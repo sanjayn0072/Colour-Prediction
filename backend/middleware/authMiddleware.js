@@ -1,0 +1,34 @@
+import jwt from 'jsonwebtoken';
+import { query } from '../config/db.js';
+
+export const protect = async (req, res, next) => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Not authorized, token missing' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const users = await query(
+      'SELECT u.id, u.name, u.phone, u.email, u.role, u.status, w.balance as available_balance, w.locked_balance ' +
+      'FROM users u ' +
+      'JOIN wallets w ON u.id = w.user_id ' +
+      'WHERE u.id = ?',
+      [decoded.id]
+    );
+    
+    if (!users || users.length === 0) {
+      return res.status(401).json({ error: 'User not found in system' });
+    }
+    
+    req.user = users[0];
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Not authorized, token invalid' });
+  }
+};
+

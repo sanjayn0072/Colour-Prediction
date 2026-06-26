@@ -1,0 +1,486 @@
+{
+  "info": {
+    "_postman_id": "8c6b7382-7489-4982-aa8c-2f3b9c7d4e12",
+    "name": "ColourPlay API Suite",
+    "description": "Comprehensive test collection for the ColourPlay backend API endpoints (Auth, Wallet, Gaming, and Store catalog).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "1. Send OTP (Pre-validate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Player\",\n  \"phone\": \"+919999999999\",\n  \"email\": \"testplayer@colourplay.com\",\n  \"password\": \"Player@1234\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/auth/send-otp",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "auth",
+                "send-otp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Verify & Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Player\",\n  \"phone\": \"+919999999999\",\n  \"email\": \"testplayer@colourplay.com\",\n  \"password\": \"Player@1234\",\n  \"idToken\": \"MOCK_FIREBASE_ID_TOKEN\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/auth/verify-register",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "auth",
+                "verify-register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. Standard Password Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.globals.set(\"jwt_token\", jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneOrEmail\": \"demo@colourplay.com\",\n  \"password\": \"Demo@1234\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. Firebase Token Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"MOCK_FIREBASE_ID_TOKEN\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/auth/firebase-login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "auth",
+                "firebase-login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Get Profile Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/auth/profile",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "auth",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Wallet Operations",
+      "item": [
+        {
+          "name": "1. Create Deposit Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/wallet/create-deposit-order",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "wallet",
+                "create-deposit-order"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Confirm Deposit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500,\n  \"transactionId\": \"TXN508127490214\",\n  \"signature\": \"MOCK_PAYMENT_SIGNATURE\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/wallet/deposit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "wallet",
+                "deposit"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. Link Bank Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountName\": \"John Doe\",\n  \"accountNumber\": \"987654321012\",\n  \"ifsc\": \"SBIN0001234\",\n  \"bankName\": \"State Bank of India\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/wallet/link-bank",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "wallet",
+                "link-bank"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. Link UPI Detail",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"upiId\": \"johndoe@ybl\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/wallet/link-upi",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "wallet",
+                "link-upi"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Request Withdrawal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 300\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/wallet/withdraw",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "wallet",
+                "withdraw"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "6. Get Transaction Statement Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/wallet/transactions",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "wallet",
+                "transactions"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gaming",
+      "item": [
+        {
+          "name": "1. Place Game Wager (Bet)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gameType\": \"colour\",\n  \"betType\": \"colour\",\n  \"betValue\": \"red\",\n  \"amount\": 100,\n  \"session\": \"1m\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/games/place-bet",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "games",
+                "place-bet"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get My Active & Historical Bets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/games/my-bets",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "games",
+                "my-bets"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Catalog & Store",
+      "item": [
+        {
+          "name": "1. Fetch Banners List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/banners",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "banners"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Fetch Products List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/products",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "products"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

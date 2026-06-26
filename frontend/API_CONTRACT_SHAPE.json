@@ -1,0 +1,154 @@
+{
+  "userProfile": {
+    "user_id": "102948",
+    "signup_name": "Demo User",
+    "email_address": "demo@colourplay.com",
+    "phone_number": "+91 99999 99999",
+    "location": "Mumbai, India",
+    "member_since": "June 2025",
+    "avatar_url": "https://api.dicebear.com/7.x/adventurer/svg?seed=Felix",
+    "account_role": "user",
+    "wallet": {
+      "total_balance": 1250.50,
+      "real_balance": 1250.50,
+      "bonus_balance": 0.00,
+      "required_wager": 0.00,
+      "withdrawal_limit_capacity": 2000.00
+    },
+    "vip_level_status": {
+      "current_level": 1,
+      "progress_deposit": 500,
+      "next_level_requirement": 1000,
+      "claimed_rewards": [
+        "1-levelUp",
+        "1-weekly"
+      ]
+    }
+  },
+  "homePage": {
+    "bannersArray": [
+      {
+        "id": 1,
+        "title": "Lucky Spin Challenge",
+        "subtitle": "Spin the lucky wheel and win cash prizes",
+        "gradient": "from-indigo-600 via-purple-600 to-pink-500",
+        "action_redirect": "spinWheel"
+      },
+      {
+        "id": 2,
+        "title": "Refer & Earn Bonus",
+        "subtitle": "Earn ₹10 for every depositing friend you invite",
+        "gradient": "from-emerald-500 via-teal-500 to-cyan-500",
+        "action_redirect": "refer"
+      },
+      {
+        "id": 3,
+        "title": "Mega Prediction Tournament",
+        "subtitle": "Play Colour and Dice games to win mega rewards",
+        "gradient": "from-orange-500 via-red-500 to-rose-500",
+        "action_redirect": "game"
+      }
+    ],
+    "categoriesArray": [
+      {
+        "id": 1,
+        "label": "Colour Prediction",
+        "icon_identifier": "Flame",
+        "color_classes": "text-rose-500 bg-rose-50 border-rose-100",
+        "target_page": "game",
+        "status": "active"
+      },
+      {
+        "id": 2,
+        "label": "Dice Pro Slider",
+        "icon_identifier": "Zap",
+        "color_classes": "text-amber-500 bg-amber-50 border-amber-100",
+        "target_page": "diceGame",
+        "status": "active"
+      },
+      {
+        "id": 3,
+        "label": "Lucky Spin Wheel",
+        "icon_identifier": "Star",
+        "color_classes": "text-indigo-500 bg-indigo-50 border-indigo-100",
+        "target_page": "spinWheel",
+        "status": "active"
+      },
+      {
+        "id": 4,
+        "label": "Crash Game Rocket",
+        "icon_identifier": "Rocket",
+        "color_classes": "text-purple-500 bg-purple-50 border-purple-100",
+        "target_page": "crashRocket",
+        "status": "coming_soon"
+      },
+      {
+        "id": 5,
+        "label": "Poker Arena",
+        "icon_identifier": "Club",
+        "color_classes": "text-slate-500 bg-slate-50 border-slate-100",
+        "target_page": "pokerArena",
+        "status": "coming_soon"
+      }
+    ],
+    "productsArray": [
+      {
+        "id": 1,
+        "title": "AuraPods Pro",
+        "price": 1499,
+        "original_price": 2499,
+        "discount_badge": "40% OFF",
+        "thumbnail_url": "https://indclub39.com/assets/earbuds.png",
+        "gallery_urls": [
+          "https://indclub39.com/assets/earbuds.png",
+          "https://indclub39.com/assets/earbuds_alt.png"
+        ],
+        "rating": 4.8,
+        "reviews_count": 124,
+        "description": "Immersive sound with high-fidelity drivers, active noise cancellation up to 40dB, and 40 hours of combined battery life.",
+        "specifications": [
+          "Active Noise Cancelling (40dB)",
+          "40 Hours Playback",
+          "IPX5 Waterproof",
+          "Bluetooth 5.3"
+        ]
+      }
+    ]
+  },
+  "gameState": {
+    "active_round_info": {
+      "session_key": "1m",
+      "period_id": 1002,
+      "server_timestamp_ms": 1781444498000
+    },
+    "countdown_timer_parameters": {
+      "time_limit_seconds": 60,
+      "time_left_seconds": 34,
+      "bet_freeze_seconds": 5
+    },
+    "recent_roll_history": [
+      {
+        "period_id": 1001,
+        "winning_number": 4,
+        "winning_colours": [
+          "green"
+        ]
+      },
+      {
+        "period_id": 1000,
+        "winning_number": 5,
+        "winning_colours": [
+          "red",
+          "violet"
+        ]
+      },
+      {
+        "period_id": 999,
+        "winning_number": 10,
+        "winning_colours": [
+          "violet"
+        ]
+      }
+    ]
+  }
+}
