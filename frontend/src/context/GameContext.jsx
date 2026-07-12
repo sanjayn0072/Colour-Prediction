@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { useUser } from './UserContext'
 
@@ -31,6 +31,11 @@ export const GameProvider = ({ children }) => {
   const [colourHistory, setColourHistory] = useState([])
 
   const [socket, setSocket] = useState(null)
+
+  const fetchUserHistoryRef = useRef(fetchUserHistory)
+  useEffect(() => {
+    fetchUserHistoryRef.current = fetchUserHistory
+  }, [fetchUserHistory])
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -109,9 +114,7 @@ export const GameProvider = ({ children }) => {
         }, 800)
 
         // Update the user's history and balance by querying the server
-        if (user) {
-          fetchUserHistory()
-        }
+        fetchUserHistoryRef.current()
       } else if (data.gameType === 'colour') {
         // Colour prediction result
         const sessionKey = data.session || '1m';
@@ -138,16 +141,40 @@ export const GameProvider = ({ children }) => {
         window.dispatchEvent(event);
 
         // Update the user's history and balance by querying the server
-        if (user) {
-          fetchUserHistory()
-        }
+        fetchUserHistoryRef.current()
       }
     })
+
+    // 4. Listen for round_started and timer_reset socket events
+    socketInstance.on('round_started', (data) => {
+      if (data.gameType === 'colour') {
+        const event = new CustomEvent('colour_round_started', { detail: data });
+        window.dispatchEvent(event);
+      } else if (data.gameType === 'dice') {
+        const event = new CustomEvent('dice_round_started', { detail: data });
+        window.dispatchEvent(event);
+      }
+    })
+
+    socketInstance.on('timer_reset', (data) => {
+      if (data.gameType === 'colour') {
+        const event = new CustomEvent('colour_round_started', { detail: data });
+        window.dispatchEvent(event);
+      } else if (data.gameType === 'dice') {
+        const event = new CustomEvent('dice_round_started', { detail: data });
+        window.dispatchEvent(event);
+      }
+    })
+
+    socketInstance.on('round_ended', (data) => {
+      const event = new CustomEvent('round_ended', { detail: data });
+      window.dispatchEvent(event);
+    });
 
     return () => {
       socketInstance.disconnect()
     }
-  }, [user, setRealBalance, fetchUserHistory])
+  }, [user !== null])
 
   return (
     <GameContext.Provider value={{

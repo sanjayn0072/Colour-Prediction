@@ -3,26 +3,31 @@ import { ArrowLeft, Gift, TrendingUp, Shield, Megaphone, Trophy, Bell, CheckChec
 
 const mapNotification = (n) => {
   const title = n.title.toLowerCase();
+  const nType = String(n.type || '').toUpperCase();
   let type = 'security';
   let icon = Shield;
-  let color = 'text-blue-650 bg-blue-50';
+  let color = 'text-blue-600 bg-blue-50 border border-blue-200/50';
 
-  if (title.includes('bonus') || title.includes('spin') || title.includes('reward')) {
-    type = 'reward';
-    icon = Gift;
-    color = 'text-pink-650 bg-pink-50';
-  } else if (title.includes('won') || title.includes('game') || title.includes('round') || title.includes('bet')) {
-    type = 'game';
-    icon = Trophy;
-    color = 'text-amber-600 bg-amber-50';
-  } else if (title.includes('promo') || title.includes('coupon') || title.includes('hour')) {
-    type = 'promo';
-    icon = Megaphone;
-    color = 'text-indigo-650 bg-indigo-50';
-  } else if (title.includes('deposit') || title.includes('withdraw') || title.includes('wallet')) {
+  if (nType === 'WALLET' || title.includes('deposit') || title.includes('withdraw') || title.includes('wallet') || title.includes('recharged')) {
     type = 'wallet';
     icon = TrendingUp;
-    color = 'text-emerald-650 bg-emerald-50';
+    color = 'text-emerald-600 bg-emerald-50 border border-emerald-200/50';
+  } else if (nType === 'GAME' || title.includes('won') || title.includes('game') || title.includes('round') || title.includes('bet')) {
+    type = 'game';
+    icon = Trophy;
+    color = 'text-amber-600 bg-amber-50 border border-amber-200/50';
+  } else if (nType === 'PROMO' || nType === 'COUPON' || title.includes('promo') || title.includes('coupon') || title.includes('bonus') || title.includes('reward')) {
+    type = 'promo';
+    icon = Gift;
+    color = 'text-indigo-600 bg-indigo-50 border border-indigo-200/50';
+  } else if (nType === 'SECURITY' || title.includes('security') || title.includes('password') || title.includes('2fa')) {
+    type = 'security';
+    icon = Shield;
+    color = 'text-blue-600 bg-blue-50 border border-blue-200/50';
+  } else if (nType === 'GLOBAL' || nType === 'SYSTEM_ALERT') {
+    type = 'global';
+    icon = Bell;
+    color = 'text-purple-600 bg-purple-50 border border-purple-200/50';
   }
 
   const diffMs = Date.now() - new Date(n.createdAt).getTime();
@@ -46,11 +51,11 @@ const mapNotification = (n) => {
     title: n.title,
     message: n.message,
     time: timeText,
-    read: Boolean(n.isRead),
+    read: Boolean(n.read || n.isRead),
   };
 };
 
-export default function Notifications({ onBack }) {
+export default function Notifications({ onBack, onRefreshUnread }) {
   const [notifications, setNotifications] = useState([])
   const [filter, setFilter] = useState('all') // all | unread
 
@@ -64,6 +69,7 @@ export default function Notifications({ onBack }) {
       const data = await response.json();
       if (response.ok && Array.isArray(data)) {
         setNotifications(data.map(mapNotification));
+        if (onRefreshUnread) onRefreshUnread();
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
@@ -74,6 +80,18 @@ export default function Notifications({ onBack }) {
     fetchNotifications();
   }, []);
 
+  useEffect(() => {
+    const handleNewNotif = (e) => {
+      const newNotif = mapNotification(e.detail);
+      setNotifications(prev => [newNotif, ...prev]);
+      if (onRefreshUnread) onRefreshUnread();
+    };
+    window.addEventListener('new_notification_received', handleNewNotif);
+    return () => {
+      window.removeEventListener('new_notification_received', handleNewNotif);
+    };
+  }, [onRefreshUnread]);
+
   const unreadCount = notifications.filter((n) => !n.read).length
 
   const filtered = filter === 'unread'
@@ -82,16 +100,14 @@ export default function Notifications({ onBack }) {
 
   const markAllRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-    const unread = notifications.filter(n => !n.read);
     const token = localStorage.getItem('token')
     const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
     try {
-      await Promise.all(unread.map(n => 
-        fetch(`${API_BASE}/api/notifications/${n.id}/read`, {
-          method: 'PUT',
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      ));
+      await fetch(`${API_BASE}/api/notifications/mark-read`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (onRefreshUnread) onRefreshUnread();
     } catch (err) {
       console.error(err);
     }
@@ -108,6 +124,7 @@ export default function Notifications({ onBack }) {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (onRefreshUnread) onRefreshUnread();
     } catch (err) {
       console.error(err);
     }
@@ -118,23 +135,23 @@ export default function Notifications({ onBack }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* ── Header ────────────────────── */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-border">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-slate-200/80">
         <div className="flex items-center justify-between px-4 py-3">
           {/* Back */}
           <button
             onClick={onBack}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer transition-colors"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer transition-colors text-slate-700 border-0 outline-none"
           >
-            <ArrowLeft size={18} className="text-foreground" />
+            <ArrowLeft size={18} />
           </button>
 
           {/* Title */}
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-foreground">Notifications</h1>
+            <h1 className="text-base font-bold text-slate-800">Notifications</h1>
             {unreadCount > 0 && (
-              <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <span className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
                 {unreadCount}
               </span>
             )}
@@ -144,10 +161,10 @@ export default function Notifications({ onBack }) {
           <button
             onClick={markAllRead}
             disabled={unreadCount === 0}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-indigo-600 border-0 outline-none"
             title="Mark all as read"
           >
-            <CheckCheck size={16} className="text-primary" />
+            <CheckCheck size={16} />
           </button>
         </div>
 
@@ -160,10 +177,10 @@ export default function Notifications({ onBack }) {
             <button
               key={tab.id}
               onClick={() => setFilter(tab.id)}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer border-0 outline-none ${
                 filter === tab.id
-                  ? 'bg-primary text-white shadow-sm shadow-primary/20'
-                  : 'bg-slate-100 text-muted-foreground hover:bg-slate-200'
+                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {tab.label}
@@ -176,11 +193,11 @@ export default function Notifications({ onBack }) {
       <div className="flex-1 px-4 pt-3 pb-6">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-              <Bell size={28} className="text-slate-300" />
+            <div className="w-16 h-16 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mb-4">
+              <Bell size={28} className="text-slate-400" />
             </div>
-            <p className="text-sm font-semibold text-muted-foreground">No notifications</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
+            <p className="text-sm font-semibold text-slate-500">No notifications</p>
+            <p className="text-xs text-slate-400 mt-1">
               {filter === 'unread' ? 'All caught up!' : 'You have no notifications yet.'}
             </p>
           </div>
@@ -194,13 +211,13 @@ export default function Notifications({ onBack }) {
                   onClick={() => markRead(notif.id)}
                   className={`relative flex gap-3 p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer group ${
                     notif.read
-                      ? 'bg-white border-border hover:bg-slate-50'
-                      : 'bg-primary/[0.03] border-primary/15 hover:bg-primary/[0.06] shadow-sm'
+                      ? 'bg-white border-slate-200/60 hover:bg-slate-100/30 text-slate-600'
+                      : 'bg-indigo-50/20 border-indigo-200/40 hover:bg-indigo-50/40 shadow-sm text-slate-800'
                   }`}
                 >
                   {/* Unread dot */}
                   {!notif.read && (
-                    <span className="absolute top-3.5 right-3.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
+                    <span className="absolute top-3.5 right-3.5 w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
                   )}
 
                   {/* Icon */}
@@ -211,15 +228,15 @@ export default function Notifications({ onBack }) {
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className={`text-sm leading-tight ${notif.read ? 'font-medium text-foreground' : 'font-semibold text-foreground'}`}>
+                      <h3 className={`text-sm leading-tight ${notif.read ? 'font-medium text-slate-600' : 'font-semibold text-slate-800'}`}>
                         {notif.title}
                       </h3>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">
                       {notif.message}
                     </p>
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-[10px] text-muted-foreground/60 font-medium">
+                      <span className="text-[10px] text-slate-400 font-medium">
                         {notif.time}
                       </span>
                       <button
@@ -227,7 +244,7 @@ export default function Notifications({ onBack }) {
                           e.stopPropagation()
                           deleteNotification(notif.id)
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-550 transition-all cursor-pointer border-0 outline-none bg-transparent"
                         title="Delete"
                       >
                         <Trash2 size={13} />

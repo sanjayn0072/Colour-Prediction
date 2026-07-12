@@ -75,6 +75,10 @@ export const mapKeys = (row) => {
   
   if (row.roll_number !== undefined && row.outcomeNumber === undefined) mapped.outcomeNumber = row.roll_number;
   if (row.winning_color !== undefined && row.winningColor === undefined) mapped.winningColor = row.winning_color;
+  
+  if (row.is_two_factor_enabled !== undefined) mapped.isTwoFactorEnabled = !!row.is_two_factor_enabled;
+  if (row.two_factor_secret !== undefined) mapped.twoFactorSecret = row.two_factor_secret;
+  if (row.phone_number !== undefined) mapped.phoneNumber = row.phone_number;
 
   // Add save helper (simulates Mongoose .save())
   mapped.save = async function() {

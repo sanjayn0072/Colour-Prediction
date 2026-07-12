@@ -1,5 +1,10 @@
 import express from 'express';
 import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -15,12 +20,36 @@ import {
   validate,
   sendOtpSchema,
   verifyRegisterSchema,
+  verifyEmailSchema,
   loginSchema,
   firebaseLoginSchema,
   placeBetSchema,
   withdrawalSchema,
   depositSchema,
-  createDepositOrderSchema
+  createDepositOrderSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  adminLoginSchema,
+  adminVerify2faSchema,
+  updateConfigTrafficSchema,
+  updateStoreConfigSchema,
+  verifyPay0DepositStatusSchema,
+  updateSuperAdminConfigSchema,
+  updateUserRoleSchema,
+  updateUserStatusSchema,
+  adjustUserBalanceSchema,
+  updateOrderStatusSchema,
+  updateComplaintStatusSchema,
+  createCouponSchema,
+  updateSpinConfigSchema,
+  updateGameStatusSchema,
+  checkoutProductSchema,
+  createProductSchema,
+  updateProductSchema,
+  createBannerSchema,
+  createComplaintSchema,
+  chatWithSupportSchema,
+  markAsReadSchema
 } from './middleware/validationMiddleware.js';
 
 // Controllers
@@ -32,6 +61,8 @@ import * as supportController from './controllers/supportController.js';
 import * as notificationController from './controllers/notificationController.js';
 import * as adminController from './controllers/adminController.js';
 import * as withdrawalController from './controllers/withdrawalController.js';
+import * as adminAuthController from './controllers/adminAuthController.js';
+import depositRoutes from './routes/depositRoutes.js';
 
 dotenv.config();
 
@@ -77,104 +108,165 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Rate Limiters
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: { error: 'Too many authentication attempts. Try again later.' }
-});
+// Import configurable rate limiters from rateLimitMiddleware
+import {
+  authRateLimiter,
+  publicLimiter,
+  authenticatedActionLimiter,
+  walletLimiter
+} from './middleware/rateLimitMiddleware.js';
 
-const walletLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Too many wallet operations. Try again later.' }
-});
-
-// Middlewares
 import { protect } from './middleware/authMiddleware.js';
 import { checkRole } from './middleware/roleMiddleware.js';
+import { uploadProductImage, uploadProductImages, verifyUploadMagicBytes } from './utils/uploadService.js';
 
 // ─── AUTHENTICATION ENDPOINTS ───
-app.post('/api/auth/send-otp', authLimiter, validate(sendOtpSchema), authController.sendOtp);
-app.post('/api/auth/verify-register', authLimiter, validate(verifyRegisterSchema), authController.verifyOtpRegister);
-app.post('/api/auth/register', authLimiter, authController.register); // Deprecated
-app.post('/api/auth/login', authLimiter, validate(loginSchema), authController.login);
-app.post('/api/auth/firebase-login', authLimiter, validate(firebaseLoginSchema), authController.firebaseLogin);
-app.get('/api/auth/profile', protect, authController.getProfile);
+app.post('/api/auth/send-otp', authRateLimiter, validate(sendOtpSchema), authController.sendOtp);
+app.post('/api/auth/verify-email', authRateLimiter, validate(verifyEmailSchema), authController.verifyOtpRegister);
+app.post('/api/auth/forgot-password', authRateLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
+app.post('/api/auth/reset-password', authRateLimiter, validate(resetPasswordSchema), authController.resetPassword);
+app.post('/api/auth/login', authRateLimiter, validate(loginSchema), authController.login);
+app.get('/api/auth/referrals', protect, authenticatedActionLimiter, authController.getReferralSignups);
+app.post('/api/auth/firebase-login', authRateLimiter, validate(firebaseLoginSchema), authController.firebaseLogin);
+app.get('/api/auth/profile', protect, authenticatedActionLimiter, authController.getProfile);
+app.put('/api/auth/profile', protect, authenticatedActionLimiter, async (req, res) => {
+  const { name, avatar, email } = req.body;
+  try {
+    if (name !== undefined) {
+      if (!name || name.trim().length === 0) {
+        return res.status(400).json({ error: 'Name is required' });
+      }
+      await query('UPDATE users SET name = ? WHERE id = ?', [name.trim(), req.user.id]);
+    }
+    if (avatar !== undefined) {
+      await query('UPDATE users SET profile_pic = ? WHERE id = ?', [avatar, req.user.id]);
+    }
+    if (email !== undefined) {
+      const cleanEmail = email ? email.trim() : '';
+      if (cleanEmail) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+          return res.status(400).json({ error: 'Invalid email address format' });
+        }
+        const existing = await query('SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1', [cleanEmail, req.user.id]);
+        if (existing && existing.length > 0) {
+          return res.status(400).json({ error: 'Email address is already in use by another account.' });
+        }
+        await query('UPDATE users SET email = ? WHERE id = ?', [cleanEmail, req.user.id]);
+      } else {
+        const placeholderEmail = `${req.user.phone}@temp-user.com`;
+        await query('UPDATE users SET email = ? WHERE id = ?', [placeholderEmail, req.user.id]);
+      }
+    }
+    return res.json({ success: true, name: name?.trim(), avatar, email: email?.trim() });
+  } catch (err) {
+    logger.error(err, 'Failed to update user profile');
+    return res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+app.post('/api/admin/login', authRateLimiter, validate(adminLoginSchema), adminAuthController.adminLogin);
+app.post('/api/admin/login/verify-2fa', authRateLimiter, validate(adminVerify2faSchema), adminAuthController.verify2FA);
+app.get('/api/admin/2fa/status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminAuthController.get2FaStatus);
+app.post('/api/admin/2fa/verify', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(adminVerify2faSchema), adminAuthController.verify2FaSession);
 
 // ─── WALLET TRANSACTION ENDPOINTS ───
 app.post('/api/wallet/link-bank', protect, walletLimiter, walletController.linkBank);
 app.post('/api/wallet/link-upi', protect, walletLimiter, walletController.linkUpi);
-app.delete('/api/wallet/payment-methods/:type', protect, walletController.deletePaymentMethod);
+app.delete('/api/wallet/payment-methods/:type', protect, walletLimiter, walletController.deletePaymentMethod);
 app.post('/api/wallet/withdraw', protect, walletLimiter, validate(withdrawalSchema), walletController.handleWithdrawal);
 app.post('/api/wallet/create-deposit-order', protect, walletLimiter, validate(createDepositOrderSchema), walletController.createDepositOrder);
-app.post('/api/wallet/deposit', protect, validate(depositSchema), walletController.deposit);
-app.get('/api/wallet/transactions', protect, walletController.getTransactions);
+app.post('/api/wallet/deposit', protect, walletLimiter, validate(depositSchema), walletController.deposit);
+app.get('/api/wallet/transactions', protect, authenticatedActionLimiter, walletController.getTransactions);
 app.post('/api/wallet/claim-vip', protect, walletLimiter, walletController.claimVipReward);
 
 // ─── MANUAL WITHDRAWAL SYSTEM ENDPOINTS ───
-app.post('/api/withdraw', protect, walletLimiter, withdrawalController.createWithdrawal);
-app.get('/api/withdraw/history', protect, withdrawalController.getWithdrawalHistory);
-app.get('/api/admin/withdrawals', protect, checkRole(['super_admin', 'admin']), withdrawalController.getAdminWithdrawals);
-app.put('/api/admin/withdrawals/:id/approve', protect, checkRole(['super_admin']), withdrawalController.approveWithdrawal);
-app.put('/api/admin/withdrawals/:id/reject', protect, checkRole(['super_admin']), withdrawalController.rejectWithdrawal);
-app.put('/api/admin/withdrawals/:id/mark-paid', protect, checkRole(['super_admin']), withdrawalController.markPaidWithdrawal);
-app.post('/api/games/place-bet', protect, validate(placeBetSchema), gameController.placeBet);
-app.get('/api/games/my-bets', protect, gameController.getMyBets);
-app.post('/api/games/verify', gameController.verifyGame);
-app.post('/api/games/spin', protect, gameController.triggerSpin);
+app.post('/api/withdraw', protect, walletLimiter, validate(withdrawalSchema), withdrawalController.createWithdrawal);
+app.get('/api/withdraw/history', protect, authenticatedActionLimiter, withdrawalController.getWithdrawalHistory);
+app.get('/api/admin/withdrawals', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.getAdminWithdrawals);
+app.put('/api/admin/withdrawals/:id/processing', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.processWithdrawal);
+app.put('/api/admin/withdrawals/:id/approve', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.approveWithdrawal);
+app.patch('/api/admin/withdrawals/:id/reject', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.rejectWithdrawal);
+app.post('/api/admin/game/overwrite', protect, authenticatedActionLimiter, checkRole(['super_admin']), gameController.overwriteGame);
+app.post('/api/games/place-bet', protect, authenticatedActionLimiter, validate(placeBetSchema), gameController.placeBet);
+app.get('/api/games/leaderboard', publicLimiter, gameController.getLeaderboard);
+app.get('/api/games/my-bets', protect, authenticatedActionLimiter, gameController.getMyBets);
+app.post('/api/games/verify', publicLimiter, gameController.verifyGame);
+app.post('/api/games/spin', protect, authenticatedActionLimiter, gameController.triggerSpin);
+app.get('/api/games/multipliers', publicLimiter, gameController.getPublicMultipliers);
+app.get('/api/admin/game-center/config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getGameCenterConfig);
+app.patch('/api/admin/game-center/config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.updateGameCenterConfig);
 
 // ─── SUPPORT AND COMPLAINTS ───
-app.post('/api/support/complaint', protect, supportController.createComplaint);
-app.get('/api/support/complaints', protect, supportController.getComplaints);
-app.post('/api/support/chat', protect, supportController.chatWithSupport);
+app.post('/api/support/complaint', protect, authenticatedActionLimiter, validate(createComplaintSchema), supportController.createComplaint);
+app.get('/api/support/complaints', protect, authenticatedActionLimiter, supportController.getComplaints);
+app.post('/api/support/chat', protect, authenticatedActionLimiter, validate(chatWithSupportSchema), supportController.chatWithSupport);
 
-// ─── NOTIFICATIONS ───
-app.get('/api/notifications', protect, notificationController.getNotifications);
-app.put('/api/notifications/:id/read', protect, notificationController.markAsRead);
+app.get('/api/notifications', protect, authenticatedActionLimiter, notificationController.getNotifications);
+app.put('/api/notifications/:id/read', protect, authenticatedActionLimiter, validate(markAsReadSchema), notificationController.markAsRead);
+app.patch('/api/notifications/mark-read', protect, authenticatedActionLimiter, notificationController.markAllAsRead);
+
+
+// ─── ADMIN NOTIFICATIONS ───
+app.get('/api/admin/notifications', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminNotifications);
+app.post('/api/admin/notifications/broadcast', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.broadcastNotification);
 
 // ─── ADMIN DASHBOARD ENDPOINTS ───
-app.get('/api/admin/metrics', protect, checkRole(['super_admin', 'admin']), adminController.getMetrics);
-app.get('/api/admin/logs', protect, checkRole(['super_admin', 'admin']), adminController.getLogs);
+app.get('/api/admin/metrics', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getMetrics);
+app.get('/api/admin/logs', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getLogs);
+
+// ─── ADMIN CONFIG ENDPOINTS ───
+app.get('/api/admin/config/traffic', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getConfigTraffic);
+app.patch('/api/admin/config/traffic', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateConfigTrafficSchema), adminController.updateConfigTraffic);
+app.get('/api/admin/store-config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getStoreConfig);
+app.post('/api/admin/verify-pay0-status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(verifyPay0DepositStatusSchema), adminController.verifyPay0DepositStatus);
+
+// ─── PAY0 DEPOSIT & APPEALS ROUTES ───
+app.use('/api/payment', depositRoutes);
+app.patch('/api/admin/store-config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateStoreConfigSchema), adminController.updateStoreConfig);
+
+// ─── SUPER ADMIN ENV CONFIG ENDPOINTS ───
+app.get('/api/superadmin/config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getSuperAdminConfig);
+app.patch('/api/superadmin/config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateSuperAdminConfigSchema), adminController.updateSuperAdminConfig);
 
 // ─── ADMIN FRAUD & RISK MANAGEMENT ───
-app.get('/api/admin/risk-alerts', protect, checkRole(['super_admin', 'admin']), adminController.getRiskAlerts);
-app.put('/api/admin/risk-alerts/:id/resolve', protect, checkRole(['super_admin']), adminController.resolveRiskAlert);
+app.get('/api/admin/risk-alerts', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getRiskAlerts);
+app.put('/api/admin/risk-alerts/:id/resolve', protect, authenticatedActionLimiter, checkRole(['super_admin']), adminController.resolveRiskAlert);
 
 // ─── FINANCIAL ANALYTICS & OVERRIDES ───
-app.get('/api/admin/analytics/finances', protect, checkRole(['super_admin', 'admin']), adminController.getFinancialAnalytics);
-app.put('/api/admin/games/:id/override', protect, checkRole(['super_admin']), adminController.overrideGameOutcome);
+app.get('/api/admin/analytics/finances', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getFinancialAnalytics);
+app.put('/api/admin/games/:id/override', protect, authenticatedActionLimiter, checkRole(['super_admin']), adminController.overrideGameOutcome);
 
 // ─── SUPER ADMIN ADVANCED MANAGEMENT ENDPOINTS ───
-app.get('/api/admin/users', protect, checkRole(['super_admin']), adminController.getAdminUsers);
-app.get('/api/admin/users/:id/history', protect, checkRole(['super_admin']), adminController.getUserHistory);
-app.put('/api/admin/users/:id/status', protect, checkRole(['super_admin']), adminController.updateUserStatus);
-app.put('/api/admin/users/:id/balance', protect, checkRole(['super_admin']), adminController.adjustUserBalance);
-app.get('/api/admin/orders', protect, checkRole(['super_admin']), adminController.getAdminOrders);
-app.put('/api/admin/orders/:id/status', protect, checkRole(['super_admin']), adminController.updateOrderStatus);
-app.get('/api/admin/complaints', protect, checkRole(['super_admin']), adminController.getAdminComplaints);
-app.put('/api/admin/complaints/:id', protect, checkRole(['super_admin']), adminController.updateComplaintStatus);
-app.get('/api/admin/coupons', protect, checkRole(['super_admin']), adminController.getCoupons);
-app.post('/api/admin/coupons', protect, checkRole(['super_admin']), adminController.createCoupon);
-app.delete('/api/admin/coupons/:id', protect, checkRole(['super_admin']), adminController.deleteCoupon);
-app.get('/api/admin/spin-configs', protect, checkRole(['super_admin']), adminController.getSpinConfigs);
-app.put('/api/admin/spin-configs/:id', protect, checkRole(['super_admin']), adminController.updateSpinConfig);
-app.get('/api/admin/games', protect, checkRole(['super_admin']), adminController.getGames);
-app.put('/api/admin/games/:id/status', protect, checkRole(['super_admin']), adminController.updateGameStatus);
+app.get('/api/admin/users', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminUsers);
+app.post('/api/superadmin/update-user', protect, authenticatedActionLimiter, checkRole(['super_admin']), validate(updateUserRoleSchema), adminController.updateUserRole);
+app.get('/api/admin/users/:id/history', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getUserHistory);
+app.put('/api/admin/users/:id/status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateUserStatusSchema), adminController.updateUserStatus);
+app.put('/api/admin/users/:id/balance', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(adjustUserBalanceSchema), adminController.adjustUserBalance);
+app.get('/api/admin/orders', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminOrders);
+app.put('/api/admin/orders/:id/status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateOrderStatusSchema), adminController.updateOrderStatus);
+app.get('/api/admin/complaints', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminComplaints);
+app.put('/api/admin/complaints/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateComplaintStatusSchema), adminController.updateComplaintStatus);
+app.get('/api/admin/coupons', protect, authenticatedActionLimiter, checkRole(['super_admin']), adminController.getCoupons);
+app.post('/api/admin/coupons', protect, authenticatedActionLimiter, checkRole(['super_admin']), validate(createCouponSchema), adminController.createCoupon);
+app.delete('/api/admin/coupons/:id', protect, authenticatedActionLimiter, checkRole(['super_admin']), adminController.deleteCoupon);
+app.get('/api/admin/spin-configs', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getSpinConfigs);
+app.put('/api/admin/spin-configs/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateSpinConfigSchema), adminController.updateSpinConfig);
+app.get('/api/admin/games', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getGames);
+app.put('/api/admin/games/:id/status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateGameStatusSchema), adminController.updateGameStatus);
 
 
 // ─── CATALOG AND STORE ENDPOINTS ───
-app.get('/api/products', catalogController.getProducts);
-app.post('/api/products/checkout', protect, catalogController.checkoutProduct);
-app.post('/api/products', protect, checkRole(['super_admin']), catalogController.createProduct);
-app.put('/api/products/:id', protect, checkRole(['super_admin']), catalogController.updateProduct);
-app.delete('/api/products/:id', protect, checkRole(['super_admin']), catalogController.deleteProduct);
+app.get('/api/products', publicLimiter, catalogController.getProducts);
+app.post('/api/products/checkout', protect, authenticatedActionLimiter, validate(checkoutProductSchema), catalogController.checkoutProduct);
+app.post('/api/admin/products', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), uploadProductImages, verifyUploadMagicBytes, validate(createProductSchema), catalogController.createProduct);
+app.put('/api/admin/products/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), uploadProductImages, verifyUploadMagicBytes, validate(updateProductSchema), catalogController.updateProduct);
+app.delete('/api/admin/products/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), catalogController.deleteProduct);
 
-app.get('/api/banners', catalogController.getBanners);
-app.post('/api/banners', protect, checkRole(['super_admin']), catalogController.createBanner);
-app.put('/api/banners/:id', protect, checkRole(['super_admin']), catalogController.updateBanner);
-app.delete('/api/banners/:id', protect, checkRole(['super_admin']), catalogController.deleteBanner);
+app.get('/api/banners', publicLimiter, catalogController.getBanners);
+app.post('/api/banners', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(createBannerSchema), catalogController.createBanner);
+app.put('/api/banners/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), catalogController.updateBanner);
+app.delete('/api/banners/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), catalogController.deleteBanner);
 
 // ─── CENTRALIZED PROVABLY FAIR GAME STATE LOOPS ───
 gameController.initializeGameLoop(io);
@@ -188,13 +280,19 @@ io.use(async (socket, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const users = await query(
-      'SELECT u.id, u.role, w.balance as wallet_balance FROM users u JOIN wallets w ON u.id = w.user_id WHERE u.id = ? LIMIT 1',
+      'SELECT u.id, u.role, u.name, u.status, w.balance as wallet_balance FROM users u JOIN wallets w ON u.id = w.user_id WHERE u.id = ? LIMIT 1',
       [decoded.id]
     );
     if (!users || users.length === 0) {
       return next(new Error('Authentication error: User not found'));
     }
     socket.user = users[0];
+
+    // Block suspended/locked accounts from socket connections
+    if (socket.user.status && socket.user.status !== 'active') {
+      return next(new Error('Authentication error: Account suspended'));
+    }
+
     next();
   } catch (err) {
     next(new Error('Authentication error: Token invalid'));
@@ -202,10 +300,33 @@ io.use(async (socket, next) => {
 });
 
 // ─── SOCKET.IO CONNECTIONS ───
+// In-memory rate limiter for socket room joins
+const socketJoinTimestamps = new Map();
+const SOCKET_JOIN_COOLDOWN_MS = 5000;
+
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
 
+  if (socket.user?.id) {
+    socket.join(`user_room_${socket.user.id}`);
+  }
+
+  if (socket.user?.role === 'super_admin') {
+    socket.join('super_admin_room');
+    socket.join('admin_room');
+  } else if (socket.user?.role === 'admin') {
+    socket.join('admin_room');
+    io.to('super_admin_room').emit('admin_logged_in', { 
+      adminId: socket.user.id,
+      adminName: socket.user.name 
+    });
+  }
+
   socket.on('join_dice_lobby', async () => {
+    const now = Date.now();
+    const lastJoin = socketJoinTimestamps.get(socket.id + '_dice') || 0;
+    if (now - lastJoin < SOCKET_JOIN_COOLDOWN_MS) return;
+    socketJoinTimestamps.set(socket.id + '_dice', now);
     socket.join('dice_room');
     let history = [];
     try {
@@ -229,6 +350,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join_colour', async () => {
+    const now = Date.now();
+    const lastJoin = socketJoinTimestamps.get(socket.id + '_colour') || 0;
+    if (now - lastJoin < SOCKET_JOIN_COOLDOWN_MS) return;
+    socketJoinTimestamps.set(socket.id + '_colour', now);
     socket.join('colour_room_30s');
     socket.join('colour_room_1m');
     socket.join('colour_room_2m');
@@ -262,13 +387,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    socketJoinTimestamps.delete(socket.id + '_dice');
+    socketJoinTimestamps.delete(socket.id + '_colour');
     logger.info(`Socket disconnected: ${socket.id}`);
   });
 });
 
 app.use((err, req, res, next) => {
-  logger.error(err, 'Unhandled request error');
-  res.status(500).json({ error: 'Internal Server Error', details: err.message });
+  logger.error(err, '[Global Error Interceptor]');
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || "An unexpected error occurred on the core game engine."
+  });
 });
 
 const PORT = process.env.PORT || 5000;

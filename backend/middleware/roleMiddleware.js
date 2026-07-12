@@ -10,6 +10,33 @@ export const checkRole = (allowedRoles = []) => {
         message: 'Your clearance level is insufficient to access this resource.' 
       });
     }
+
+    // Enforce 2FA session verification for admin-level roles
+    const isExemptRoute = req.originalUrl && (
+      req.originalUrl.includes('/2fa/status') || 
+      req.originalUrl.includes('/2fa/verify') || 
+      req.originalUrl.includes('/metrics')
+    );
+    
+    if (allowedRoles.some(r => ['admin', 'super_admin'].includes(r)) && !req.adminVerified) {
+      if (isExemptRoute) {
+        if (req.originalUrl.includes('/metrics')) {
+          return res.status(200).json({ 
+            success: false, 
+            require2FA: true, 
+            dashboardLocked: true, 
+            error: 'Two-factor authentication verification is required to access this resource.' 
+          });
+        }
+        return next();
+      }
+      return res.status(200).json({ 
+        success: false, 
+        require2FA: true, 
+        dashboardLocked: true, 
+        error: 'Two-factor authentication verification is required to access this resource.' 
+      });
+    }
     
     next();
   };

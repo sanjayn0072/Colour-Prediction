@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useLocation, useNavigate, Routes, Route } from 'react-router-dom'
 import { Home as HomeIcon, Gamepad2, Wallet, User as UserIcon } from 'lucide-react'
 import { UserProvider, useUser } from './context/UserContext'
-import { GameProvider } from './context/GameContext'
+import { GameProvider, useGame } from './context/GameContext'
 import Home from './pages/Home'
-import ColourPrediction from './pages/ColourPrediction'
-import SpinWheel from './pages/SpinWheel'
+import GameLobby from './pages/GameLobby'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
@@ -12,11 +12,92 @@ import Notifications from './pages/Notifications'
 import Profile from './pages/Profile'
 import WalletPage from './pages/Wallet'
 import DepositGateway from './pages/DepositGateway'
-import DiceGame from './pages/DiceGame'
+import DepositHistory from './pages/DepositHistory'
 import TransactionRecordsPage from './pages/TransactionRecords'
 import Support from './pages/Support'
-import AdminDashboard from './pages/AdminDashboard'
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
+const LegacyAdminDashboard = React.lazy(() => import('./pages/LegacyAdminDashboard'));
+const ProductsPage = React.lazy(() => import('./pages/ProductsPage'));
+
+const AdminLayoutSkeleton = () => (
+  <div className="min-h-screen bg-[#070b13] p-6 space-y-4 animate-pulse font-sans">
+    <div className="h-10 bg-slate-900 border border-slate-800/80 rounded-xl w-44" />
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="h-24 bg-slate-900 border border-slate-800/80 rounded-xl" />
+      <div className="h-24 bg-slate-900 border border-slate-800/80 rounded-xl" />
+      <div className="h-24 bg-slate-900 border border-slate-800/80 rounded-xl" />
+      <div className="h-24 bg-slate-900 border border-slate-800/80 rounded-xl" />
+    </div>
+    <div className="h-96 bg-slate-900 border border-slate-800/80 rounded-2xl" />
+  </div>
+);
 import './index.css'
+
+// Global Error Boundary to prevent white-screen crashes
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#0b0f19',
+          color: '#e2e8f0',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          padding: '2rem',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            background: 'rgba(19, 26, 38, 0.6)',
+            border: '1px solid rgba(99, 102, 241, 0.2)',
+            borderRadius: '16px',
+            padding: '3rem 2.5rem',
+            maxWidth: '420px',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem', color: '#f1f5f9' }}>Something went wrong</h2>
+            <p style={{ fontSize: '0.875rem', color: '#94a3b8', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+              The application encountered an unexpected error. Please refresh the page to continue.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '0.625rem 1.5rem',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                letterSpacing: '0.025em',
+                transition: 'transform 0.2s'
+              }}
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', icon: HomeIcon },
@@ -26,11 +107,56 @@ const NAV_ITEMS = [
 ]
 
 function AppContent() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const { user, login, logout } = useUser()
+  const { socket } = useGame()
   const [authPage, setAuthPage] = useState('login')
   const [activePage, setActivePage] = useState('home')
   const [routeData, setRouteData] = useState(null)
   const [profileResetTrigger, setProfileResetTrigger] = useState(0)
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+
+  const fetchUnreadNotificationsCount = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+    try {
+      const response = await fetch(`${API_BASE}/api/notifications`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await response.json()
+      if (response.ok && Array.isArray(data)) {
+        const count = data.filter(n => !n.isRead && !n.is_read).length
+        setUnreadNotificationsCount(count)
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err)
+    }
+  }
+
+  useEffect(() => {
+    if (user) {
+      fetchUnreadNotificationsCount()
+    } else {
+      setUnreadNotificationsCount(0)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!socket) return
+
+    const handleNewNotification = (notification) => {
+      setUnreadNotificationsCount(prev => prev + 1)
+      const event = new CustomEvent('new_notification_received', { detail: notification })
+      window.dispatchEvent(event)
+    }
+
+    socket.on('new_notification', handleNewNotification)
+    return () => {
+      socket.off('new_notification', handleNewNotification)
+    }
+  }, [socket])
 
   const handleNavigate = (page, data = null) => {
     if (page === 'profile' && activePage === 'profile') {
@@ -48,7 +174,9 @@ function AppContent() {
       const isAdminPath = path.includes('/admin') || hash.includes('admin')
       
       if (isAdminPath) {
-        if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+        if (!user) {
+          setAuthPage('login')
+        } else if (user.role !== 'admin' && user.role !== 'super_admin') {
           // Standard user trying to access admin layout: redirect to Home
           handleNavigate('home')
           // Clean the browser history so they don't see "/admin" or "#admin"
@@ -68,6 +196,18 @@ function AppContent() {
       window.removeEventListener('popstate', checkAdminRedirection)
     }
   }, [user])
+
+  // Sync pathname with activePage state
+  useEffect(() => {
+    const path = location.pathname
+    if (path === '/products') {
+      setActivePage('products')
+    } else if (path === '/admin') {
+      setActivePage('admin')
+    } else if (path === '/' && activePage === 'products') {
+      setActivePage('home')
+    }
+  }, [location])
 
   /* ── Auth Handlers ──────────── */
   const handleLogin = (userData) => {
@@ -99,21 +239,31 @@ function AppContent() {
   const renderPage = () => {
     switch (activePage) {
       case 'home':
-        return <Home onNavigate={handleNavigate} />
+        return <Home onNavigate={handleNavigate} unreadNotificationsCount={unreadNotificationsCount} />
+      case 'products':
+        return (
+          <React.Suspense fallback={<div className="min-h-screen bg-[#070b13] flex items-center justify-center text-slate-400 font-sans">Loading Marketplace...</div>}>
+            <ProductsPage onBack={() => { navigate('/'); setActivePage('home'); }} />
+          </React.Suspense>
+        )
       case 'game':
-        return <ColourPrediction onNavigate={handleNavigate} routeData={routeData} />
+        return <GameLobby onNavigate={handleNavigate} routeData={routeData} />
       case 'spinWheel':
-        return <SpinWheel onNavigate={handleNavigate} />
+        setTimeout(() => handleNavigate('game', { gameId: 'spin-wheel' }), 0)
+        return null
+      case 'diceGame':
+        setTimeout(() => handleNavigate('game', { gameId: 'dice-game' }), 0)
+        return null
       case 'notifications':
-        return <Notifications onBack={() => handleNavigate('home')} />
+        return <Notifications onBack={() => handleNavigate('home')} onRefreshUnread={fetchUnreadNotificationsCount} />
       case 'wallet':
         return <WalletPage onNavigate={handleNavigate} initialTab={routeData?.tab} />
       case 'transactionRecords':
         return <TransactionRecordsPage onBack={() => handleNavigate('wallet')} />
       case 'depositGateway':
         return <DepositGateway depositData={routeData} onBack={() => handleNavigate('wallet')} onNavigate={handleNavigate} />
-      case 'diceGame':
-        return <DiceGame onNavigate={handleNavigate} />
+      case 'depositHistory':
+        return <DepositHistory onBack={() => handleNavigate('wallet')} />
       case 'support':
         return <Support onNavigate={handleNavigate} />
       case 'profile':
@@ -131,14 +281,18 @@ function AppContent() {
           setTimeout(() => handleNavigate('home'), 0)
           return null
         }
-        return <AdminDashboard onNavigate={handleNavigate} onBack={() => handleNavigate('profile')} />
+        return (
+          <React.Suspense fallback={<AdminLayoutSkeleton />}>
+            <AdminDashboard onNavigate={handleNavigate} onBack={() => handleNavigate('profile')} />
+          </React.Suspense>
+        )
       default:
         return <Home onNavigate={handleNavigate} />
     }
   }
 
   // Hide nav bar on certain pages
-  const hideNav = ['depositGateway', 'transactionRecords', 'admin'].includes(activePage)
+  const hideNav = ['depositGateway', 'transactionRecords', 'depositHistory', 'admin'].includes(activePage)
   const isAdminLayout = activePage === 'admin'
 
   return (
@@ -191,10 +345,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <UserProvider>
-      <GameProvider>
-        <AppContent />
-      </GameProvider>
-    </UserProvider>
+    <ErrorBoundary>
+      <UserProvider>
+        <GameProvider>
+          <AppContent />
+        </GameProvider>
+      </UserProvider>
+    </ErrorBoundary>
   )
 }

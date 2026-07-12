@@ -1,8 +1,10 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import logger from '../utils/logger.js';
-import { verifyFirebaseToken } from '../utils/firebaseAdmin.js';
 import { query, pool } from '../config/db.js';
+import { sendSMSVerification } from '../utils/smsService.js';
+import { createNotification } from '../utils/notifier.js';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -10,81 +12,157 @@ const generateToken = (id) => {
   });
 };
 
-export const sendOtp = async (req, res) => {
-  const { name, phone, email, password } = req.body;
+const getCleanPhone = (phone) => {
+  if (typeof phone !== 'string') return '';
+  const sanitized = phone.replace(/[\s-]/g, '').replace(/\+/g, '');
+  if (sanitized.length === 12 && sanitized.startsWith('91')) {
+    return sanitized.substring(2);
+  }
+  if (sanitized.length === 11 && sanitized.startsWith('0')) {
+    return sanitized.substring(1);
+  }
+  return sanitized;
+};
 
-  if (!name || !phone || !email || !password) {
-    return res.status(400).json({ error: 'All fields are required' });
+/**
+ * Sends a registration OTP via SMS using our Renflair Gateway integration.
+ */
+export const sendOtp = async (req, res) => {
+  const { name, phone, password } = req.body;
+
+  if (!name || !phone || !password) {
+    return res.status(400).json({ error: 'Please fill in all the required fields before proceeding.' });
   }
 
+  const email = req.body.email ? String(req.body.email).trim() : `${getCleanPhone(phone)}@temp-user.com`;
+
   try {
-    const normalizedPhone = phone.replace(/[\s-]/g, '');
+    const cleanPhone = getCleanPhone(phone);
+
+    // Backend Sanitization Gate: Reject invalid phone numbers
+    if (cleanPhone.length !== 10 || !/^\d+$/.test(cleanPhone)) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit phone number.' });
+    }
 
     // Check availability in MySQL
     const users = await query(
       'SELECT id FROM users WHERE phone = ? OR email = ? LIMIT 1',
-      [normalizedPhone, email]
+      [cleanPhone, email]
     );
 
     if (users && users.length > 0) {
-      return res.status(400).json({ error: 'Phone number or email already registered' });
+      return res.status(400).json({ error: 'This phone number is already registered. Please sign in to your account.' });
     }
 
-    return res.status(200).json({ message: 'Validation successful' });
+    // Generate numeric 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+    // CRITICAL: Ensure the database write finishes cleanly BEFORE SMS dispatch fires
+    await query(
+      'INSERT INTO otp_tokens (email, otp_hash, type, expires_at) VALUES (?, ?, "REGISTER", DATE_ADD(NOW(), INTERVAL 10 MINUTE))',
+      [cleanPhone, otpHash]
+    );
+
+    // Call dynamic smsService
+    const smsResult = await sendSMSVerification(cleanPhone, otp);
+
+    // If SMS gateway fails, return 502 — fail loudly in production
+    if (!smsResult.success) {
+      logger.error(`[SMS] sendOtp failed for ${cleanPhone}: ${smsResult.error}`);
+      return res.status(502).json({ error: 'We were unable to deliver the verification code. Please check your number and try again shortly.' });
+    }
+
+    return res.status(200).json({ message: 'Verification code sent via SMS.' });
   } catch (error) {
     logger.error(error, 'Error in sendOtp');
-    return res.status(500).json({ error: 'An internal server error occurred.' });
+    return res.status(500).json({ error: 'We encountered an unexpected issue on our server. Please try again in a few moments.' });
   }
 };
 
 const generateUniqueUid = async (connection) => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let attempts = 0;
-  while (attempts < 10) {
-    const uid = Math.floor(100000 + Math.random() * 900000).toString();
+  while (attempts < 20) {
+    let uid = '';
+    for (let i = 0; i < 8; i++) {
+      uid += chars[crypto.randomInt(0, chars.length)];
+    }
     const [existing] = await connection.query('SELECT id FROM users WHERE uid = ? LIMIT 1', [uid]);
     if (existing.length === 0) {
       return uid;
     }
     attempts++;
   }
-  throw new Error('Failed to generate a unique 6-digit UID');
+  throw new Error('Failed to generate a unique 8-character UID');
 };
 
+/**
+ * Verifies the OTP and registers the user inside an atomic transaction.
+ */
 export const verifyOtpRegister = async (req, res) => {
-  const { name, phone, email, password, idToken } = req.body;
+  const { name, phone, password, otp, inviteCode } = req.body;
 
-  if (!name || !phone || !email || !password || !idToken) {
-    return res.status(400).json({ error: 'All fields, including Firebase ID Token, are required' });
+  if (!name || !phone || !password || !otp) {
+    return res.status(400).json({ error: 'Please fill in all fields and enter your verification code.' });
   }
+
+  const email = req.body.email ? String(req.body.email).trim() : `${getCleanPhone(phone)}@temp-user.com`;
 
   const connection = await pool.getConnection();
   try {
-    // 1. Verify Firebase ID Token
-    const claims = await verifyFirebaseToken(idToken);
-    const verifiedPhone = claims.phone_number;
+    const cleanPhone = getCleanPhone(phone);
+    const otpStr = String(otp).trim();
 
-    if (!verifiedPhone) {
-      return res.status(400).json({ error: 'Firebase ID Token does not contain a verified phone number' });
+    // Backend Sanitization Gate: Reject invalid inputs
+    if (cleanPhone.length !== 10 || !/^\d+$/.test(cleanPhone)) {
+      connection.release();
+      return res.status(400).json({ error: 'Please enter a valid 10-digit phone number.' });
+    }
+    if (otpStr.length !== 6 || !/^\d+$/.test(otpStr)) {
+      connection.release();
+      return res.status(400).json({ error: 'Please enter the complete 6-digit verification code.' });
     }
 
-    const normalizedReqPhone = phone.replace(/[\s-]/g, '');
-    const normalizedVerifiedPhone = verifiedPhone.replace(/[\s-]/g, '');
-
-    if (normalizedReqPhone !== normalizedVerifiedPhone) {
-      return res.status(400).json({ error: 'Registration phone number does not match verified Firebase phone number' });
-    }
-
-    // 2. Double check user doesn't exist
-    const users = await query(
-      'SELECT id FROM users WHERE phone = ? OR email = ? LIMIT 1',
-      [normalizedReqPhone, email]
+    // Compare user OTP hash against the record matching this phone number
+    const otpHash = crypto.createHash('sha256').update(otpStr).digest('hex');
+    const tokens = await connection.query(
+      'SELECT id FROM otp_tokens WHERE email = ? AND otp_hash = ? AND type = "REGISTER" AND expires_at > NOW() LIMIT 1',
+      [cleanPhone, otpHash]
     );
-    if (users && users.length > 0) {
-      return res.status(400).json({ error: 'Phone number or email already registered' });
+    
+    if (!tokens[0] || tokens[0].length === 0) {
+      connection.release();
+      return res.status(400).json({ error: 'The verification code you entered is invalid or has expired. Please request a new code.' });
     }
 
-    // 3. Create actual user inside transaction
+    // Double check user doesn't exist
+    const users = await connection.query(
+      'SELECT id FROM users WHERE phone = ? OR email = ? LIMIT 1',
+      [cleanPhone, email]
+    );
+    if (users[0] && users[0].length > 0) {
+      connection.release();
+      return res.status(400).json({ error: 'This phone number is already registered. Please sign in to your account.' });
+    }
+
+    // Lookup referrer if inviteCode was provided
+    let referrerId = null;
+    if (inviteCode && inviteCode.trim() !== '') {
+      const cleanInvite = String(inviteCode).trim().replace(/[^a-zA-Z0-9]/g, '');
+      const referrers = await connection.query(
+        'SELECT id FROM users WHERE uid = ? LIMIT 1',
+        [cleanInvite]
+      );
+      if (referrers[0] && referrers[0].length > 0) {
+        referrerId = referrers[0][0].id;
+      }
+    }
+
+    // Create user profile inside MySQL Transaction
     await connection.beginTransaction();
+
+    await connection.query('DELETE FROM otp_tokens WHERE id = ?', [tokens[0][0].id]);
 
     const uid = await generateUniqueUid(connection);
 
@@ -93,7 +171,7 @@ export const verifyOtpRegister = async (req, res) => {
 
     const [userResult] = await connection.query(
       'INSERT INTO users (uid, name, phone, email, password_hash, role) VALUES (?, ?, ?, ?, ?, "user")',
-      [uid, name, normalizedReqPhone, email, hashedPassword]
+      [uid, name, cleanPhone, email, hashedPassword]
     );
     const newUserId = userResult.insertId;
 
@@ -109,6 +187,14 @@ export const verifyOtpRegister = async (req, res) => {
       [newUserId]
     );
 
+    // Insert referral tracking link if referrerId was found
+    if (referrerId) {
+      await connection.query(
+        'INSERT INTO referrals (referrer_id, referred_id, status) VALUES (?, ?, "registered")',
+        [referrerId, newUserId]
+      );
+    }
+
     await connection.commit();
 
     const token = generateToken(newUserId);
@@ -119,7 +205,7 @@ export const verifyOtpRegister = async (req, res) => {
         _id: String(newUserId),
         uid,
         name,
-        phone: normalizedReqPhone,
+        phone: cleanPhone,
         email,
         walletBalance: 0,
         bonusBalance: 0,
@@ -135,94 +221,38 @@ export const verifyOtpRegister = async (req, res) => {
   }
 };
 
+/**
+ * Stub login endpoint to deprecate Firebase authentication.
+ */
 export const firebaseLogin = async (req, res) => {
-  const { idToken } = req.body;
-
-  if (!idToken) {
-    return res.status(400).json({ error: 'Firebase ID Token is required' });
-  }
-
-  try {
-    // 1. Verify ID Token
-    const claims = await verifyFirebaseToken(idToken);
-    const verifiedPhone = claims.phone_number;
-
-    if (!verifiedPhone) {
-      return res.status(400).json({ error: 'Firebase ID Token does not contain a verified phone number' });
-    }
-
-    const normalizedPhone = verifiedPhone.replace(/[\s-]/g, '');
-
-    // 2. Find user in database with wallet balances
-    const users = await query(
-      'SELECT u.id, u.name, u.phone, u.email, u.role, u.status, w.balance as wallet_balance, w.bonus_balance, w.locked_balance, w.required_wager ' +
-      'FROM users u ' +
-      'JOIN wallets w ON u.id = w.user_id ' +
-      'WHERE u.phone = ? LIMIT 1',
-      [normalizedPhone]
-    );
-
-    if (!users || users.length === 0) {
-      return res.status(404).json({ error: 'No account associated with this phone number. Please register first.' });
-    }
-
-    const user = users[0];
-
-    // Fetch claimed VIP rewards
-    const vipClaims = await query(
-      'SELECT v.vip_level, v.reward_type FROM bonuses b ' +
-      'JOIN vip_bonus_details v ON b.id = v.bonus_id ' +
-      'WHERE b.user_id = ? AND b.type = "vip"',
-      [user.id]
-    );
-    const claimedRewards = vipClaims.map(c => `${c.vip_level}-${c.reward_type}`);
-
-    const token = generateToken(user.id);
-    return res.json({
-      token,
-      user: {
-        id: String(user.id),
-        _id: String(user.id),
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        walletBalance: parseFloat(user.wallet_balance || 0),
-        availableBalance: parseFloat(user.wallet_balance || 0),
-        lockedBalance: parseFloat(user.locked_balance || 0),
-        bonusBalance: parseFloat(user.bonus_balance || 0),
-        requiredWager: parseFloat(user.required_wager || 0),
-        claimedVipRewards: claimedRewards,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    return res.status(401).json({ error: `Authentication failed: ${error.message}` });
-  }
+  return res.status(400).json({ error: 'Firebase Auth is deprecated. Please register or login using password credentials.' });
 };
 
 export const register = async (req, res) => {
-  return res.status(400).json({ error: 'Registration now requires Firebase verification. Please update your client.' });
+  return res.status(400).json({ error: 'Registration now requires SMS verification. Please update your client.' });
 };
 
 export const login = async (req, res) => {
   const { phoneOrEmail, password } = req.body;
 
   if (!phoneOrEmail || !password) {
-    return res.status(400).json({ error: 'All fields are required' });
+    return res.status(400).json({ error: 'Please enter your credentials to sign in.' });
   }
 
   try {
+    const cleanLookup = getCleanPhone(phoneOrEmail);
+
     // Query users with wallet balances
     const users = await query(
       'SELECT u.id, u.name, u.phone, u.email, u.password_hash, u.role, u.status, w.balance as wallet_balance, w.bonus_balance, w.locked_balance, w.required_wager ' +
       'FROM users u ' +
       'JOIN wallets w ON u.id = w.user_id ' +
       'WHERE u.phone = ? OR u.email = ? LIMIT 1',
-      [phoneOrEmail, phoneOrEmail]
+      [cleanLookup, phoneOrEmail]
     );
 
     if (!users || users.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: "The phone number or password you entered doesn't match our records. Please double-check and try again." });
     }
 
     const user = users[0];
@@ -230,7 +260,7 @@ export const login = async (req, res) => {
     // Password verification using bcrypt
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: "The phone number or password you entered doesn't match our records. Please double-check and try again." });
     }
 
     // Fetch claimed VIP rewards
@@ -311,6 +341,7 @@ export const getProfile = async (req, res) => {
         name: req.user.name,
         phone: req.user.phone,
         email: req.user.email,
+        avatar: req.user.profile_pic || '/avatars/Avatar_1.jpg',
         walletBalance: parseFloat(wallet.wallet_balance || 0),
         availableBalance: parseFloat(wallet.wallet_balance || 0),
         lockedBalance: parseFloat(wallet.locked_balance || 0),
@@ -335,5 +366,161 @@ export const getProfile = async (req, res) => {
   } catch (err) {
     logger.error(err, 'Error in getProfile');
     return res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+};
+
+/**
+ * Password reset trigger: gets the user's mobile number, generates and hashes 6-digit OTP,
+ * then dispatches it via SMS Service.
+ */
+export const forgotPassword = async (req, res) => {
+  const { phoneOrEmail } = req.body;
+  if (!phoneOrEmail) return res.status(400).json({ error: 'Please enter your phone number or email to proceed.' });
+
+  try {
+    const cleanLookup = getCleanPhone(phoneOrEmail);
+    const isPhone = /^\d+$/.test(cleanLookup);
+
+    // Backend Sanitization Gate
+    if (isPhone && cleanLookup.length !== 10) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit phone number.' });
+    }
+
+    const users = await query(
+      'SELECT id, phone, email FROM users WHERE phone = ? OR email = ? LIMIT 1',
+      [cleanLookup, phoneOrEmail]
+    );
+    if (!users || users.length === 0) {
+      return res.status(404).json({ error: "We couldn't find an account matching these details. Please check your spelling or register for a new account." });
+    }
+
+    const phone = users[0].phone;
+    if (!phone) {
+      return res.status(400).json({ error: "We couldn't find a mobile number linked to this account." });
+    }
+
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+    // CRITICAL: Ensure the database write finishes cleanly BEFORE SMS dispatch fires
+    await query(
+      'INSERT INTO otp_tokens (email, otp_hash, type, expires_at) VALUES (?, ?, "RESET_PASSWORD", DATE_ADD(NOW(), INTERVAL 10 MINUTE))',
+      [phone, otpHash]
+    );
+
+    const smsResult = await sendSMSVerification(phone, otp);
+
+    // If SMS gateway fails, return 502 — fail loudly in production
+    if (!smsResult.success) {
+      logger.error(`[SMS] forgotPassword failed for ${phone}: ${smsResult.error}`);
+      return res.status(502).json({ error: 'We were unable to deliver the verification code. Please try again shortly.' });
+    }
+
+    return res.status(200).json({ message: 'Verification code sent to your registered mobile number.' });
+  } catch (error) {
+    logger.error(error, 'Error in forgotPassword');
+    return res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+};
+
+/**
+ * Resets the password after matching the phone number token hash.
+ */
+export const resetPassword = async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ error: 'Please fill in all the required fields.' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    const cleanLookup = getCleanPhone(email);
+    const otpStr = String(otp).trim();
+
+    // Backend Sanitization Gate
+    if (otpStr.length !== 6 || !/^\d+$/.test(otpStr)) {
+      connection.release();
+      return res.status(400).json({ error: 'Please enter the complete 6-digit verification code.' });
+    }
+
+    const users = await connection.query(
+      'SELECT phone, email FROM users WHERE phone = ? OR email = ? LIMIT 1',
+      [cleanLookup, email]
+    );
+    if (!users[0] || users[0].length === 0) {
+      connection.release();
+      return res.status(404).json({ error: "We couldn't find an account matching these details." });
+    }
+
+    const phone = users[0][0].phone;
+    const userEmail = users[0][0].email;
+
+    const otpHash = crypto.createHash('sha256').update(otpStr).digest('hex');
+    const tokens = await connection.query(
+      'SELECT id FROM otp_tokens WHERE email = ? AND otp_hash = ? AND type = "RESET_PASSWORD" AND expires_at > NOW() LIMIT 1',
+      [phone, otpHash]
+    );
+    
+    if (!tokens[0] || tokens[0].length === 0) {
+      connection.release();
+      return res.status(400).json({ error: 'The verification code you entered is invalid or has expired. Please request a new code.' });
+    }
+
+    await connection.beginTransaction();
+
+    await connection.query('DELETE FROM otp_tokens WHERE id = ?', [tokens[0][0].id]);
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await connection.query('UPDATE users SET password_hash = ? WHERE email = ?', [hashedPassword, userEmail]);
+
+    // Fetch user details for SECURITY notification inside the transaction
+    const [userRows] = await connection.query('SELECT id FROM users WHERE email = ? LIMIT 1', [userEmail]);
+    if (userRows.length > 0) {
+      await createNotification(
+        userRows[0].id,
+        'Security Alert: Password Updated',
+        'Your password has been successfully updated/reset.',
+        'SECURITY',
+        connection
+      );
+    }
+
+    await connection.commit();
+    return res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    await connection.rollback();
+    logger.error(error, 'Error in resetPassword');
+    return res.status(500).json({ error: 'An internal server error occurred.' });
+  } finally {
+    connection.release();
+  }
+};
+
+export const getReferralSignups = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT u.id, u.phone, r.created_at ' +
+      'FROM referrals r ' +
+      'JOIN users u ON r.referred_id = u.id ' +
+      'WHERE r.referrer_id = ? ORDER BY r.created_at DESC',
+      [req.user.id]
+    );
+    
+    const referrals = rows.map(row => {
+      const rawPhone = String(row.phone || '').trim();
+      const maskedPhone = rawPhone.length > 4 ? '******' + rawPhone.slice(-4) : '****';
+      return {
+        id: row.id,
+        phone: maskedPhone,
+        created_at: row.created_at
+      };
+    });
+    
+    return res.json(referrals);
+  } catch (err) {
+    logger.error(err, 'Failed to fetch referral signups');
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 };

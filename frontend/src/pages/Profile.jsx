@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '../context/UserContext'
+import { useGame } from '../context/GameContext'
 import { getVipLevel, VIP_TIERS } from '../utils/vipTiers'
 import { 
   Settings, Shield, History, HelpCircle, ChevronRight, LogOut, Award, 
@@ -136,9 +137,9 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
     }
   }, [toast])
 
-  const defaultAvatar = 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix'
+  const defaultAvatar = '/avatars/Avatar_1.jpg'
 
-  const totalDeposit = depositRecords.reduce((acc, curr) => acc + (curr.status === 'Completed' ? curr.amount : 0), 0)
+  const totalDeposit = user?.totalDeposits || 0
   
   const vipLevel = getVipLevel(totalDeposit)
   const totalWinnings = betRecords.filter(r => r.amount > 0 && r.game !== 'VIP Reward' && r.game !== 'Referral Reward').reduce((acc, curr) => acc + curr.amount, 0)
@@ -226,7 +227,7 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
           </div>
           <div className="flex-1">
             <h1 className="text-xl font-bold text-slate-800">{user?.name || 'Demo User'}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{user?.email || 'demo@colourplay.com'}</p>
+            <p className="text-sm text-slate-500 mt-0.5">{user?.email || 'demo@rrclub.com'}</p>
             <p className="text-[10px] text-slate-450 mt-1 font-mono font-bold flex items-center gap-1">
               UID: {user?.uid || '102948'}
               <button 
@@ -390,119 +391,121 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
 
               {/* Security & Limits */}
               <div className="space-y-3 pt-2">
-                <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Security & Limits</h3>
-                
-                {/* 2FA Mode Toggle */}
-                <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-slate-750">Two-Factor Auth (2FA)</span>
-                    <span className="text-[8px] text-slate-400">Protects wallet with OTP</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (twoFactorEnabled) {
-                        setTwoFactorEnabled(false)
-                        setTwoFaVerified(false)
-                        setToast('Two-Factor Authentication disabled')
-                      } else {
-                        setTwoFactorEnabled(true)
-                        setTwoFaVerified(false)
-                      }
-                    }}
-                    className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
-                      twoFactorEnabled ? 'bg-primary justify-end' : 'bg-slate-200 justify-start'
-                    }`}
-                  >
-                    <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
-                      {twoFactorEnabled ? <Check size={8} className="text-primary font-bold" /> : <X size={8} className="text-slate-400" />}
-                    </span>
-                  </button>
-                </div>
-
-                {/* Detailed 2FA Setup/Status Section inside settings modal */}
-                {twoFactorEnabled && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3 transition-all animate-[fadeIn_0.2s_ease-out] text-slate-700">
-                    {twoFaVerified ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-emerald-600 font-bold">
-                          <Shield size={14} className="animate-pulse" />
-                          <span className="text-[10px] font-black uppercase tracking-wider">2FA Active & Secured</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">
-                          Your account is protected by Google Authenticator. Verification codes will be required for large withdrawals and password changes.
-                        </p>
-                        <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2">
-                          <span className="text-[9px] font-mono text-slate-400">Secret: •••• •••• •••• Z24W</span>
-                          <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Linked</span>
-                        </div>
+                <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Security & Limits</h3>                {/* 2FA Mode Toggle (Admins Only) */}
+                {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                  <>
+                    <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-bold text-slate-755">Two-Factor Auth (2FA)</span>
+                        <span className="text-[8px] text-slate-400">Protects wallet with OTP</span>
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-primary font-bold">
-                          <Shield size={14} />
-                          <span className="text-[10px] font-black uppercase tracking-wider">Setup 2FA Protection</span>
-                        </div>
-                        <p className="text-[9px] text-slate-500 leading-relaxed">
-                          1. Scan this QR code or copy the key into your Google Authenticator app.
-                        </p>
+                      <button
+                        onClick={() => {
+                          if (twoFactorEnabled) {
+                            setTwoFactorEnabled(false)
+                            setTwoFaVerified(false)
+                            setToast('Two-Factor Authentication disabled')
+                          } else {
+                            setTwoFactorEnabled(true)
+                            setTwoFaVerified(false)
+                          }
+                        }}
+                        className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
+                          twoFactorEnabled ? 'bg-primary justify-end' : 'bg-slate-200 justify-start'
+                        }`}
+                      >
+                        <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
+                          {twoFactorEnabled ? <Check size={8} className="text-primary font-bold" /> : <X size={8} className="text-slate-400" />}
+                        </span>
+                      </button>
+                    </div>
 
-                        <div className="flex flex-col items-center bg-white border border-slate-200 rounded-2xl p-3 relative overflow-hidden">
-                          <div className="w-20 h-20 border border-dashed border-slate-200 rounded-xl flex items-center justify-center mb-2 bg-slate-50">
-                            <QrCode size={36} className="text-primary" />
+                    {/* Detailed 2FA Setup/Status Section inside settings modal */}
+                    {twoFactorEnabled && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3 transition-all animate-[fadeIn_0.2s_ease-out] text-slate-700">
+                        {twoFaVerified ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-emerald-600 font-bold">
+                              <Shield size={14} className="animate-pulse" />
+                              <span className="text-[10px] font-black uppercase tracking-wider">2FA Active & Secured</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                              Your account is protected by Google Authenticator. Verification codes will be required for large withdrawals and password changes.
+                            </p>
+                            <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2">
+                              <span className="text-[9px] font-mono text-slate-400">Secret: •••• •••• •••• Z24W</span>
+                              <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Linked</span>
+                            </div>
                           </div>
-                          <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 mt-1">
-                            <span className="text-[10px] font-mono font-bold text-slate-700">CP7X98Y6Z24W44UT</span>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-primary font-bold">
+                              <Shield size={14} />
+                              <span className="text-[10px] font-black uppercase tracking-wider">Setup 2FA Protection</span>
+                            </div>
+                            <p className="text-[9px] text-slate-500 leading-relaxed">
+                              1. Scan this QR code or copy the key into your Google Authenticator app.
+                            </p>
+
+                            <div className="flex flex-col items-center bg-white border border-slate-200 rounded-2xl p-3 relative overflow-hidden">
+                              <div className="w-20 h-20 border border-dashed border-slate-200 rounded-xl flex items-center justify-center mb-2 bg-slate-50">
+                                <QrCode size={36} className="text-primary" />
+                              </div>
+                              <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 mt-1">
+                                <span className="text-[10px] font-mono font-bold text-slate-700">CP7X98Y6Z24W44UT</span>
+                                <button
+                                  onClick={() => {
+                                    copyToClipboard('CP7X98Y6Z24W44UT')
+                                    setTwoFaCopied(true)
+                                    setTimeout(() => setTwoFaCopied(false), 2000)
+                                  }}
+                                  className="text-[9px] font-bold text-primary flex items-center gap-0.5 cursor-pointer hover:underline bg-transparent border-0 outline-none p-0"
+                                >
+                                  {twoFaCopied ? 'Copied' : <Copy size={10} />}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Enter 6-Digit Code</label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={totpCode}
+                                onChange={(e) => {
+                                  setTotpCode(e.target.value.replace(/[^0-9]/g, ''))
+                                  setTotpError(false)
+                                }}
+                                placeholder="000 000"
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-bold font-mono tracking-widest text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                              />
+                              {totpError && (
+                                <p className="text-[9px] text-red-500 font-bold flex items-center gap-0.5">
+                                  <AlertCircle size={10} /> Invalid 6-digit verification code
+                                </p>
+                              )}
+                            </div>
+
                             <button
                               onClick={() => {
-                                copyToClipboard('CP7X98Y6Z24W44UT')
-                                setTwoFaCopied(true)
-                                setTimeout(() => setTwoFaCopied(false), 2000)
+                                if (totpCode.length === 6) {
+                                  setTwoFaVerified(true)
+                                  setTotpCode('')
+                                  setToast('🎉 2FA linked successfully!')
+                                } else {
+                                  setTotpError(true)
+                                }
                               }}
-                              className="text-[9px] font-bold text-primary flex items-center gap-0.5 cursor-pointer hover:underline bg-transparent border-0 outline-none p-0"
+                              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-650 text-white font-bold text-[10px] rounded-xl shadow-md cursor-pointer hover:brightness-105 transition-all border-0 outline-none"
                             >
-                              {twoFaCopied ? 'Copied' : <Copy size={10} />}
+                              Verify & Bind
                             </button>
                           </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Enter 6-Digit Code</label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={6}
-                            value={totpCode}
-                            onChange={(e) => {
-                              setTotpCode(e.target.value.replace(/[^0-9]/g, ''))
-                              setTotpError(false)
-                            }}
-                            placeholder="000 000"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-bold font-mono tracking-widest text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-                          />
-                          {totpError && (
-                            <p className="text-[9px] text-red-500 font-bold flex items-center gap-0.5">
-                              <AlertCircle size={10} /> Invalid 6-digit verification code
-                            </p>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            if (totpCode.length === 6) {
-                              setTwoFaVerified(true)
-                              setTotpCode('')
-                              setToast('🎉 2FA linked successfully!')
-                            } else {
-                              setTotpError(true)
-                            }
-                          }}
-                          className="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-650 text-white font-bold text-[10px] rounded-xl shadow-md cursor-pointer hover:brightness-105 transition-all border-0 outline-none"
-                        >
-                          Verify & Bind
-                        </button>
+                        )}
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
 
                 {/* Responsible Gaming limit */}
@@ -585,26 +588,39 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
             </div>
 
             <div className="grid grid-cols-4 gap-3 max-h-[45vh] overflow-y-auto p-1">
-              {[
-                "Felix", "Aneka", "Jack", "Luna", "Oliver", "Maya", "Leo", 
-                "Zoe", "Milo", "Sofia", "Toby", "Ruby", "Max", "Mia", "Sam"
-              ].map((seed) => {
-                const imgUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}`
-                const isSelected = user?.avatar === imgUrl
+              {Array.from({ length: 12 }, (_, i) => {
+                const avatarUrl = `/avatars/Avatar_${i + 1}.jpg`;
+                const isSelected = user?.avatar === avatarUrl;
                 return (
                   <button
-                    key={seed}
-                    onClick={() => {
-                      setUser(prev => ({ ...prev, avatar: imgUrl }))
-                      setShowAvatarPicker(false)
+                    key={i}
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem('token');
+                        const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+                        const response = await fetch(`${API_BASE}/api/auth/profile`, {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                          },
+                          body: JSON.stringify({ avatar: avatarUrl })
+                        });
+                        if (response.ok) {
+                          setUser(prev => ({ ...prev, avatar: avatarUrl }));
+                        }
+                      } catch (err) {
+                        console.error('Failed to update profile picture:', err);
+                      }
+                      setShowAvatarPicker(false);
                     }}
                     className={`aspect-square rounded-2xl overflow-hidden bg-slate-50 border-2 transition-all p-1 hover:scale-105 active:scale-95 cursor-pointer ${
                       isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <img src={imgUrl} className="w-full h-full object-cover" alt={seed} />
+                    <img src={avatarUrl} className="w-full h-full object-cover" alt={`Avatar ${i + 1}`} />
                   </button>
-                )
+                );
               })}
             </div>
 
@@ -659,8 +675,11 @@ function SubPageContent({ page, orders, onNavigate, onSelectAvatarClick }) {
 }
 /* ── Account Details ── */
 function AccountDetails({ onSelectAvatarClick }) {
-  const { user } = useUser()
+  const { user, fetchUserHistory } = useUser()
   const [toast, setToast] = useState(null)
+  const [emailVal, setEmailVal] = useState(user?.email || '')
+  const [nameVal, setNameVal] = useState(user?.name || '')
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (toast) {
@@ -668,11 +687,64 @@ function AccountDetails({ onSelectAvatarClick }) {
       return () => clearTimeout(t)
     }
   }, [toast])
-  const defaultAvatar = 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix'
+
+  useEffect(() => {
+    if (user) {
+      setEmailVal(user.email || '')
+      setNameVal(user.name || '')
+    }
+  }, [user])
+
+  const defaultAvatar = '/avatars/Avatar_1.jpg'
   const name = user?.name || 'Demo User'
-  const email = user?.email || 'demo@colourplay.com'
+  const email = user?.email || 'demo@rrclub.com'
   const phone = user?.phone || '+91 99999 99999'
   const location = user?.location || 'Mumbai, India'
+
+  const handleSaveProfile = async () => {
+    if (!nameVal.trim()) {
+      setToast('Full Name is required.')
+      return
+    }
+    
+    // If it's a temp email prefix matching phone, treat it as empty/optional
+    const isTempEmail = emailVal.trim().includes('@temp-user.com');
+    if (emailVal.trim() && !isTempEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal.trim())) {
+      setToast('Invalid email address format.')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const token = localStorage.getItem('token')
+      const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+      const response = await fetch(`${API_BASE}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: nameVal.trim(),
+          email: emailVal.trim()
+        })
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update profile.')
+      }
+
+      await fetchUserHistory()
+      setToast('Profile updated successfully!')
+    } catch (err) {
+      setToast(err.message || 'Error updating profile')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Display user-friendly email in UI (hide temp emails)
+  const displayEmail = emailVal.includes('@temp-user.com') ? '' : emailVal;
 
   return (
     <div className="space-y-4">
@@ -698,23 +770,23 @@ function AccountDetails({ onSelectAvatarClick }) {
           </div>
         </div>
         <h4 className="text-sm font-black text-slate-800">{name}</h4>
-        <p className="text-[11px] text-slate-400 mt-0.5">{email}</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">{email.includes('@temp-user.com') ? 'No email linked' : email}</p>
       </div>
 
-      {/* Read-Only Information */}
+      {/* Edit Profile Fields */}
       <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
-        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-100 pb-3 mb-2">Profile Information</h3>
-        <div className="space-y-3">
+        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-100 pb-3 mb-2">Account Settings</h3>
+        <div className="space-y-3.5">
           <div>
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">User UID</label>
-            <div className="w-full px-4 py-3 bg-slate-50 border border-transparent rounded-xl text-xs font-bold font-mono text-slate-600 flex items-center justify-between">
+            <div className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-500 flex items-center justify-between select-none">
               <span>{user?.uid || '102948'}</span>
               <button 
                 onClick={() => {
                   copyToClipboard(user?.uid || '102948')
                   setToast('UID copied to clipboard!')
                 }}
-                className="flex items-center gap-1 text-[10px] font-bold text-primary hover:underline cursor-pointer"
+                className="flex items-center gap-1 text-[10px] font-bold text-primary hover:underline cursor-pointer bg-transparent border-0 outline-none p-0"
               >
                 <Copy size={12} /> Copy
               </button>
@@ -723,38 +795,54 @@ function AccountDetails({ onSelectAvatarClick }) {
 
           <div>
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Full Name</label>
-            <div className="w-full px-4 py-3 bg-slate-50 border border-transparent rounded-xl text-xs font-semibold text-slate-600">
-              {name}
-            </div>
+            <input
+              type="text"
+              value={nameVal}
+              onChange={(e) => setNameVal(e.target.value)}
+              placeholder="Enter your full name"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+            />
           </div>
 
           <div>
-            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Email Address</label>
-            <div className="w-full px-4 py-3 bg-slate-50 border border-transparent rounded-xl text-xs font-semibold text-slate-600">
-              {email}
-            </div>
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Email Address (Optional)</label>
+            <input
+              type="email"
+              value={displayEmail}
+              onChange={(e) => setEmailVal(e.target.value)}
+              placeholder="Add email address"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+            />
           </div>
 
           <div>
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Phone Number</label>
-            <div className="w-full px-4 py-3 bg-slate-50 border border-transparent rounded-xl text-xs font-semibold text-slate-600">
+            <div className="w-full px-4 py-3 bg-slate-100 border border-transparent rounded-xl text-xs font-semibold text-slate-500 select-none">
               {phone}
             </div>
           </div>
 
           <div>
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Location</label>
-            <div className="w-full px-4 py-3 bg-slate-50 border border-transparent rounded-xl text-xs font-semibold text-slate-600">
+            <div className="w-full px-4 py-3 bg-slate-100 border border-transparent rounded-xl text-xs font-semibold text-slate-500 select-none">
               {location}
             </div>
           </div>
 
           <div>
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Member Since</label>
-            <div className="w-full px-4 py-3 bg-slate-50 border border-transparent rounded-xl text-xs font-semibold text-slate-600">
+            <div className="w-full px-4 py-3 bg-slate-100 border border-transparent rounded-xl text-xs font-semibold text-slate-500 select-none">
               June 2025
             </div>
           </div>
+
+          <button
+            onClick={handleSaveProfile}
+            disabled={isSaving}
+            className="w-full py-3 mt-4 bg-primary text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-300 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-md shadow-primary/10 cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            {isSaving ? 'Saving Changes...' : 'Save Profile Changes'}
+          </button>
         </div>
       </div>
 
@@ -769,11 +857,11 @@ function AccountDetails({ onSelectAvatarClick }) {
 }
 
 function VipClub() {
-  const { depositRecords, claimedVipRewards, setClaimedVipRewards, setBetRecords, addBonus, fetchUserHistory } = useUser()
+  const { user, claimedVipRewards, setClaimedVipRewards, setBetRecords, addBonus, fetchUserHistory } = useUser()
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [toast, setToast] = useState(null)
   
-  const totalDeposit = depositRecords.reduce((acc, curr) => acc + (curr.status === 'Completed' ? curr.amount : 0), 0)
+  const totalDeposit = user?.totalDeposits || 0
 
   const currentVipLevel = getVipLevel(totalDeposit)
 
@@ -1082,22 +1170,119 @@ function VipClub() {
 /* ── Refer & Earn Hub ── */
 function ReferEarn() {
   const { 
+    user,
     unclaimedReferral, setUnclaimedReferral, 
     directReferralReward, betCommissionReward,
     setBetRecords, depositRecords, addBonus 
   } = useUser()
+  const { socket } = useGame()
+  
+  const [referralSignups, setReferralSignups] = useState([])
+  const [leaderboard, setLeaderboard] = useState([])
+  const [loadingReferrals, setLoadingReferrals] = useState(false)
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false)
+  const [commissionLogs, setCommissionLogs] = useState([])
+  const [loadingCommissions, setLoadingCommissions] = useState(false)
+
   const totalDeposit = depositRecords.reduce((acc, curr) => acc + (curr.status === 'Completed' ? curr.amount : 0), 0)
   const vipLevel = getVipLevel(totalDeposit)
   const [activeTab, setActiveTab] = useState('rewards') // 'rewards' | 'rules' | 'leaderboard' | 'referrals'
+  
+  useEffect(() => {
+    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+
+    if (activeTab === 'rewards') {
+      const fetchCommissions = async () => {
+        setLoadingCommissions(true)
+        try {
+          const res = await fetch(`${API_BASE}/api/wallet/transactions`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const filtered = data.filter(t => ['referral_bonus', 'commission'].includes(t.type))
+            setCommissionLogs(filtered)
+          }
+        } catch (err) {
+          console.error('Error fetching commission logs:', err)
+        } finally {
+          setLoadingCommissions(false)
+        }
+      }
+      fetchCommissions()
+    }
+    
+    if (activeTab === 'referrals') {
+      const fetchReferrals = async () => {
+        setLoadingReferrals(true)
+        try {
+          const res = await fetch(`${API_BASE}/api/auth/referrals`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setReferralSignups(data)
+          }
+        } catch (err) {
+          console.error('Error fetching referrals:', err)
+        } finally {
+          setLoadingReferrals(false)
+        }
+      }
+      fetchReferrals()
+    }
+    
+    if (activeTab === 'leaderboard') {
+      const fetchLeaderboard = async () => {
+        setLoadingLeaderboard(true)
+        try {
+          const res = await fetch(`${API_BASE}/api/games/leaderboard`)
+          if (res.ok) {
+            const data = await res.json()
+            setLeaderboard(data)
+          }
+        } catch (err) {
+          console.error('Error fetching leaderboard:', err)
+        } finally {
+          setLoadingLeaderboard(false)
+        }
+      }
+      fetchLeaderboard()
+    }
+  }, [activeTab])
+
+  // Socket listener for real-time leaderboard updates
+  useEffect(() => {
+    if (!socket) return
+    const handleLeaderboardUpdate = (data) => {
+      setLeaderboard(data)
+    }
+    socket.on('leaderboard_update', handleLeaderboardUpdate)
+    return () => {
+      socket.off('leaderboard_update', handleLeaderboardUpdate)
+    }
+  }, [socket])
   const [copied, setCopied] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const referralLink = "https://indclub39.com/?code=34UUCR8WY8T&t=17814444868"
+  const referralLink = `${window.location.origin}/register?invitecode=${user?.referral_code || ''}`
 
   const handleCopy = () => {
-    copyToClipboard(referralLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    navigator.clipboard.writeText(referralLink)
+      .then(() => {
+        setToast("📋 Referral Link copied to clipboard successfully!")
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      .catch((err) => {
+        console.error('Failed to copy using navigator.clipboard', err)
+        copyToClipboard(referralLink)
+        setToast("📋 Referral Link copied to clipboard successfully!")
+      })
   }
 
   const handleClaimCommission = () => {
@@ -1118,8 +1303,8 @@ function ReferEarn() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'ColourPlay Referral',
-          text: 'Join ColourPlay and play exciting prediction games to win cash!',
+          title: 'RRClub Referral',
+          text: 'Join RRClub and play prediction games to win real cash!',
           url: referralLink,
         })
       } catch {
@@ -1135,9 +1320,9 @@ function ReferEarn() {
   const handleSocialShare = (platform) => {
     let url = ''
     if (platform === 'whatsapp') {
-      url = `https://api.whatsapp.com/send?text=${encodeURIComponent('Join ColourPlay and play prediction games to win real cash! ' + referralLink)}`
+      url = `https://api.whatsapp.com/send?text=${encodeURIComponent('Join RRClub and play prediction games to win real cash!\n' + referralLink)}`
     } else if (platform === 'telegram') {
-      url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join ColourPlay and play prediction games to win real cash!')}`
+      url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join RRClub and play prediction games to win real cash!')}`
     } else if (platform === 'facebook') {
       url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`
     }
@@ -1230,14 +1415,31 @@ function ReferEarn() {
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               <span>Date</span>
-              <span>Total Cash</span>
-              <span>Total Bonus</span>
+              <span>Description</span>
+              <span>Amount</span>
             </div>
             <div className="divide-y divide-slate-100 text-xs">
-              <div className="p-4 flex justify-between"><span>14-06-2026</span><span className="font-semibold text-emerald-600">+₹150.00</span><span className="text-slate-400">₹0.00</span></div>
-              <div className="p-4 flex justify-between"><span>13-06-2026</span><span className="font-semibold text-emerald-600">+₹300.00</span><span className="text-slate-400">₹0.00</span></div>
-              <div className="p-4 flex justify-between"><span>11-06-2026</span><span className="font-semibold text-emerald-600">+₹500.00</span><span className="text-slate-400">+₹100.00</span></div>
-              <div className="p-4 flex justify-between"><span>09-06-2026</span><span className="font-semibold text-emerald-600">+₹500.00</span><span className="text-slate-400">+₹250.00</span></div>
+              {loadingCommissions ? (
+                [1, 2].map((_, i) => (
+                  <div key={i} className="p-4 animate-pulse flex justify-between">
+                    <div className="w-16 h-4 bg-slate-200 rounded" />
+                    <div className="w-32 h-4 bg-slate-200 rounded" />
+                    <div className="w-12 h-4 bg-slate-200 rounded" />
+                  </div>
+                ))
+              ) : commissionLogs.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">
+                  No commission earnings recorded yet.
+                </div>
+              ) : (
+                commissionLogs.map((log, i) => (
+                  <div key={i} className="p-4 flex justify-between items-center">
+                    <span className="text-slate-500">{new Date(log.createdAt).toLocaleDateString()}</span>
+                    <span className="font-semibold text-slate-700">{log.description}</span>
+                    <span className="font-semibold text-emerald-600">+₹{parseFloat(log.amount).toFixed(2)}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -1273,25 +1475,44 @@ function ReferEarn() {
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center">
             <span className="w-10">Rank</span>
-            <span className="flex-1">Referrer Name</span>
-            <span className="text-right">Prize Earned</span>
+            <span className="flex-1">Player Name</span>
+            <span className="text-right">Total Profit</span>
           </div>
           <div className="divide-y divide-slate-100 text-xs">
-            {[
-              { rank: 1, name: 'Sanjay Sharma', prize: '₹25,000', badge: '🥇' },
-              { rank: 2, name: 'Aditya Sen', prize: '₹15,000', badge: '🥈' },
-              { rank: 3, name: 'Megha Gupta', prize: '₹10,000', badge: '🥉' },
-              { rank: 4, name: 'Rajesh Patel', prize: '₹5,000' },
-              { rank: 5, name: 'Sneha Rao', prize: '₹3,000' },
-            ].map((item, i) => (
-              <div key={i} className="px-4 py-3.5 flex items-center">
-                <span className="w-10 font-bold text-slate-500 flex items-center gap-0.5">
-                  {item.rank} {item.badge && <span className="text-sm">{item.badge}</span>}
-                </span>
-                <span className="flex-1 font-semibold text-slate-800">{item.name}</span>
-                <span className="text-right font-bold text-emerald-600">{item.prize}</span>
+            {loadingLeaderboard ? (
+              [1, 2, 3, 4, 5].map((_, i) => (
+                <div key={i} className="px-4 py-3.5 flex items-center justify-between animate-pulse">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="w-6 h-4 bg-slate-200 rounded" />
+                    <div className="w-8 h-8 bg-slate-200 rounded-full" />
+                    <div className="w-24 h-4 bg-slate-200 rounded" />
+                  </div>
+                  <div className="w-12 h-4 bg-slate-200 rounded text-right" />
+                </div>
+              ))
+            ) : leaderboard.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                No profit entries recorded yet.
               </div>
-            ))}
+            ) : (
+              leaderboard.map((item, i) => (
+                <div key={i} className="px-4 py-3.5 flex items-center">
+                  <span className="w-10 font-bold text-slate-500 flex items-center gap-0.5">
+                    {item.rank} {item.badge && <span className="text-sm">{item.badge}</span>}
+                  </span>
+                  {item.avatar && (
+                    <img 
+                      src={item.avatar} 
+                      alt="" 
+                      className="w-6 h-6 rounded-full border border-slate-200 mr-2"
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  )}
+                  <span className="flex-1 font-semibold text-slate-800">{item.name}</span>
+                  <span className="text-right font-bold text-emerald-600">{item.prize}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -1301,23 +1522,34 @@ function ReferEarn() {
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
             <span>Referral Details</span>
-            <span>Reward Secured</span>
+            <span>Status</span>
           </div>
           <div className="divide-y divide-slate-100 text-xs">
-            {[
-              { name: 'Karan Mehra', date: 'June 14, 2026', deposit: 'Completed', reward: '₹10.00' },
-              { name: 'Rahul Varma', date: 'June 13, 2026', deposit: 'Completed', reward: '₹10.00' },
-              { name: 'Pooja Reddy', date: 'June 11, 2026', deposit: 'Completed', reward: '₹10.00' },
-              { name: 'Aman Dixit', date: 'June 09, 2026', deposit: 'Pending', reward: '₹0.00' },
-            ].map((friend, i) => (
-              <div key={i} className="p-4 flex items-center justify-between">
-                <div>
-                  <h5 className="font-semibold text-slate-800">{friend.name}</h5>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Joined: {friend.date} · Deposit: <span className={friend.deposit === 'Completed' ? 'text-emerald-500 font-bold' : 'text-slate-400 font-medium'}>{friend.deposit}</span></p>
+            {loadingReferrals ? (
+              [1, 2, 3].map((_, i) => (
+                <div key={i} className="p-4 animate-pulse flex justify-between items-center">
+                  <div className="space-y-2">
+                    <div className="w-24 h-4 bg-slate-200 rounded" />
+                    <div className="w-32 h-3 bg-slate-200 rounded" />
+                  </div>
+                  <div className="w-12 h-4 bg-slate-200 rounded" />
                 </div>
-                <span className={`font-bold ${friend.reward !== '₹0.00' ? 'text-emerald-600' : 'text-slate-400'}`}>+{friend.reward}</span>
+              ))
+            ) : referralSignups.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                You have not referred anyone yet.
               </div>
-            ))}
+            ) : (
+              referralSignups.map((friend, i) => (
+                <div key={i} className="p-4 flex items-center justify-between">
+                  <div>
+                    <h5 className="font-semibold text-slate-800">User {friend.phone}</h5>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Joined: {new Date(friend.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <span className="font-bold text-emerald-600">Registered</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -1661,119 +1893,123 @@ function SafeCenterModal({ onClose }) {
           <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">Safe Center</h3>
         </div>
 
-        {/* Two Factor Auth Toggle */}
-        <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
-          <div className="flex flex-col">
-            <span className="text-[11px] font-bold text-slate-700">Two-Factor Auth</span>
-            <span className="text-[8px] text-slate-400 mt-0.5">Secure your account actions</span>
-          </div>
-          <button
-            onClick={() => {
-              if (twoFA) {
-                setTwoFA(false)
-                setTwoFaVerified(false)
-                setToast({ msg: 'Two-Factor Authentication disabled', type: 'success' })
-              } else {
-                setTwoFA(true)
-                setTwoFaVerified(false)
-              }
-            }}
-            className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
-              twoFA ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
-            }`}
-          >
-            <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
-              {twoFA ? <Check size={8} className="text-indigo-600 font-bold" /> : <X size={8} className="text-slate-400" />}
-            </span>
-          </button>
-        </div>
-
-        {/* Detailed 2FA Setup/Status Section */}
-        {twoFA && (
-          <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-3.5 transition-all animate-[fadeIn_0.2s_ease-out]">
-            {twoFaVerified ? (
-              <div className="space-y-2.5">
-                <div className="flex items-center gap-2 text-emerald-600">
-                  <Shield size={14} className="animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">2FA Active & Secured</span>
-                </div>
-                <p className="text-[10px] text-slate-500 leading-relaxed">
-                  Your account is protected by Google Authenticator. Verification codes will be required for large withdrawals and password changes.
-                </p>
-                <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-2">
-                  <span className="text-[9px] font-mono text-slate-400">Secret: •••• •••• •••• Z24W</span>
-                  <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Linked</span>
-                </div>
+        {/* Two Factor Auth Toggle (Admins Only) */}
+        {(user?.role === 'admin' || user?.role === 'super_admin') && (
+          <>
+            <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-bold text-slate-700">Two-Factor Auth</span>
+                <span className="text-[8px] text-slate-400 mt-0.5">Secure your account actions</span>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-indigo-600">
-                  <Shield size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Setup 2FA Protection</span>
-                </div>
-                <p className="text-[9px] text-slate-400 leading-relaxed">
-                  1. Scan this QR code or copy the key into your Google Authenticator app.
-                </p>
+              <button
+                onClick={() => {
+                  if (twoFA) {
+                    setTwoFA(false)
+                    setTwoFaVerified(false)
+                    setToast({ msg: 'Two-Factor Authentication disabled', type: 'success' })
+                  } else {
+                    setTwoFA(true)
+                    setTwoFaVerified(false)
+                  }
+                }}
+                className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
+                  twoFA ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'
+                }`}
+              >
+                <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
+                  {twoFA ? <Check size={8} className="text-indigo-600 font-bold" /> : <X size={8} className="text-slate-400" />}
+                </span>
+              </button>
+            </div>
 
-                {/* QR Code and Secret Key Setup */}
-                <div className="flex flex-col items-center bg-white border border-slate-200 rounded-2xl p-3.5 relative overflow-hidden">
-                  <div className="w-24 h-24 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center mb-2 bg-slate-50">
-                    <QrCode size={40} className="text-indigo-600" />
+            {/* Detailed 2FA Setup/Status Section */}
+            {twoFA && (
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-3.5 transition-all animate-[fadeIn_0.2s_ease-out]">
+                {twoFaVerified ? (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2 text-emerald-600">
+                      <Shield size={14} className="animate-pulse" />
+                      <span className="text-[10px] font-black uppercase tracking-wider">2FA Active & Secured</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Your account is protected by Google Authenticator. Verification codes will be required for large withdrawals and password changes.
+                    </p>
+                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-2">
+                      <span className="text-[9px] font-mono text-slate-400">Secret: •••• •••• •••• Z24W</span>
+                      <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Linked</span>
+                    </div>
                   </div>
-                  <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 mt-1.5">
-                    <span className="text-[10px] font-mono font-bold text-slate-700 select-all">CP7X98Y6Z24W44UT</span>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-indigo-600">
+                      <Shield size={14} />
+                      <span className="text-[10px] font-black uppercase tracking-wider">Setup 2FA Protection</span>
+                    </div>
+                    <p className="text-[9px] text-slate-400 leading-relaxed">
+                      1. Scan this QR code or copy the key into your Google Authenticator app.
+                    </p>
+
+                    {/* QR Code and Secret Key Setup */}
+                    <div className="flex flex-col items-center bg-white border border-slate-200 rounded-2xl p-3.5 relative overflow-hidden">
+                      <div className="w-24 h-24 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center mb-2 bg-slate-50">
+                        <QrCode size={40} className="text-indigo-600" />
+                      </div>
+                      <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5 mt-1.5">
+                        <span className="text-[10px] font-mono font-bold text-slate-700 select-all">CP7X98Y6Z24W44UT</span>
+                        <button
+                          onClick={() => {
+                            copyToClipboard('CP7X98Y6Z24W44UT')
+                            setTwoFaCopied(true)
+                            setTimeout(() => setTwoFaCopied(false), 2000)
+                          }}
+                          className="text-[9px] font-bold text-indigo-600 flex items-center gap-0.5 cursor-pointer hover:underline"
+                        >
+                          {twoFaCopied ? 'Copied' : <Copy size={10} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Verification Input */}
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Enter 6-Digit Code</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={totpCode}
+                        onChange={(e) => {
+                          setTotpCode(e.target.value.replace(/[^0-9]/g, ''))
+                          setTotpError(false)
+                        }}
+                        placeholder="000 000"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-bold font-mono tracking-widest text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      {totpError && (
+                        <p className="text-[9px] text-red-500 font-bold flex items-center gap-0.5">
+                          <AlertCircle size={10} /> Invalid 6-digit verification code
+                        </p>
+                      )}
+                    </div>
+
                     <button
                       onClick={() => {
-                        copyToClipboard('CP7X98Y6Z24W44UT')
-                        setTwoFaCopied(true)
-                        setTimeout(() => setTwoFaCopied(false), 2000)
+                        if (totpCode.length === 6) {
+                          setTwoFaVerified(true)
+                          setTotpCode('')
+                          setToast({ msg: '🎉 2FA linked successfully!', type: 'success' })
+                        } else {
+                          setTotpError(true)
+                        }
                       }}
-                      className="text-[9px] font-bold text-indigo-600 flex items-center gap-0.5 cursor-pointer hover:underline"
+                      className="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-[10px] rounded-xl shadow-md cursor-pointer hover:from-indigo-700 hover:to-purple-700 transition-all"
                     >
-                      {twoFaCopied ? 'Copied' : <Copy size={10} />}
+                      Verify & Bind
                     </button>
                   </div>
-                </div>
-
-                {/* Verification Input */}
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Enter 6-Digit Code</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={totpCode}
-                    onChange={(e) => {
-                      setTotpCode(e.target.value.replace(/[^0-9]/g, ''))
-                      setTotpError(false)
-                    }}
-                    placeholder="000 000"
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-bold font-mono tracking-widest text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                  {totpError && (
-                    <p className="text-[9px] text-red-500 font-bold flex items-center gap-0.5">
-                      <AlertCircle size={10} /> Invalid 6-digit verification code
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (totpCode.length === 6) {
-                      setTwoFaVerified(true)
-                      setTotpCode('')
-                      setToast({ msg: '🎉 2FA linked successfully!', type: 'success' })
-                    } else {
-                      setTotpError(true)
-                    }
-                  }}
-                  className="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-[10px] rounded-xl shadow-md cursor-pointer hover:from-indigo-700 hover:to-purple-700 transition-all"
-                >
-                  Verify & Bind
-                </button>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
 
         {/* Change Password Form */}
@@ -1841,10 +2077,10 @@ function PolicyTextModal({ type, onClose }) {
   }
 
   const contentMap = {
-    about: 'ColourPlay is India\'s most trusted gaming and colour prediction platform. We offer a state-of-the-art gaming experience with real-time analytics, instant payouts, and premium rewards. Our platform operates with top-tier encryption to ensure maximum safety and security for all players.',
+    about: 'RRClub is India\'s most trusted gaming and colour prediction platform. We offer a state-of-the-art gaming experience with real-time analytics, instant payouts, and premium rewards. Our platform operates with top-tier encryption to ensure maximum safety and security for all players.',
     responsible: 'Gaming is an enjoyable form of entertainment. To prevent gaming addiction and promote responsible behaviors: 1. Set a personal budget for deposits. 2. Never chase losses. 3. Take regular breaks. 4. If you need self-exclusion, contact support to lock your account temporarily.',
     fairplay: 'All predictions are determined using secure random number generation (RNG) servers. The game outcomes are mathematically validated to be 100% transparent and provably fair. Neither players nor administrators can manipulate active rounds.',
-    terms: 'By registering on ColourPlay, you agree to: 1. Be at least 18 years of age. 2. Use a single account. 3. Refrain from abusive or cooperative play. 4. Comply with standard verification requests. Violating these terms may result in account termination.',
+    terms: 'By registering on RRClub, you agree to: 1. Be at least 18 years of age. 2. Use a single account. 3. Refrain from abusive or cooperative play. 4. Comply with standard verification requests. Violating these terms may result in account termination.',
     privacy: 'Your privacy is paramount. We store your data securely and use it only to facilitate deposits, withdrawals, and gameplay. We do not sell or share your personal details with third-party advertising companies. Standard SSL encryption is active.'
   }
 
@@ -1907,7 +2143,7 @@ function HelpSupport() {
           <MessageCircle size={18} className="text-emerald-500" /><span className="text-sm font-semibold text-slate-800">Live Chat</span><span className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Online</span>
         </button>
         <button className="w-full p-4 flex items-center gap-3 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer">
-          <Mail size={18} className="text-blue-500" /><span className="text-sm font-semibold text-slate-800">Email Support</span><span className="ml-auto text-xs text-slate-400">support@colourplay.com</span>
+          <Mail size={18} className="text-blue-500" /><span className="text-sm font-semibold text-slate-800">Email Support</span><span className="ml-auto text-xs text-slate-400">support@rrclub.com</span>
         </button>
         <button className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer">
           <Phone size={18} className="text-orange-500" /><span className="text-sm font-semibold text-slate-800">Call Us</span><span className="ml-auto text-xs text-slate-400">+91 1800-XXX-XXXX</span>

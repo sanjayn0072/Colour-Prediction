@@ -1,6 +1,8 @@
+import React from 'react'
 import { X, Flame, Zap, Star, Bomb, Rocket, Play, Lock, Gamepad2 } from 'lucide-react'
 
 export default function GameLobbyModal({ isOpen, onClose, onNavigate, activeGameId }) {
+
   if (!isOpen) return null
 
   const games = [
@@ -118,7 +120,7 @@ export default function GameLobbyModal({ isOpen, onClose, onNavigate, activeGame
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
                   {/* Icon Badge */}
-                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 shadow-inner ${game.iconColor}`}>
+                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 shadow-inner overflow-hidden ${game.iconColor}`}>
                     <Icon size={20} />
                   </div>
                   

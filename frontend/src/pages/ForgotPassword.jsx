@@ -1,11 +1,12 @@
-import { useState, useRef } from 'react'
-import { ArrowLeft, Mail, Lock, Eye, EyeOff, KeyRound, ShieldCheck, Send } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ArrowLeft, Phone, Lock, Eye, EyeOff, KeyRound, ShieldCheck, Send } from 'lucide-react'
+import { translateError } from '../utils/errorTranslator'
 
-const STEPS = ['email', 'otp', 'reset']
+const STEPS = ['phone', 'otp', 'reset']
 
 export default function ForgotPassword({ onNavigate }) {
-  const [step, setStep] = useState('email') // email → otp → reset
-  const [email, setEmail] = useState('')
+  const [step, setStep] = useState('phone') // phone → otp → reset
+  const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -14,40 +15,111 @@ export default function ForgotPassword({ onNavigate }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  
+  // Timer state for resend OTP
+  const [resendTimer, setResendTimer] = useState(60)
+  const timerRef = useRef(null)
+  
   const otpRefs = useRef([])
-
   const stepIndex = STEPS.indexOf(step)
 
+  const startResendTimer = () => {
+    setResendTimer(60)
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
+  useEffect(() => {
+    if (step === 'otp') {
+      startResendTimer()
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [step])
+
+  const formatResendTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+
   /* ── Step 1: Send OTP ──────────── */
-  const handleSendOtp = (e) => {
-    e.preventDefault()
+  const handleSendOtp = async (e) => {
+    if (e) e.preventDefault()
     setError('')
-    if (!email) {
-      setError('Please enter your email address.')
+
+    const cleanPhone = phone.trim().replace(/\D/g, '')
+    if (cleanPhone.length !== 10) {
+      setError('Please enter a standard 10-digit phone number.')
       return
     }
+
     setLoading(true)
-    setTimeout(() => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+      const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          phoneOrEmail: cleanPhone
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to dispatch verification OTP.')
+      }
+
       setStep('otp')
+    } catch (err) {
+      setError(translateError(err.message))
+    } finally {
       setLoading(false)
-    }, 800)
+    }
+  }
+
+  /* ── Resend OTP trigger ────────── */
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return
+    await handleSendOtp()
+    startResendTimer()
   }
 
   /* ── Step 2: Verify OTP ────────── */
   const handleOtpChange = (index, value) => {
-    if (value.length > 1) return
+    const cleaned = value.replace(/\D/g, '').slice(-1)
     const newOtp = [...otp]
-    newOtp[index] = value
+    newOtp[index] = cleaned
     setOtp(newOtp)
-    // Auto-focus next
-    if (value && index < 5) {
+
+    if (cleaned && index < 5) {
       otpRefs.current[index + 1]?.focus()
     }
   }
 
   const handleOtpKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus()
+    if (e.key === 'Backspace') {
+      if (!otp[index] && index > 0) {
+        const newOtp = [...otp]
+        newOtp[index - 1] = ''
+        setOtp(newOtp)
+        otpRefs.current[index - 1]?.focus()
+      } else if (otp[index]) {
+        const newOtp = [...otp]
+        newOtp[index] = ''
+        setOtp(newOtp)
+      }
     }
   }
 
@@ -55,24 +127,21 @@ export default function ForgotPassword({ onNavigate }) {
     e.preventDefault()
     setError('')
     const code = otp.join('')
-    if (code.length !== 6) {
-      setError('Please enter the complete 6-digit OTP.')
+    if (code.length !== 6 || !/^\d+$/.test(code)) {
+      setError('Please enter the complete 6-digit verification code.')
       return
     }
-    setLoading(true)
-    setTimeout(() => {
-      // Accept any 6-digit code for demo
-      setStep('reset')
-      setLoading(false)
-    }, 800)
+    // Set to next step (reset form)
+    setStep('reset')
   }
 
   /* ── Step 3: Reset Password ────── */
-  const handleReset = (e) => {
+  const handleReset = async (e) => {
     e.preventDefault()
     setError('')
+    
     if (!newPassword || !confirmPassword) {
-      setError('Please fill in both fields.')
+      setError('Please fill in all fields.')
       return
     }
     if (newPassword.length < 6) {
@@ -83,11 +152,36 @@ export default function ForgotPassword({ onNavigate }) {
       setError('Passwords do not match.')
       return
     }
+
     setLoading(true)
-    setTimeout(() => {
+    try {
+      const code = otp.join('')
+      const cleanPhone = phone.trim().replace(/\D/g, '')
+
+      const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+      const response = await fetch(`${API_BASE}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: cleanPhone,
+          otp: code,
+          newPassword: newPassword
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password. Please check your OTP.')
+      }
+
       setSuccess(true)
+    } catch (err) {
+      setError(translateError(err.message))
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   /* ── Success Screen ────────────── */
@@ -121,8 +215,8 @@ export default function ForgotPassword({ onNavigate }) {
         {/* Back button */}
         <button
           onClick={() => {
-            if (step === 'email') onNavigate('login')
-            else if (step === 'otp') setStep('email')
+            if (step === 'phone') onNavigate('login')
+            else if (step === 'otp') setStep('phone')
             else setStep('otp')
           }}
           className="relative z-10 w-8 h-8 rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-4 cursor-pointer hover:bg-white/30 transition-colors"
@@ -135,13 +229,13 @@ export default function ForgotPassword({ onNavigate }) {
             <KeyRound size={26} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            {step === 'email' && 'Forgot Password'}
+            {step === 'phone' && 'Forgot Password'}
             {step === 'otp' && 'Verify OTP'}
             {step === 'reset' && 'New Password'}
           </h1>
           <p className="text-sm text-white/75 mt-1">
-            {step === 'email' && "Enter your email, we'll send a code"}
-            {step === 'otp' && `Code sent to ${email}`}
+            {step === 'phone' && "Enter your phone number, we'll send a code"}
+            {step === 'otp' && `Code sent to +91 ${phone}`}
             {step === 'reset' && 'Create a new secure password'}
           </p>
         </div>
@@ -171,33 +265,37 @@ export default function ForgotPassword({ onNavigate }) {
       <div className="flex-1 px-6 pt-6 pb-8">
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-xs font-medium px-4 py-2.5 rounded-xl mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-600 text-xs font-medium px-4 py-2.5 rounded-xl mb-4 animate-[fadeIn_0.2s_ease-out]">
             {error}
           </div>
         )}
 
-        {/* ── Step 1: Email ──────────── */}
-        {step === 'email' && (
+        {/* ── Step 1: Phone ──────────── */}
+        {step === 'phone' && (
           <form onSubmit={handleSendOtp} className="space-y-5">
             <div>
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
-                Email Address
+                Phone Number
               </label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative flex items-center">
+                <div className="absolute left-3.5 flex items-center gap-1 text-sm font-semibold text-slate-600 border-r border-slate-200 pr-2.5 h-6">
+                  <Phone size={16} className="text-slate-400 shrink-0" />
+                  <span className="leading-none">+91</span>
+                </div>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-border rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  type="tel"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9999999999"
+                  className="w-full pl-[4.5rem] pr-4 py-3 bg-slate-50 border border-border rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || phone.length !== 10}
               className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-orange-200/50 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -205,7 +303,7 @@ export default function ForgotPassword({ onNavigate }) {
               ) : (
                 <>
                   <Send size={16} />
-                  Send OTP
+                  Send OTP via SMS
                 </>
               )}
             </button>
@@ -228,7 +326,7 @@ export default function ForgotPassword({ onNavigate }) {
                     inputMode="numeric"
                     maxLength={1}
                     value={digit}
-                    onChange={(e) => handleOtpChange(i, e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
                     className={`w-11 h-13 text-center text-lg font-bold bg-slate-50 border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all ${
                       digit ? 'border-primary bg-primary/5' : 'border-border'
@@ -236,17 +334,26 @@ export default function ForgotPassword({ onNavigate }) {
                   />
                 ))}
               </div>
-              <p className="text-[11px] text-muted-foreground text-center mt-3">
+              
+              <p className="text-[11px] text-muted-foreground text-center mt-4">
                 Didn't receive the code?{' '}
-                <button type="button" className="text-primary font-semibold hover:underline cursor-pointer">
-                  Resend
-                </button>
+                {resendTimer > 0 ? (
+                  <span className="text-slate-400 font-semibold">Resend OTP in {formatResendTimer(resendTimer)}</span>
+                ) : (
+                  <button 
+                    type="button" 
+                    onClick={handleResendOtp}
+                    className="text-primary font-semibold hover:underline cursor-pointer bg-transparent border-0 outline-none p-0 inline"
+                  >
+                    Resend OTP via SMS
+                  </button>
+                )}
               </p>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || otp.join('').length !== 6}
               className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-orange-200/50 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (

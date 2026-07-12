@@ -36,5 +36,5 @@ export function getVipLevel(totalDeposit) {
 export function getVipLimit(vipLevel) {
   if (vipLevel <= 0) return 0
   const tier = VIP_TIERS.find(t => t.level === vipLevel)
-  return tier ? tier.minDeposit * 20 : 0
+  return tier ? tier.minDeposit * 30 : 0
 }

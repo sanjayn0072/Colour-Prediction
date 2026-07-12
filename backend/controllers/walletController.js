@@ -1,5 +1,8 @@
 import crypto from 'crypto';
+import logger from '../utils/logger.js';
 import { query, pool } from '../config/db.js';
+import { ioInstance } from './gameController.js';
+import { createNotification } from '../utils/notifier.js';
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'cplay_jwt_secret') {
   throw new Error('FATAL: JWT_SECRET environment variable is missing, undefined, or set to insecure default fallback.');
@@ -31,7 +34,7 @@ export const handleWithdrawal = async (req, res) => {
   }
 
   const fee = calculateWithdrawalFee(withdrawAmount);
-  const totalDeduction = withdrawAmount + fee;
+  const totalDeduction = Number(withdrawAmount) + Number(fee);
 
   const connection = await pool.getConnection();
   try {
@@ -44,14 +47,16 @@ export const handleWithdrawal = async (req, res) => {
     );
 
     if (!wallets || wallets.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Wallet not found' });
     }
 
     const currentBalance = parseFloat(wallets[0].balance);
 
     if (currentBalance < totalDeduction) {
+      await connection.rollback();
       return res.status(400).json({
-        error: 'Insufficient balance',
+        error: 'insufficient balance',
         message: `Your account balance must be at least ₹${totalDeduction.toFixed(2)} (including a fee of ₹${fee.toFixed(2)}).`
       });
     }
@@ -72,6 +77,7 @@ export const handleWithdrawal = async (req, res) => {
     const paymentMethodId = paymentMethods[0]?.id || null;
 
     if (!paymentMethodId) {
+      await connection.rollback();
       return res.status(400).json({ error: 'Please link a bank account or UPI detail before withdrawing.' });
     }
 
@@ -82,11 +88,21 @@ export const handleWithdrawal = async (req, res) => {
     );
     const withdrawalId = withdrawResult.insertId;
 
-    // 5. Write to ledger (wallet_transactions)
+    // 5. Write to ledger (wallet_transactions) in separate payout and fee rows
+    const balanceAfterPayout = parseFloat((currentBalance - withdrawAmount).toFixed(4));
+    
+    // Payout Net Payout
     await connection.query(
       'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
       'VALUES (?, ?, ?, "withdrawal", "withdrawals", ?, ?, ?, ?)',
-      [req.user.id, wallets[0].id, -withdrawAmount, withdrawalId, currentBalance, newBalance, `Initiated withdrawal of ₹${withdrawAmount} (fee: ₹${fee})`]
+      [req.user.id, wallets[0].id, -withdrawAmount, withdrawalId, currentBalance, balanceAfterPayout, `Withdrawal net amount payout: WITHDRAW-${withdrawalId}`]
+    );
+
+    // Processing Fee
+    await connection.query(
+      'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+      'VALUES (?, ?, ?, "withdrawal", "withdrawals", ?, ?, ?, ?)',
+      [req.user.id, wallets[0].id, -fee, withdrawalId, balanceAfterPayout, newBalance, `Withdrawal processing fee debit: WITHDRAW-${withdrawalId}`]
     );
 
     // 6. Update user statistics aggregates
@@ -110,7 +126,7 @@ export const handleWithdrawal = async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
-    console.error(error);
+    logger.error(error);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   } finally {
     connection.release();
@@ -135,7 +151,7 @@ export const linkBank = async (req, res) => {
 
     return res.json({ message: 'Bank account linked successfully' });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 };
@@ -158,7 +174,7 @@ export const linkUpi = async (req, res) => {
 
     return res.json({ message: 'UPI ID linked successfully' });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 };
@@ -265,6 +281,15 @@ export const deposit = async (req, res) => {
       [depositAmount, req.user.id]
     );
 
+    // Dynamic Wallet Notification inside the active transaction
+    await createNotification(
+      req.user.id,
+      'Wallet Recharged!',
+      `Wallet Recharged! ₹${depositAmount} added.`,
+      'WALLET',
+      connection
+    );
+
     await connection.commit();
 
     return res.json({ 
@@ -273,7 +298,7 @@ export const deposit = async (req, res) => {
     });
   } catch (err) {
     await connection.rollback();
-    console.error(err);
+    logger.error(err);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   } finally {
     connection.release();
@@ -287,6 +312,7 @@ export const createDepositOrder = async (req, res) => {
   }
   const depositAmount = parseFloat(amount);
   const transactionId = `DEP-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const secret = process.env.JWT_SECRET;
   const signature = crypto.createHmac('sha256', secret).update(`${depositAmount}:${transactionId}`).digest('hex');
   return res.json({ amount: depositAmount, transactionId, signature });
 };
@@ -300,7 +326,7 @@ export const getTransactions = async (req, res) => {
     );
     return res.json(transactions);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 };
@@ -314,7 +340,7 @@ export const deletePaymentMethod = async (req, res) => {
     await query('DELETE FROM payment_methods WHERE user_id = ? AND type = ?', [req.user.id, type]);
     return res.json({ message: 'Payment method deleted successfully' });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 };
@@ -406,7 +432,7 @@ export const claimVipReward = async (req, res) => {
     });
   } catch (err) {
     await connection.rollback();
-    console.error(err);
+    logger.error(err);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   } finally {
     connection.release();

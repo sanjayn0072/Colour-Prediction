@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock, User, Phone, UserPlus, ArrowLeft, Sparkles, KeyRound } from 'lucide-react'
-import { auth } from '../lib/firebase'
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
+import { translateError } from '../utils/errorTranslator'
 
 export default function Register({ onNavigate }) {
+  const [searchParams] = useSearchParams()
+  const rawInviteCode = searchParams.get('invitecode') || ''
+  const inviteCode = rawInviteCode.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)
+  
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({ name: '', phone: '', email: '', password: '', confirmPassword: '', otp: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -11,30 +15,53 @@ export default function Register({ onNavigate }) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [confirmationResult, setConfirmationResult] = useState(null)
+
+  // Timer state for resend OTP
+  const [resendTimer, setResendTimer] = useState(60)
+  const timerRef = useRef(null)
+
+  const startResendTimer = () => {
+    setResendTimer(60)
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }
 
   useEffect(() => {
-    return () => {
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear()
-          window.recaptchaVerifier = null
-        } catch (_) {}
-      }
+    if (step === 2) {
+      startResendTimer()
     }
-  }, [])
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [step])
+
+  const formatResendTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }))
 
   const handleSendOtp = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
     setError('')
 
-    if (!form.name || !form.phone || !form.email || !form.password || !form.confirmPassword) {
+    const cleanPhone = form.phone.trim().replace(/\D/g, '')
+
+    if (!form.name || !cleanPhone || !form.password || !form.confirmPassword) {
       setError('Please fill in all required fields.')
       return
     }
-    if (form.phone.length !== 10) {
+    if (cleanPhone.length !== 10) {
       setError('Phone number must be exactly 10 digits.')
       return
     }
@@ -50,10 +77,7 @@ export default function Register({ onNavigate }) {
     setLoading(true)
 
     try {
-      const fullPhone = `+91${form.phone}`
-
-      // 1. Pre-validate info and check availability with backend
-      const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`
+      const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
       const response = await fetch(`${API_BASE}/api/auth/send-otp`, {
         method: 'POST',
         headers: {
@@ -61,7 +85,7 @@ export default function Register({ onNavigate }) {
         },
         body: JSON.stringify({
           name: form.name,
-          phone: fullPhone,
+          phone: cleanPhone,
           email: form.email,
           password: form.password
         })
@@ -72,55 +96,48 @@ export default function Register({ onNavigate }) {
         throw new Error(data.error || 'Failed to initialize registration.')
       }
 
-      // 2. Setup RecaptchaVerifier
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible'
-        })
-      }
-
-      // 3. Trigger Firebase Phone Auth SMS
-      const verifier = window.recaptchaVerifier
-      const confirmation = await signInWithPhoneNumber(auth, fullPhone, verifier)
-      setConfirmationResult(confirmation)
       setStep(2)
     } catch (err) {
-      setError(err.message || 'Verification SMS failed to send. Please try again.')
+      setError(translateError(err.message))
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return
+    await handleSendOtp()
+    startResendTimer()
   }
 
   const handleVerifyRegister = async (e) => {
     e.preventDefault()
     setError('')
 
-    if (!form.otp || form.otp.length < 6) {
-      setError('Please enter the 6-digit OTP code.')
+    const cleanOtp = form.otp.trim().replace(/\D/g, '')
+    const cleanPhone = form.phone.trim().replace(/\D/g, '')
+
+    if (cleanOtp.length !== 6) {
+      setError('Please enter the complete 6-digit OTP code.')
       return
     }
 
     setLoading(true)
 
     try {
-      // 1. Confirm code with Firebase
-      const result = await confirmationResult.confirm(form.otp)
-      const idToken = await result.user.getIdToken()
-
-      // 2. Register user on backend
-      const fullPhone = `+91${form.phone}`
-      const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`
-      const response = await fetch(`${API_BASE}/api/auth/verify-register`, {
+      const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+      const response = await fetch(`${API_BASE}/api/auth/verify-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           name: form.name,
-          phone: fullPhone,
+          phone: cleanPhone,
           email: form.email,
           password: form.password,
-          idToken
+          otp: cleanOtp,
+          inviteCode: inviteCode || undefined
         })
       })
 
@@ -131,7 +148,7 @@ export default function Register({ onNavigate }) {
 
       setSuccess(true)
     } catch (err) {
-      setError(err.message || 'Verification failed. Please verify the code and try again.')
+      setError(translateError(err.message))
     } finally {
       setLoading(false)
     }
@@ -161,7 +178,6 @@ export default function Register({ onNavigate }) {
 
   return (
     <div className="w-full md:max-w-md mx-auto min-h-screen bg-background text-foreground md:shadow-xl md:shadow-slate-200/80 md:border-x md:border-border flex flex-col">
-      <div id="recaptcha-container"></div>
       
       {/* Top Gradient Header */}
       <div className="relative bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 px-6 pt-10 pb-10 rounded-b-[2rem] overflow-hidden">
@@ -184,7 +200,7 @@ export default function Register({ onNavigate }) {
             {step === 1 ? 'Create Account' : 'Verify Phone'}
           </h1>
           <p className="text-sm text-white/75 mt-1">
-            {step === 1 ? 'Join ColourPlay today' : `Enter the code sent to +91 ${form.phone}`}
+            {step === 1 ? 'Join RRClub today' : `Enter the code sent to +91 ${form.phone}`}
           </p>
         </div>
       </div>
@@ -241,22 +257,7 @@ export default function Register({ onNavigate }) {
               </div>
             </div>
 
-            {/* Email */}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
-                Email Address <span className="text-destructive">*</span>
-              </label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => update('email', e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-border rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                />
-              </div>
-            </div>
+
 
             {/* Password */}
             <div>
@@ -317,7 +318,7 @@ export default function Register({ onNavigate }) {
             {/* Submit */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || form.phone.length !== 10}
               className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-emerald-200/50 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -342,7 +343,7 @@ export default function Register({ onNavigate }) {
             <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-start gap-2.5">
               <KeyRound size={16} className="text-blue-500 mt-0.5 shrink-0" />
               <p className="text-xs text-blue-700 leading-relaxed">
-                A verification code has been sent to your phone number <strong>+91 {form.phone}</strong>. Please enter the 6-digit verification code below.
+                A verification code has been sent to your phone number <strong>+91 {form.phone}</strong>. Please enter the 6-digit code below.
               </p>
             </div>
 
@@ -356,11 +357,26 @@ export default function Register({ onNavigate }) {
                   type="text"
                   maxLength={6}
                   value={form.otp}
-                  onChange={(e) => update('otp', e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => update('otp', e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="Enter 6-digit code"
                   className="w-full px-4 py-3.5 text-center text-lg tracking-[0.5em] font-bold bg-slate-50 border border-border rounded-xl text-foreground placeholder:text-slate-300 placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                 />
               </div>
+              
+              <p className="text-[11px] text-muted-foreground text-center mt-4">
+                Didn't receive the code?{' '}
+                {resendTimer > 0 ? (
+                  <span className="text-slate-400 font-semibold">Resend OTP in {formatResendTimer(resendTimer)}</span>
+                ) : (
+                  <button 
+                    type="button" 
+                    onClick={handleResendOtp}
+                    className="text-primary font-semibold hover:underline cursor-pointer bg-transparent border-0 outline-none p-0 inline"
+                  >
+                    Resend OTP via SMS
+                  </button>
+                )}
+              </p>
             </div>
 
             {/* Submit */}

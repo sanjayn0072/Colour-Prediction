@@ -299,12 +299,20 @@ const imageMap = {
   '/src/assets/keyboard_alt.png': keyboardAltImg,
   '/src/assets/mouse.png': mouseImg,
   '/src/assets/mouse_alt.png': mouseAltImg,
+  '/src/assets/aurapods.png': earbudsImg,
+  '/src/assets/chronos.png': smartwatchImg,
+  '/src/assets/apex.png': keyboardImg,
+  '/src/assets/viper.png': mouseImg,
 };
 
 const mapProduct = (p) => {
   const resolveImg = (imgStr) => {
     if (!imgStr) return earbudsImg;
     if (imageMap[imgStr]) return imageMap[imgStr];
+    if (imgStr.startsWith('/uploads/')) {
+      const base = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+      return `${base}${imgStr}`;
+    }
     return imgStr;
   };
   return {
@@ -471,7 +479,7 @@ export function UserProvider({ children }) {
     const token = localStorage.getItem('token')
     if (!token) return
     try {
-      const res = await fetch(`${API_BASE}/api/products/${id}`, {
+      const res = await fetch(`${API_BASE}/api/admin/products/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -510,6 +518,24 @@ export function UserProvider({ children }) {
         })
       ])
 
+      // Intercept 429 rate limit responses gracefully
+      if (profileRes.status === 429 || txRes.status === 429 || betsRes.status === 429 || withdrawRes.status === 429) {
+        console.warn('[Rate Limit Warning]: Too many requests. Silently suppressing fetch to prevent rendering loops.');
+        return;
+      }
+
+      // If the token is expired or invalid, silently log out and stop — do NOT flood console with 401s
+      if (profileRes.status === 401 || profileRes.status === 403) {
+        localStorage.removeItem('token')
+        setUser(null)
+        setRealBalance(0)
+        setAvailableBalance(0)
+        setLockedBalance(0)
+        setBonusBalance(0)
+        setSavedBanks([])
+        setSavedUpis([])
+        return
+      }
       if (profileRes.ok) {
         const profileData = await profileRes.json()
         if (profileData.user) {
@@ -638,7 +664,7 @@ export function UserProvider({ children }) {
 
           // Wager record (negative amount)
           mappedBetRecords.push({
-            id: b._id ? `BET-${b._id.slice(-6).toUpperCase()}` : `BET-${Math.floor(10000 + Math.random() * 90000)}`,
+            id: b.id ? `BET-${b.id}` : (b._id ? `BET-${b._id}` : `BET-${Math.floor(10000 + Math.random() * 90000)}`),
             title: `Bet placed on ${gameName}`,
             amount: -b.betAmount,
             status: b.status === 'pending' ? 'Pending' : 'Completed',
@@ -650,7 +676,7 @@ export function UserProvider({ children }) {
           // If won, payout record (positive amount)
           if (b.status === 'won' && b.payout > 0) {
             mappedBetRecords.push({
-              id: b._id ? `PAY-${b._id.slice(-6).toUpperCase()}` : `PAY-${Math.floor(10000 + Math.random() * 90000)}`,
+              id: b.id ? `PAY-${b.id}` : (b._id ? `PAY-${b._id}` : `PAY-${Math.floor(10000 + Math.random() * 90000)}`),
               title: `Winnings from ${gameName}`,
               amount: b.payout,
               status: 'Completed',
@@ -667,7 +693,10 @@ export function UserProvider({ children }) {
         })
       }
     } catch (err) {
-      console.error('Failed to load user history:', err)
+      // Only log unexpected errors — not auth failures
+      if (!err.message?.includes('401') && !err.message?.includes('Unauthorized')) {
+        console.error('Failed to load user history:', err)
+      }
     }
   }
 

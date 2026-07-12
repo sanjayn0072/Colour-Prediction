@@ -1,4 +1,5 @@
 import { query } from '../config/db.js';
+import { decryptConfigValue } from '../utils/configEncryption.js';
 
 // POST /api/support/complaint
 export const createComplaint = async (req, res) => {
@@ -42,24 +43,34 @@ export const chatWithSupport = async (req, res) => {
     return res.status(400).json({ error: 'Message is required.' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  let apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_AI_API_KEY;
+
+  try {
+    const configRows = await query('SELECT config_value FROM system_configs WHERE config_key = "GEMINI_AI_API_KEY" LIMIT 1');
+    if (configRows && configRows.length > 0 && configRows[0].config_value) {
+      apiKey = decryptConfigValue(configRows[0].config_value);
+    }
+  } catch (err) {
+    // Silently log error, fallback to env variables
+  }
+
   if (!apiKey || apiKey.trim() === '') {
     // If no API Key is provided on backend, return a fallback message
     return res.json({
-      text: "Hello! I am the ColourPlay Support Assistant. Our AI chat system is currently in offline/demo mode because no API key is configured. Please submit an Email Ticket if you need direct agent assistance."
+      text: "Hello! I am the RRClub Support Assistant. Our AI chat system is currently in offline/demo mode because no API key is configured. Please submit an Email Ticket if you need direct agent assistance."
     });
   }
 
   try {
     const SYSTEM_INSTRUCTION = `
-You are the official Customer Support Assistant for "ColourPlay" (also known as ColourPlay Technologies Pvt Ltd), India's premier online tech-product shopping and prediction gaming platform.
+You are the official Customer Support Assistant for "RRClub" (also known as RRClub Technologies Pvt Ltd), India's premier online tech-product shopping and prediction gaming platform.
 
 Your task is to help users navigate the platform, explain rules, answer questions about deposits, withdrawals, promotions, VIP club, and shopping products.
 
 CRITICAL BOUNDARY RULE:
-You must ONLY answer questions regarding the ColourPlay website, platform, rules, account settings, games, wallet deposits, wallet withdrawals, VIP levels, and shop orders. 
-If the user asks about ANYTHING outside of the ColourPlay platform (for example: writing code, general knowledge, math, science, politics, news, geography, recipes, or other unrelated games), you must politely but firmly refuse to answer. You should reply:
-"I am the ColourPlay Support Assistant. I can only assist with questions regarding our games, deposits, withdrawals, VIP rewards, and shop purchases. Please let me know how I can help you with ColourPlay!"
+You must ONLY answer questions regarding the RRClub website, platform, rules, account settings, games, wallet deposits, wallet withdrawals, VIP levels, and shop orders. 
+If the user asks about ANYTHING outside of the RRClub platform (for example: writing code, general knowledge, math, science, politics, news, geography, recipes, or other unrelated games), you must politely but firmly refuse to answer. You should reply:
+"I am the RRClub Support Assistant. I can only assist with questions regarding our games, deposits, withdrawals, VIP rewards, and shop purchases. Please let me know how I can help you with RRClub!"
 
 Platform details to guide your answers:
 1. Colour Prediction Game:
@@ -83,12 +94,13 @@ Platform details to guide your answers:
      - Viper Wireless Mouse: ₹1,899 (36% OFF, regular ₹2,999), 65g, 26K DPI.
    - Shipping is free via BlueDart. Orders are delivered in ~5 days.
 5. Wallet / Payments:
-   - Minimum Deposit: ₹100. Credited in 5-10 minutes. Available methods: UPI (QR scan or copy ID 'colourplay@ybl') and Bank Transfer.
+   - Minimum Deposit: ₹100. Credited in 5-10 minutes. Available methods: UPI (QR scan or copy ID 'rrclub@ybl') and Bank Transfer.
    - Minimum Withdrawal: ₹100. Maximum Withdrawal: ₹5,000. Processed within 24 hours.
    - Withdrawal fees are calculated dynamically (approx. 3% processing fee).
-   - Account withdrawals require VIP Level 1+ (made at least ₹100 deposit total).
+   - Account withdrawals allow VIP 0 users to withdraw up to ₹2,000 total. Higher VIP levels unlock up to 30x of their tier deposit requirement.
 6. Refer & Earn:
-   - Sharing referral link/code (CPLAY2025) gives a ₹100 bonus to both when the invitee signs up and completes their first deposit.
+   - Sharing referral link/code (RRCLUB2026) gives a ₹100 bonus to both when the invitee signs up and completes their first deposit.
+   - Referral code structure is prefix RRCLUB.
 7. VIP Club Tiers:
    - Rewards include Level Up Bonuses, Monthly Bonuses, Daily Cashbacks, and custom Vip privileges. VIP levels are unlocked based on cumulative deposit amounts.
 

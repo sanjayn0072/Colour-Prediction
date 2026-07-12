@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { translateError } from '../utils/errorTranslator'
 import { ArrowLeft, Info, Banknote, Ticket, Gift, Sparkles, X, Gamepad2, AlertCircle, Trophy, Copy, Check } from 'lucide-react'
 import { useUser } from '../context/UserContext'
 import GameLobbyModal from '../components/GameLobbyModal'
@@ -44,6 +45,12 @@ const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//$
 export default function SpinWheel({ onNavigate }) {
   const { user, fetchUserHistory, addVoucher, wagerMultipliers } = useUser()
   const [showLobby, setShowLobby] = useState(false)
+  const [toast, setToast] = useState(null)
+  const showToast = (msg, type = 'success') => {
+    const finalMsg = type === 'error' ? translateError(msg) : msg;
+    setToast({ msg: finalMsg, type })
+    setTimeout(() => setToast(null), 3500)
+  }
   const [isSpinning, setIsSpinning] = useState(false)
   const [rotation, setRotation] = useState(0)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState(null)
@@ -134,7 +141,7 @@ export default function SpinWheel({ onNavigate }) {
 
     } catch (err) {
       setIsSpinning(false)
-      alert(err.message || 'Failed to complete spin. Please try again.')
+      showToast(err.message, 'error')
     }
   }
 
@@ -145,35 +152,30 @@ export default function SpinWheel({ onNavigate }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 text-slate-800 relative overflow-hidden font-sans pb-20 select-none">
+    <div className="flex flex-col min-h-screen bg-transparent text-slate-800 relative overflow-hidden font-sans pb-20 select-none">
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-sm w-[90%] ${
+            toast.type === 'success'
+              ? 'bg-emerald-600'
+              : toast.type === 'error'
+              ? 'bg-red-500'
+              : 'bg-indigo-650'
+          } text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2`}
+        >
+          {toast.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+          <span className="flex-1">{toast.msg}</span>
+          <button onClick={() => setToast(null)} className="cursor-pointer">
+            <X size={14} />
+          </button>
+        </div>
+      )}
       
       {/* ── BACKGROUND LIGHTING AND GLOWS ── */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[180%] h-[50vh] bg-gradient-to-b from-indigo-500/5 via-purple-500/5 to-transparent rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute top-1/2 left-0 w-24 h-24 bg-indigo-400/5 rounded-full blur-xl pointer-events-none" />
       <div className="absolute top-1/3 right-0 w-32 h-32 bg-purple-400/5 rounded-full blur-xl pointer-events-none" />
-
-      {/* ── HEADER NAVBAR ── */}
-      <header className="relative z-10 flex items-center justify-between px-4 py-4 shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <button 
-          onClick={() => onNavigate?.('game')} 
-          className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
-        >
-          <ArrowLeft size={18} className="text-slate-600" />
-        </button>
-        <h1 className="text-base font-extrabold text-slate-800 tracking-wide uppercase flex items-center gap-1.5 font-sans">
-          <Trophy size={16} className="text-indigo-600 animate-pulse" />
-          Premium Spin Wheel
-        </h1>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setShowLobby(true)} 
-            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
-            title="Games Lobby"
-          >
-            <Gamepad2 size={16} className="text-slate-600" />
-          </button>
-        </div>
-      </header>
 
       {/* ── LIVE WINNERS TICKER ── */}
       <div className="relative z-10 bg-slate-100/80 backdrop-blur-md border-y border-slate-200/80 py-2.5 overflow-hidden select-none shadow-sm">

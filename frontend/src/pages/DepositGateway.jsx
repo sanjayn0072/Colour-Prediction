@@ -1,63 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { translateError } from '../utils/errorTranslator'
 import { useUser } from '../context/UserContext'
-import { ArrowLeft, Copy, Check, QrCode, Clock, Shield, AlertCircle, HelpCircle } from 'lucide-react'
-
-function copyToClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text);
-  } else {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-    } catch (err) {
-      console.error('Fallback copy failed', err);
-    }
-    document.body.removeChild(textArea);
-    return Promise.resolve();
-  }
-}
-
-const COMPANY_UPI = 'colourplay@ybl'
-const COMPANY_BANK = {
-  name: 'ColourPlay Technologies Pvt Ltd',
-  accountNumber: '9876543210123456',
-  ifsc: 'SBIN0001234',
-  bank: 'State Bank of India',
-  branch: 'Mumbai Main Branch',
-  type: 'Current Account',
-}
+import { ArrowLeft, ExternalLink, CheckCircle, Clock, Shield, AlertCircle, RefreshCw, Loader2, CreditCard } from 'lucide-react'
 
 export default function DepositGateway({ depositData, onBack, onNavigate }) {
-  const { addDeposit, setDepositRecords } = useUser()
-  /* This state simulates backend control — only one method active at a time */
-  const [activeDepositMethod] = useState('upi')
-  const [copied, setCopied] = useState(null)
-  const [confirmed, setConfirmed] = useState(false)
-  const [processing, setProcessing] = useState(false)
-  const [utr, setUtr] = useState('')
-  
-  const [orderData, setOrderData] = useState(null)
-  const [loadingOrder, setLoadingOrder] = useState(true)
-  const [orderError, setOrderError] = useState(null)
-  const [reloadTrigger, setReloadTrigger] = useState(0)
+  const { fetchUserHistory } = useUser()
+  const [paymentUrl, setPaymentUrl] = useState(null)
+  const [orderInfo, setOrderInfo] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [gatewayOpened, setGatewayOpened] = useState(false)
+  const [checkingStatus, setCheckingStatus] = useState(false)
+  const [depositStatus, setDepositStatus] = useState(null) // 'pending' | 'completed' | 'failed'
+  const [retryCount, setRetryCount] = useState(0)
+  const pollTimerRef = useRef(null)
+  const windowRef = useRef(null)
 
   const amount = depositData?.amount || 0
   const voucher = depositData?.voucher || null
 
+  // ── Create Pay0 Order on Mount ──
   useEffect(() => {
     let active = true
-    const fetchOrder = async () => {
+    const createOrder = async () => {
+      setLoading(true)
+      setError(null)
       try {
         const token = localStorage.getItem('token') || ''
         const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
-        const res = await fetch(`${API_BASE}/api/wallet/create-deposit-order`, {
+        const res = await fetch(`${API_BASE}/api/payment/create`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -66,115 +37,164 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
           body: JSON.stringify({ amount })
         })
         if (!res.ok) {
-          const errData = await res.json()
-          throw new Error(errData.error || 'Failed to create deposit order')
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || `Server returned ${res.status}`)
         }
         const data = await res.json()
-        if (active) {
-          setOrderData(data)
-          setLoadingOrder(false)
+        if (active && data.success && data.payment_url) {
+          setPaymentUrl(data.payment_url)
+          setOrderInfo({ orderId: data.orderId, amount: data.amount })
+          setDepositStatus('pending')
+          setLoading(false)
+          // Auto-open gateway in new tab
+          const win = window.open(data.payment_url, '_blank')
+          windowRef.current = win
+          if (win) {
+            setGatewayOpened(true)
+          }
+        } else {
+          throw new Error(data.error || data.message || 'Failed to create payment order')
         }
       } catch (err) {
         if (active) {
-          setOrderError(err.message)
-          setLoadingOrder(false)
+          setError(translateError(err.message))
+          setLoading(false)
         }
       }
     }
-    fetchOrder()
+    createOrder()
     return () => { active = false }
-  }, [amount, reloadTrigger])
+  }, [amount, retryCount])
 
-  const handleCopy = (text, field) => {
-    copyToClipboard(text);
-    setCopied(field)
-    setTimeout(() => setCopied(null), 2000)
-  }
+  // ── Auto-poll deposit status every 10 seconds ──
+  useEffect(() => {
+    if (!orderInfo?.orderId || depositStatus === 'completed') return
+    
+    const checkStatus = async () => {
+      try {
+        const token = localStorage.getItem('token') || ''
+        const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+        const res = await fetch(`${API_BASE}/api/payment/history`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const records = await res.json()
+          const found = records.find(r => r.transactionId === orderInfo.orderId)
+          if (found && found.status === 'completed') {
+            setDepositStatus('completed')
+            fetchUserHistory?.()
+          }
+        }
+      } catch (e) {
+        // Silently ignore polling errors
+      }
+    }
 
-  const handleConfirm = async () => {
-    if (!orderData) return
-    setProcessing(true)
+    // Initial check after 5 seconds
+    const initialTimer = setTimeout(checkStatus, 5000)
+    // Then poll every 10 seconds
+    pollTimerRef.current = setInterval(checkStatus, 10000)
+
+    return () => {
+      clearTimeout(initialTimer)
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    }
+  }, [orderInfo?.orderId, depositStatus])
+
+  // ── Manual Status Check ──
+  const handleCheckStatus = async () => {
+    if (checkingStatus) return
+    setCheckingStatus(true)
     try {
       const token = localStorage.getItem('token') || ''
       const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
-      const res = await fetch(`${API_BASE}/api/wallet/deposit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          amount: orderData.amount,
-          transactionId: orderData.transactionId,
-          signature: orderData.signature,
-          utr: utr
-        })
+      const res = await fetch(`${API_BASE}/api/payment/history`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       })
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || 'Failed to confirm deposit')
+      if (res.ok) {
+        const records = await res.json()
+        const found = records.find(r => r.transactionId === orderInfo?.orderId)
+        if (found && found.status === 'completed') {
+          setDepositStatus('completed')
+          fetchUserHistory?.()
+        }
       }
-      
-      let bonus = 0
-      let voucherTitle = ''
-      if (voucher) {
-        const pct = typeof voucher === 'object' ? voucher.percent : (voucher.includes('june-14') ? 1 : voucher.includes('super') ? 3 : voucher.includes('pro') ? 5 : 0)
-        bonus = Math.floor(amount * (pct / 100))
-        voucherTitle = typeof voucher === 'object' ? voucher.title : voucher
-      }
-      
-      addDeposit(amount, bonus)
-      
-      const newRecord = {
-        id: orderData.transactionId,
-        amount: amount,
-        bonus: bonus,
-        status: 'Completed',
-        date: new Date().toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-        method: activeDepositMethod === 'upi' ? 'UPI' : 'Bank Transfer',
-        voucher: voucherTitle || null,
-        utr: utr,
-        timestamp: Date.now()
-      }
-      setDepositRecords(prev => [newRecord, ...prev])
-      setConfirmed(true)
-    } catch (err) {
-      console.error(err)
-      alert(err.message || 'An error occurred during verification')
+    } catch (e) {
+      // ignore
     } finally {
-      setProcessing(false)
+      setTimeout(() => setCheckingStatus(false), 1500)
     }
   }
 
-  if (loadingOrder) {
+  const handleOpenGateway = () => {
+    if (paymentUrl) {
+      const win = window.open(paymentUrl, '_blank')
+      windowRef.current = win
+      if (win) setGatewayOpened(true)
+    }
+  }
+
+  // ── Loading State ──
+  if (loading) {
     return (
       <div className="flex flex-col min-h-screen bg-slate-50 items-center justify-center px-6">
-        <div className="w-10 h-10 border-4 border-indigo-655/30 border-t-indigo-600 rounded-full animate-spin mb-4" style={{ borderTopColor: '#4f46e5' }} />
-        <p className="text-sm text-slate-500 font-medium">Generating secure payment session...</p>
+        <div style={{
+          width: 56, height: 56, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 20, boxShadow: '0 8px 32px rgba(99,102,241,0.3)',
+          animation: 'pulse 2s ease-in-out infinite'
+        }}>
+          <CreditCard size={24} color="white" />
+        </div>
+        <div style={{
+          width: 40, height: 40, border: '3px solid rgba(99,102,241,0.15)',
+          borderTopColor: '#6366f1', borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite', marginBottom: 16
+        }} />
+        <p style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Creating secure payment session...</p>
+        <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>Connecting to payment gateway</p>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg) } }
+          @keyframes pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.05) } }
+        `}</style>
       </div>
     )
   }
 
-  if (orderError) {
+  // ── Error State ──
+  if (error) {
     return (
       <div className="flex flex-col min-h-screen bg-slate-50 items-center justify-center px-6 text-center">
-        <AlertCircle size={48} className="text-rose-500 mb-4" />
-        <h2 className="text-lg font-bold text-slate-800">Session Generation Failed</h2>
-        <p className="text-sm text-slate-500 mt-1 max-w-xs">{orderError}</p>
-        <div className="flex gap-3 mt-6">
+        <div style={{
+          width: 64, height: 64, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 16, boxShadow: '0 4px 16px rgba(239,68,68,0.1)'
+        }}>
+          <AlertCircle size={28} color="#ef4444" />
+        </div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b' }}>Payment Session Failed</h2>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 6, maxWidth: 280, lineHeight: 1.6 }}>{error}</p>
+        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
           <button
             onClick={onBack}
-            className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm rounded-xl transition-colors cursor-pointer"
+            style={{
+              padding: '12px 24px', background: '#f1f5f9', color: '#475569',
+              fontWeight: 700, fontSize: 13, borderRadius: 12, border: 'none',
+              cursor: 'pointer', transition: 'all 0.2s'
+            }}
           >
             Go Back
           </button>
           <button
-            onClick={() => {
-              setOrderError(null)
-              setLoadingOrder(true)
-              setReloadTrigger(prev => prev + 1)
+            onClick={() => setRetryCount(c => c + 1)}
+            style={{
+              padding: '12px 24px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: 'white', fontWeight: 700, fontSize: 13, borderRadius: 12,
+              border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+              transition: 'all 0.2s'
             }}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transition-colors cursor-pointer"
           >
             Retry
           </button>
@@ -183,248 +203,239 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
     )
   }
 
-
-  /* ── Success Screen ── */
-  if (confirmed) {
+  // ── Success / Completed State ──
+  if (depositStatus === 'completed') {
     return (
       <div className="flex flex-col min-h-screen bg-slate-50 items-center justify-center px-6">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mb-5 shadow-lg shadow-emerald-100">
-          <Check size={36} className="text-emerald-600" />
+        <div style={{
+          width: 80, height: 80, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 20, boxShadow: '0 8px 32px rgba(34,197,94,0.2)',
+          animation: 'scaleIn 0.4s ease-out'
+        }}>
+          <CheckCircle size={40} color="#16a34a" />
         </div>
-        <h2 className="text-xl font-bold text-slate-800">Payment Submitted!</h2>
-        <p className="text-sm text-slate-500 mt-2 text-center leading-relaxed max-w-xs">
-          Your deposit of <span className="font-bold text-slate-700">₹{amount.toLocaleString()}</span> is being verified. Amount will be credited within 5-10 minutes.
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Payment Successful!</h2>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 8, textAlign: 'center', lineHeight: 1.6, maxWidth: 300 }}>
+          Your deposit of <span style={{ fontWeight: 700, color: '#1e293b' }}>₹{amount.toLocaleString()}</span> has been
+          verified and credited to your wallet.
         </p>
         {voucher && (
-          <div className="mt-3 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
-            <p className="text-xs text-emerald-700 font-semibold">🎟️ Voucher "{typeof voucher === 'object' ? voucher.title : voucher}" applied!</p>
+          <div style={{
+            marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0',
+            padding: '6px 14px', borderRadius: 10
+          }}>
+            <p style={{ fontSize: 12, color: '#15803d', fontWeight: 600 }}>🎟️ Voucher "{typeof voucher === 'object' ? voucher.title : voucher}" applied!</p>
           </div>
         )}
-        <div className="mt-3 flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg">
-          <Clock size={14} />
-          <span className="text-xs font-semibold">Estimated: 5-10 minutes</span>
-        </div>
         <button
-          onClick={onBack}
-          className="mt-8 px-8 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-200/50 cursor-pointer hover:from-indigo-700 hover:to-purple-700 transition-all"
+          onClick={() => { fetchUserHistory?.(); onBack() }}
+          style={{
+            marginTop: 28, padding: '14px 32px',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: 'white', fontWeight: 700, fontSize: 14, borderRadius: 14,
+            border: 'none', cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(99,102,241,0.3)',
+            transition: 'all 0.2s'
+          }}
         >
           Back to Wallet
         </button>
+        <style>{`
+          @keyframes scaleIn { from { transform: scale(0.5); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+        `}</style>
       </div>
     )
   }
 
-  /* ── Main Gateway ── */
+  // ── Main: Gateway Opened / Waiting for Payment ──
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-4 py-4 flex items-center gap-3">
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 40,
+        background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(16px)',
+        borderBottom: '1px solid #e2e8f0', padding: '16px',
+        display: 'flex', alignItems: 'center', gap: 12
+      }}>
         <button
           onClick={onBack}
-          className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center cursor-pointer hover:bg-slate-200 transition-colors"
+          style={{
+            width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', border: 'none', transition: 'all 0.2s'
+          }}
         >
-          <ArrowLeft size={16} className="text-slate-600" />
+          <ArrowLeft size={16} color="#475569" />
         </button>
-        <h1 className="text-base font-bold text-slate-800">Complete Deposit</h1>
+        <h1 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>Complete Deposit</h1>
       </header>
 
-      <div className="px-4 pt-5 flex-1">
+      <div style={{ padding: '20px 16px', flex: 1 }}>
         {/* Amount Card */}
-        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-5 text-white relative overflow-hidden mb-5">
-          <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
-          <div className="absolute -bottom-6 -left-6 w-20 h-20 bg-white/10 rounded-full" />
-          <div className="relative z-10">
-            <p className="text-white/80 text-xs font-medium uppercase tracking-wider">Deposit Amount</p>
-            <p className="text-3xl font-bold mt-1">₹{amount.toLocaleString()}</p>
-            {voucher && (
-              <div className="mt-2 inline-flex items-center gap-1 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full">
-                <span className="text-[10px] font-bold text-white/90">🎟️ {typeof voucher === 'object' ? voucher.title : voucher}</span>
-              </div>
+        <div style={{
+          background: 'linear-gradient(135deg, #6366f1 0%, #7c3aed 50%, #8b5cf6 100%)',
+          borderRadius: 20, padding: 24, color: 'white', position: 'relative',
+          overflow: 'hidden', marginBottom: 20,
+          boxShadow: '0 8px 32px rgba(99,102,241,0.3)'
+        }}>
+          <div style={{ position: 'absolute', top: -32, right: -32, width: 96, height: 96, background: 'rgba(255,255,255,0.08)', borderRadius: '50%' }} />
+          <div style={{ position: 'absolute', bottom: -24, left: -24, width: 80, height: 80, background: 'rgba(255,255,255,0.06)', borderRadius: '50%' }} />
+          <div style={{ position: 'relative', zIndex: 2 }}>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.5 }}>Deposit Amount</p>
+            <p style={{ fontSize: 32, fontWeight: 800, marginTop: 4 }}>₹{amount.toLocaleString()}</p>
+            {orderInfo && (
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 6, fontFamily: 'monospace' }}>
+                Order: {orderInfo.orderId}
+              </p>
             )}
           </div>
         </div>
 
-        {/* Security Notice */}
-        <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3 mb-5">
-          <Shield size={16} className="text-blue-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-700 leading-relaxed">
-            Send the <span className="font-bold">exact amount</span> shown above. Your deposit will be verified and credited automatically within 5-10 minutes.
+        {/* Status Card */}
+        <div style={{
+          background: 'white', borderRadius: 16, padding: 24,
+          border: '1px solid #e2e8f0', marginBottom: 16,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          textAlign: 'center'
+        }}>
+          {/* Animated waiting indicator */}
+          <div style={{
+            width: 64, height: 64, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 16px', position: 'relative'
+          }}>
+            <div style={{
+              position: 'absolute', inset: -4, borderRadius: '50%',
+              border: '2px solid transparent', borderTopColor: '#6366f1',
+              animation: 'spin 2s linear infinite'
+            }} />
+            <Clock size={24} color="#6366f1" />
+          </div>
+
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
+            {gatewayOpened ? 'Complete Payment in New Tab' : 'Payment Gateway Ready'}
+          </h3>
+          <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, maxWidth: 280, margin: '0 auto' }}>
+            {gatewayOpened
+              ? 'A new tab has been opened with the payment gateway. Complete your payment there.'
+              : 'Click the button below to open the payment gateway and complete your deposit.'
+            }
           </p>
-        </div>
 
-        {/* ── Dynamic Payment Block ── */}
-        {activeDepositMethod === 'upi' ? (
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Pay via UPI</h3>
-
-            {/* QR Code */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col items-center shadow-sm">
-              <div className="w-48 h-48 bg-gradient-to-br from-slate-50 to-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center mb-4">
-                <QrCode size={64} className="text-slate-300 mb-2" />
-                <p className="text-[10px] text-slate-400 font-medium">Scan to Pay</p>
-              </div>
-              <p className="text-xs text-slate-500 text-center">Scan this QR code using any UPI app<br />(GPay, PhonePe, Paytm, etc.)</p>
-            </div>
-
-            {/* UPI ID */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-xs text-slate-500 font-medium mb-2">Or pay directly to UPI ID</p>
-              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-                <span className="text-sm font-mono font-bold text-indigo-700">{COMPANY_UPI}</span>
-                <button
-                  onClick={() => handleCopy(COMPANY_UPI, 'upi')}
-                  className="flex items-center gap-1 text-xs font-semibold text-indigo-600 cursor-pointer hover:underline"
-                >
-                  {copied === 'upi' ? (
-                    <><Check size={12} /> Copied!</>
-                  ) : (
-                    <><Copy size={12} /> Copy</>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Steps */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-bold text-slate-700 mb-2">How to pay</p>
-              <div className="space-y-2">
-                {[
-                  'Open your UPI app (GPay, PhonePe, etc.)',
-                  `Send exactly ₹${amount.toLocaleString()} to ${COMPANY_UPI}`,
-                  'After payment, tap "I Have Made the Payment" below',
-                ].map((step, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[10px] font-bold text-indigo-600">{i + 1}</span>
-                    </span>
-                    <p className="text-xs text-slate-600 leading-relaxed">{step}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Pay via Bank Transfer</h3>
-
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              {[
-                { label: 'Account Name', value: COMPANY_BANK.name, key: 'name' },
-                { label: 'Account Number', value: COMPANY_BANK.accountNumber, key: 'accNo' },
-                { label: 'IFSC Code', value: COMPANY_BANK.ifsc, key: 'ifsc' },
-                { label: 'Bank', value: COMPANY_BANK.bank, key: 'bank' },
-                { label: 'Branch', value: COMPANY_BANK.branch, key: 'branch' },
-                { label: 'Account Type', value: COMPANY_BANK.type, key: 'type' },
-              ].map((item, i, arr) => (
-                <div
-                  key={item.key}
-                  className={`p-4 flex items-center justify-between ${i !== arr.length - 1 ? 'border-b border-slate-100' : ''}`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-slate-500 font-medium">{item.label}</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{item.value}</p>
-                  </div>
-                  <button
-                    onClick={() => handleCopy(item.value, item.key)}
-                    className="flex items-center gap-1 text-xs font-semibold text-indigo-600 cursor-pointer hover:underline shrink-0 ml-3"
-                  >
-                    {copied === item.key ? (
-                      <><Check size={12} /> Copied!</>
-                    ) : (
-                      <><Copy size={12} /> Copy</>
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Steps */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-bold text-slate-700 mb-2">How to pay</p>
-              <div className="space-y-2">
-                {[
-                  'Open your banking app or net banking',
-                  `Transfer exactly ₹${amount.toLocaleString()} to the account above`,
-                  'Use NEFT/IMPS/RTGS for instant transfer',
-                  'After payment, tap "I Have Made the Payment" below',
-                ].map((step, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[10px] font-bold text-indigo-600">{i + 1}</span>
-                    </span>
-                    <p className="text-xs text-slate-600 leading-relaxed">{step}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* UTR Input Card */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm mt-5 space-y-2 animate-[fadeIn_0.2s_ease-out]">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-            Enter 12-Digit UTR (UPI Ref No)
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={12}
-            value={utr}
-            onChange={(e) => {
-              const val = e.target.value.replace(/[^0-9]/g, '')
-              if (val.length <= 12) setUtr(val)
+          {/* Open Gateway / Re-open Button */}
+          <button
+            onClick={handleOpenGateway}
+            style={{
+              marginTop: 20, padding: '14px 28px',
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: 'white', fontWeight: 700, fontSize: 13, borderRadius: 12,
+              border: 'none', cursor: 'pointer', display: 'inline-flex',
+              alignItems: 'center', gap: 8,
+              boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+              transition: 'all 0.2s'
             }}
-            placeholder="e.g. 614002689210"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-          />
-          <p className="text-[10px] text-slate-400 leading-normal">
-            *Ensure to copy the UTR/Reference number from your payment app transaction details and paste it here to verify deposit.
-          </p>
+          >
+            <ExternalLink size={16} />
+            {gatewayOpened ? 'Re-open Payment Page' : 'Open Payment Gateway'}
+          </button>
+
+          {gatewayOpened && (
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>
+              If the tab was blocked by your browser, click the button above to open it manually.
+            </p>
+          )}
         </div>
 
-        {/* Important Notice */}
-        <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-5">
-          <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+        {/* Security Notice */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          background: '#eff6ff', border: '1px solid #bfdbfe',
+          borderRadius: 12, padding: 14, marginBottom: 16
+        }}>
+          <Shield size={16} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <p className="text-xs font-bold text-amber-800">Important</p>
-            <p className="text-[11px] text-amber-700 leading-relaxed mt-0.5">
-              • Send the exact amount: ₹{amount.toLocaleString()}<br />
-              • Only confirm after completing payment and entering UTR<br />
-              • Do not close this page during verification
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#1d4ed8', marginBottom: 2 }}>Secure Payment</p>
+            <p style={{ fontSize: 11, color: '#2563eb', lineHeight: 1.5 }}>
+              Your payment is processed securely via our payment partner. Your wallet will be credited automatically once payment is confirmed.
             </p>
           </div>
         </div>
 
-        {/* Confirm Button */}
+        {/* Auto-settlement notice */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          background: '#f0fdf4', border: '1px solid #bbf7d0',
+          borderRadius: 12, padding: 14, marginBottom: 16
+        }}>
+          <CheckCircle size={16} color="#16a34a" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#15803d', marginBottom: 2 }}>Auto-Settlement</p>
+            <p style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>
+              Once you complete payment on the gateway, your wallet balance will be credited automatically within 1-2 minutes. No manual verification needed.
+            </p>
+          </div>
+        </div>
+
+        {/* Check Status Button */}
         <button
-          onClick={handleConfirm}
-          disabled={processing || utr.length !== 12}
-          className="w-full mt-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-200/50 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          onClick={handleCheckStatus}
+          disabled={checkingStatus}
+          style={{
+            width: '100%', padding: '14px', marginTop: 4,
+            background: checkingStatus ? '#f1f5f9' : 'white',
+            color: checkingStatus ? '#94a3b8' : '#475569',
+            fontWeight: 700, fontSize: 13, borderRadius: 12,
+            border: '1px solid #e2e8f0', cursor: checkingStatus ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            transition: 'all 0.2s'
+          }}
         >
-          {processing ? (
-            <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          {checkingStatus ? (
+            <>
+              <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} />
+              Checking...
+            </>
           ) : (
             <>
-              <Check size={16} />
-              {utr.length === 12 ? 'I Have Made the Payment' : 'Enter 12-Digit UTR to Confirm'}
+              <RefreshCw size={16} />
+              I Have Paid — Check Status
             </>
           )}
         </button>
 
-        {/* Support helper block */}
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
-          <HelpCircle size={14} className="text-indigo-600 shrink-0" />
-          <span>Need help with payment?</span>
-          <button 
+        <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>
+          Status is checked automatically every 10 seconds. You can also manually check above.
+        </p>
+
+        {/* Support helper */}
+        <div style={{
+          marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 6, fontSize: 12, color: '#64748b',
+          background: 'white', border: '1px solid #e2e8f0',
+          borderRadius: 16, padding: 12
+        }}>
+          <AlertCircle size={14} color="#6366f1" style={{ flexShrink: 0 }} />
+          <span>Need help?</span>
+          <button
             type="button"
             onClick={() => onNavigate?.('support')}
-            className="text-indigo-650 font-bold hover:underline cursor-pointer bg-transparent border-0 outline-none p-0"
+            style={{
+              color: '#6366f1', fontWeight: 700, cursor: 'pointer',
+              background: 'transparent', border: 'none', padding: 0,
+              fontSize: 12, textDecoration: 'none'
+            }}
           >
-            Chat with AI Support
+            Chat with Support
           </button>
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+      `}</style>
     </div>
   )
 }

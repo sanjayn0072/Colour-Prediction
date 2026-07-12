@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useUser } from '../context/UserContext'
 import { calculateWithdrawalFee, WITHDRAW_MIN, WITHDRAW_MAX } from '../utils/withdrawalFee'
+import { translateError } from '../utils/errorTranslator'
 
 function generateNumeric16Id() {
   const now = new Date();
@@ -47,7 +48,8 @@ export default function Wallet({ onNavigate, initialTab }) {
   /* Toast */
   const [toast, setToast] = useState(null)
   const showToast = (msg, type = 'success') => {
-    setToast({ msg, type })
+    const finalMsg = type === 'error' ? translateError(msg) : msg;
+    setToast({ msg: finalMsg, type })
     setTimeout(() => setToast(null), 3000)
   }
 
@@ -88,6 +90,13 @@ export default function Wallet({ onNavigate, initialTab }) {
           >
             <HelpCircle size={14} />
             Support
+          </button>
+          <button
+            onClick={() => onNavigate?.('depositHistory')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 border border-indigo-200 transition-all cursor-pointer"
+          >
+            <CreditCard size={14} />
+            Deposits
           </button>
           <button
             onClick={() => onNavigate?.('transactionRecords')}
@@ -586,7 +595,7 @@ function DepositTab({ onNavigate, showToast }) {
 }
 
 function WithdrawTab({ onNavigate }) {
-  const { availableBalance, realBalance, bonusBalance, requiredWager, depositRecords, withdrawRecords, setWithdrawRecords, savedBanks, savedUpis, fetchUserHistory } = useUser()
+  const { user, availableBalance, realBalance, bonusBalance, requiredWager, depositRecords, withdrawRecords, setWithdrawRecords, savedBanks, savedUpis, fetchUserHistory } = useUser()
   const [amount, setAmount] = useState('')
   const [customAmount, setCustomAmount] = useState('')
   const [withdrawMethod, setWithdrawMethod] = useState(savedBanks.length > 0 ? 'bank' : savedUpis.length > 0 ? 'upi' : 'bank')
@@ -611,17 +620,15 @@ function WithdrawTab({ onNavigate }) {
   const methodAvailable =
     (withdrawMethod === 'bank' && activeBank) || (withdrawMethod === 'upi' && activeUpi)
 
-  const totalDeposit = depositRecords.reduce((acc, curr) => acc + (curr.status === 'Completed' ? curr.amount : 0), 0)
+  const totalDeposit = user?.totalDeposits || 0
   const vipLevel = getVipLevel(totalDeposit)
-  const vipLimit = getVipLimit(vipLevel)
-  const totalWithdrawn = withdrawRecords.reduce((acc, curr) => acc + (['PENDING', 'APPROVED', 'PAID'].includes(curr.status) ? curr.amount : 0), 0)
-  const showCapacityCard = vipLevel > 0 && (totalWithdrawn >= vipLimit || (selectedAmount > 0 && totalWithdrawn + selectedAmount > vipLimit))
+  const vipLimit = vipLevel === 0 ? 2000 : getVipLimit(vipLevel)
+  const totalWithdrawn = withdrawRecords.reduce((acc, curr) => acc + (['PENDING', 'PROCESSING', 'APPROVED', 'PAID'].includes(curr.status) ? curr.amount : 0), 0)
+  const showCapacityCard = totalWithdrawn >= vipLimit || (selectedAmount > 0 && totalWithdrawn + selectedAmount > vipLimit) || vipLevel === 0
 
   /* Validation */
   let validationError = null
-  if (vipLevel <= 0) {
-    validationError = 'Unlock VIP 1 (Deposit ₹100+) to activate withdrawals.'
-  } else if (selectedAmount > 0) {
+  if (selectedAmount > 0) {
     if (selectedAmount < WITHDRAW_MIN) {
       validationError = `Minimum withdrawal is ₹${WITHDRAW_MIN}`
     } else if (selectedAmount > WITHDRAW_MAX) {
@@ -630,13 +637,10 @@ function WithdrawTab({ onNavigate }) {
       validationError = `Insufficient available balance. You have ₹${availableBalance.toFixed(2)} available.`
     } else if (selectedAmount % 100 !== 0) {
       validationError = 'Amount must be in multiples of ₹100'
-    } else if (totalWithdrawn + selectedAmount > vipLimit) {
-      validationError = `Exceeds remaining VIP withdrawal capacity (₹${Math.max(0, vipLimit - totalWithdrawn).toLocaleString()} left)`
     }
   }
 
   const canWithdraw =
-    vipLevel > 0 &&
     selectedAmount >= WITHDRAW_MIN &&
     selectedAmount <= WITHDRAW_MAX &&
     selectedAmount <= availableBalance &&
@@ -744,59 +748,6 @@ function WithdrawTab({ onNavigate }) {
 
   return (
     <div className="space-y-5">
-      {/* VIP Withdrawal Limit Status Card */}
-      {showCapacityCard && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3 animate-[fadeIn_0.2s_ease-out]">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-            <div className="flex items-center gap-1.5">
-              <Award size={16} className="text-amber-500" />
-              <span className="text-xs font-bold text-slate-700">VIP Withdrawal Capacity</span>
-            </div>
-            <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2.5 py-0.5 rounded-full">
-              VIP {vipLevel}
-            </span>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[11px]">
-              <span className="text-slate-500 font-medium font-sans">Total Tier Limit (20x VIP Req.)</span>
-              <span className="font-bold text-slate-800">₹{vipLimit.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-[11px]">
-              <span className="text-slate-500 font-medium font-sans">Withdrawn (Completed + Pending)</span>
-              <span className="font-semibold text-slate-700">₹{totalWithdrawn.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-[11px] font-bold border-t border-dashed border-slate-100 pt-1.5">
-              <span className="text-slate-600 font-sans">Remaining Capacity</span>
-              <span className={vipLimit - totalWithdrawn > 0 ? "text-emerald-600 font-sans" : "text-red-500 font-sans"}>
-                ₹{Math.max(0, vipLimit - totalWithdrawn).toLocaleString()}
-              </span>
-            </div>
-          </div>
-          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all duration-500 ${
-                totalWithdrawn >= vipLimit ? 'bg-red-500' : 'bg-indigo-600'
-              }`} 
-              style={{ width: `${Math.min(100, (totalWithdrawn / (vipLimit || 1)) * 100)}%` }}
-            />
-          </div>
-          {vipLevel <= 0 ? (
-            <p className="text-[10px] text-amber-600 leading-normal font-medium bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-start gap-1">
-              <AlertCircle size={12} className="shrink-0 mt-0.5" />
-              <span>
-                Withdrawals are locked at VIP 0. Make a deposit of ₹100 or more to unlock VIP 1 and activate ₹2,000 withdrawal limit!
-              </span>
-            </p>
-          ) : totalWithdrawn >= vipLimit ? (
-            <p className="text-[10px] text-red-500 leading-normal font-medium bg-red-50 p-2 rounded-lg border border-red-100 flex items-start gap-1">
-              <AlertCircle size={12} className="shrink-0 mt-0.5" />
-              <span>
-                Withdrawal limit reached! Deposit more to upgrade to VIP {Math.min(20, vipLevel + 1)} and unlock higher limits.
-              </span>
-            </p>
-          ) : null}
-        </div>
-      )}
 
       {/* Wagering Requirement Alert */}
       {requiredWager > 0 && (

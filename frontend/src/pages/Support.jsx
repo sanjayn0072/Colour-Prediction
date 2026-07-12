@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { translateError } from '../utils/errorTranslator'
 import { 
   ArrowLeft, HelpCircle, MessageSquare, Mail, 
   Send, Sparkles, AlertCircle, Trash2, CheckCircle2, Upload, Paperclip, X, Clock
@@ -24,7 +25,7 @@ export default function Support({ onNavigate }) {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello! I am your ColourPlay Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to ColourPlay!*`,
+      text: `Hello! I am your RRClub Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to RRClub!*`,
       timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
     }
   ])
@@ -49,7 +50,8 @@ export default function Support({ onNavigate }) {
   }, [messages, isTyping])
 
   const showToast = (msg, type = 'success') => {
-    setToast({ msg, type })
+    const finalMsg = type === 'error' ? translateError(msg) : msg;
+    setToast({ msg: finalMsg, type })
     setTimeout(() => setToast(null), 3000)
   }
 
@@ -60,7 +62,7 @@ export default function Support({ onNavigate }) {
         {
           id: 'welcome',
           sender: 'assistant',
-          text: `Hello! I am your ColourPlay Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to ColourPlay!*`,
+          text: `Hello! I am your RRClub Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to RRClub!*`,
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }
       ])
@@ -382,7 +384,7 @@ export default function Support({ onNavigate }) {
                   </p>
                 </div>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 w-full max-w-xs text-left text-[11px] text-slate-600 space-y-1">
-                  <p>• <strong>Contact:</strong> support@colourplay.com</p>
+                  <p>• <strong>Contact:</strong> support@rrclub.com</p>
                   <p>• <strong>Subject:</strong> {subject}</p>
                   <p>• <strong>Status:</strong> Assigned (Pending review)</p>
                   {refId && <p>• <strong>Ref ID:</strong> {refId}</p>}
@@ -501,8 +503,8 @@ export default function Support({ onNavigate }) {
             {/* Email link fallback */}
             <p className="text-[10px] text-slate-400 text-center font-medium">
               Having issues? You can also email us directly at{' '}
-              <a href="mailto:support@colourplay.com" className="text-primary font-bold hover:underline">
-                support@colourplay.com
+              <a href="mailto:support@rrclub.com" className="text-primary font-bold hover:underline">
+                support@rrclub.com
               </a>
             </p>
           </div>

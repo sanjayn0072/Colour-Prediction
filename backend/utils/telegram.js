@@ -1,4 +1,6 @@
+import { query } from '../config/db.js';
 import logger from './logger.js';
+import { decryptConfigValue } from './configEncryption.js';
 
 /**
  * Sends a Telegram notification when a new withdrawal request is made.
@@ -22,8 +24,18 @@ export async function sendWithdrawalAlert({
   accountNumber,
   ifscCode
 }) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  let botToken = process.env.TELEGRAM_BOT_TOKEN;
+  let chatId = process.env.TELEGRAM_CHAT_ID;
+
+  try {
+    const configRows = await query('SELECT config_key, config_value FROM system_configs WHERE config_key IN ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")');
+    configRows.forEach(row => {
+      if (row.config_key === 'TELEGRAM_BOT_TOKEN' && row.config_value) botToken = decryptConfigValue(row.config_value);
+      if (row.config_key === 'TELEGRAM_CHAT_ID' && row.config_value) chatId = decryptConfigValue(row.config_value);
+    });
+  } catch (err) {
+    logger.error(err, 'Failed to fetch Telegram config from database');
+  }
 
   if (!botToken || !chatId) {
     logger.warn('Telegram Bot configuration missing (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID). Notification skipped.');

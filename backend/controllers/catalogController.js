@@ -1,4 +1,5 @@
 import { query, pool } from '../config/db.js';
+import logger from '../utils/logger.js';
 
 // --- PRODUCTS ---
 
@@ -6,7 +7,7 @@ import { query, pool } from '../config/db.js';
 export const getProducts = async (req, res) => {
   try {
     const products = await query(
-      'SELECT id, title, price, original_price as original, description as `desc`, rating, reviews_count as reviews, stock ' +
+      'SELECT id, title, price, original_price as original, description as `desc`, rating, reviews_count as reviews, stock, category ' +
       'FROM products ORDER BY created_at DESC'
     );
 
@@ -14,70 +15,80 @@ export const getProducts = async (req, res) => {
     for (const p of products) {
       const images = await query('SELECT image_url FROM product_images WHERE product_id = ?', [p.id]);
       p.images = images.map(img => img.image_url);
-      p.image = p.images[0] || '';
+      
+      // Fallback fallback image check
+      if (p.images.length === 0 || !p.images[0]) {
+        p.image = '/uploads/placeholder.png';
+        p.images = ['/uploads/placeholder.png'];
+      } else {
+        p.image = p.images[0];
+      }
+      
       p.specs = ['Premium tech quality', 'Manufacturer Warranty'];
-      p.badge = 'New Arrival';
+      p.badge = p.stock > 0 ? 'In Stock' : 'Out of Stock';
     }
 
     res.json(products);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch products', details: error.message });
+    logger.error(error, 'Failed to fetch products');
+    res.status(500).json({ error: 'Failed to fetch products' });
   }
 };
 
-// POST /api/products
+// POST /api/admin/products
 export const createProduct = async (req, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Access denied: Super Administrator clearance required' });
+    // Role clearance gate: Allow super_admin and admin
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: Administrative clearance required' });
     }
 
-    const { title, price, original, badge, image, images, rating, reviews, desc } = req.body;
-    if (!title || price === undefined) {
-      return res.status(400).json({ error: 'Title and price are required' });
+    const { title, description, price, discount_price, stock_count, category } = req.body;
+    
+    if (!title || discount_price === undefined) {
+      return res.status(400).json({ error: 'Title and final selling price (discount_price) are required.' });
     }
 
-    const origPrice = original || price * 1.5;
-    const finalBadge = badge || 'New Arrival';
-    const finalRating = rating || 5.0;
-    const finalReviews = reviews || 0;
-    const finalDesc = desc || 'Premium high-performance product added via Administrator Control Center.';
+    const finalSellingPrice = parseFloat(discount_price);
+    const originalPriceVal = price ? parseFloat(price) : finalSellingPrice * 1.5;
+    const finalStock = stock_count !== undefined ? parseInt(stock_count, 10) : 100;
+    const finalDesc = description || 'Premium high-performance product added via Administrator Control Center.';
+    const finalCategory = category || 'Tech';
+
+    // Multiple File Upload handling
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      imageUrls = req.files.map(f => `/uploads/products/${f.filename}`);
+    } else {
+      imageUrls = ['/uploads/placeholder.png'];
+    }
 
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
 
       const [result] = await connection.query(
-        'INSERT INTO products (title, price, original_price, description, rating, reviews_count, stock) VALUES (?, ?, ?, ?, ?, ?, 100)',
-        [title, price, origPrice, finalDesc, finalRating, finalReviews]
+        'INSERT INTO products (title, price, original_price, description, rating, reviews_count, stock, category) VALUES (?, ?, ?, ?, 5.00, 0, ?, ?)',
+        [title, finalSellingPrice, originalPriceVal, finalDesc, finalStock, finalCategory]
       );
       const newProductId = result.insertId;
 
-      // Seed product image
-      if (image) {
+      // Insert all product images (first is primary)
+      for (let i = 0; i < imageUrls.length; i++) {
+        const isPrimary = i === 0 ? 1 : 0;
         await connection.query(
-          'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, 1)',
-          [newProductId, image]
+          'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)',
+          [newProductId, imageUrls[i], isPrimary]
         );
-      }
-
-      const imgList = images || [];
-      for (const imgUrl of imgList) {
-        if (imgUrl !== image) {
-          await connection.query(
-            'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, 0)',
-            [newProductId, imgUrl]
-          );
-        }
       }
 
       await connection.commit();
 
       const [newProductRows] = await connection.query('SELECT * FROM products WHERE id = ? LIMIT 1', [newProductId]);
       const createdProduct = newProductRows[0];
-      createdProduct.image = image || '';
-      createdProduct.images = imgList;
-      createdProduct.badge = finalBadge;
+      createdProduct.image = imageUrls[0];
+      createdProduct.images = imageUrls;
+      createdProduct.badge = 'In Stock';
       createdProduct.specs = ['Premium tech quality', 'Manufacturer Warranty'];
 
       res.status(201).json(createdProduct);
@@ -88,65 +99,122 @@ export const createProduct = async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create product', details: error.message });
+    logger.error(error, 'Failed to create product');
+    res.status(500).json({ error: 'Failed to create product' });
   }
 };
 
-// PUT /api/products/:id
+// PUT /api/admin/products/:id
 export const updateProduct = async (req, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Access denied: Super Administrator clearance required' });
+    // Role clearance gate: Allow super_admin and admin
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: Administrative clearance required' });
     }
 
     const { id } = req.params;
-    const fields = req.body;
+    const { title, description, price, discount_price, stock_count, category } = req.body;
 
-    const setClauses = [];
-    const values = [];
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    if (fields.title !== undefined) { setClauses.push('title = ?'); values.push(fields.title); }
-    if (fields.price !== undefined) { setClauses.push('price = ?'); values.push(fields.price); }
-    if (fields.original !== undefined) { setClauses.push('original_price = ?'); values.push(fields.original); }
-    if (fields.desc !== undefined) { setClauses.push('description = ?'); values.push(fields.desc); }
-    if (fields.rating !== undefined) { setClauses.push('rating = ?'); values.push(fields.rating); }
-    if (fields.stock !== undefined) { setClauses.push('stock = ?'); values.push(fields.stock); }
+      const setClauses = [];
+      const values = [];
 
-    if (setClauses.length === 0) {
-      return res.status(400).json({ error: 'No fields provided to update' });
+      if (title !== undefined) { setClauses.push('title = ?'); values.push(title); }
+      if (description !== undefined) { setClauses.push('description = ?'); values.push(description); }
+      if (discount_price !== undefined) { setClauses.push('price = ?'); values.push(parseFloat(discount_price)); }
+      if (price !== undefined) { setClauses.push('original_price = ?'); values.push(parseFloat(price)); }
+      if (stock_count !== undefined) { setClauses.push('stock = ?'); values.push(parseInt(stock_count, 10)); }
+      if (category !== undefined) { setClauses.push('category = ?'); values.push(category); }
+
+      if (setClauses.length > 0) {
+        values.push(id);
+        await connection.query(`UPDATE products SET ${setClauses.join(', ')} WHERE id = ?`, values);
+      }
+
+      // If new files are uploaded, replace all existing images
+      if (req.files && req.files.length > 0) {
+        const imageUrls = req.files.map(f => `/uploads/products/${f.filename}`);
+        
+        // Delete all existing image entries for this product
+        await connection.query('DELETE FROM product_images WHERE product_id = ?', [id]);
+        
+        // Insert new images
+        for (let i = 0; i < imageUrls.length; i++) {
+          const isPrimary = i === 0 ? 1 : 0;
+          await connection.query(
+            'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)',
+            [id, imageUrls[i], isPrimary]
+          );
+        }
+      }
+
+      await connection.commit();
+
+      const [updatedProductRows] = await connection.query('SELECT * FROM products WHERE id = ? LIMIT 1', [id]);
+      if (updatedProductRows.length === 0) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+
+      const product = updatedProductRows[0];
+      const imagesRows = await connection.query('SELECT image_url FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC', [id]);
+      product.images = imagesRows.map(img => img.image_url);
+      if (product.images.length === 0) {
+        product.images = ['/uploads/placeholder.png'];
+      }
+      product.image = product.images[0];
+      product.badge = product.stock > 0 ? 'In Stock' : 'Out of Stock';
+      product.specs = ['Premium tech quality', 'Manufacturer Warranty'];
+
+      res.json(product);
+    } catch (txErr) {
+      await connection.rollback();
+      throw txErr;
+    } finally {
+      connection.release();
     }
-
-    values.push(id);
-    await query(`UPDATE products SET ${setClauses.join(', ')} WHERE id = ?`, values);
-
-    const [updatedProduct] = await query('SELECT * FROM products WHERE id = ? LIMIT 1', [id]);
-    if (!updatedProduct) {
-      return res.status(404).json({ error: 'Product not found' });
-    }
-
-    res.json(updatedProduct);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update product', details: error.message });
+    logger.error(error, 'Failed to update product');
+    res.status(500).json({ error: 'Failed to update product' });
   }
 };
 
 // DELETE /api/products/:id
 export const deleteProduct = async (req, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Access denied: Super Administrator clearance required' });
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: Administrative clearance required' });
     }
 
     const { id } = req.params;
-    const [result] = await pool.query('DELETE FROM products WHERE id = ?', [id]);
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Product not found' });
+      // Delete associated images
+      await connection.query('DELETE FROM product_images WHERE product_id = ?', [id]);
+      
+      // Delete product
+      const [result] = await connection.query('DELETE FROM products WHERE id = ?', [id]);
+
+      if (result.affectedRows === 0) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'Product not found' });
+      }
+
+      await connection.commit();
+      res.json({ message: 'Product deleted successfully', id });
+    } catch (txErr) {
+      await connection.rollback();
+      throw txErr;
+    } finally {
+      connection.release();
     }
-
-    res.json({ message: 'Product deleted successfully', id });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete product', details: error.message });
+    logger.error(error, 'Failed to delete product');
+    res.status(500).json({ error: 'Failed to delete product' });
   }
 };
 
@@ -159,15 +227,16 @@ export const getBanners = async (req, res) => {
     const banners = await query('SELECT id, title, subtitle, image_url as imageUrl, gradient, action FROM banners WHERE is_active = 1');
     res.json(banners);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch banners', details: error.message });
+    logger.error(error, 'Failed to fetch banners');
+    res.status(500).json({ error: 'Failed to fetch banners' });
   }
 };
 
 // POST /api/banners
 export const createBanner = async (req, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Access denied: Super Administrator clearance required' });
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: Administrative clearance required' });
     }
 
     const { title, subtitle, gradient, action } = req.body;
@@ -183,15 +252,16 @@ export const createBanner = async (req, res) => {
     const [newBanner] = await query('SELECT * FROM banners WHERE id = ? LIMIT 1', [result.insertId]);
     res.status(201).json(newBanner);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create banner', details: error.message });
+    logger.error(error, 'Failed to create banner');
+    res.status(500).json({ error: 'Failed to create banner' });
   }
 };
 
 // PUT /api/banners/:id
 export const updateBanner = async (req, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Access denied: Super Administrator clearance required' });
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: Administrative clearance required' });
     }
 
     const { id } = req.params;
@@ -219,15 +289,16 @@ export const updateBanner = async (req, res) => {
 
     res.json(updatedBanner);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update banner', details: error.message });
+    logger.error(error, 'Failed to update banner');
+    res.status(500).json({ error: 'Failed to update banner' });
   }
 };
 
 // DELETE /api/banners/:id
 export const deleteBanner = async (req, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Access denied: Super Administrator clearance required' });
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: Administrative clearance required' });
     }
 
     const { id } = req.params;
@@ -239,7 +310,8 @@ export const deleteBanner = async (req, res) => {
 
     res.json({ message: 'Banner deleted successfully', id });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete banner', details: error.message });
+    logger.error(error, 'Failed to delete banner');
+    res.status(500).json({ error: 'Failed to delete banner' });
   }
 };
 
@@ -367,7 +439,7 @@ export const checkoutProduct = async (req, res) => {
 
   } catch (error) {
     await connection.rollback();
-    console.error(error);
+    logger.error(error, 'Failed checkout transaction');
     return res.status(500).json({ error: 'An internal server error occurred.' });
   } finally {
     connection.release();

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useUser } from '../context/UserContext'
 import { useGame } from '../context/GameContext'
-import { Clock, Lock, Shield, HelpCircle, Trophy, Sparkles, Check, X, Minus, Plus, Gamepad2, AlertCircle } from 'lucide-react'
+import { Clock, Lock, Shield, HelpCircle, Trophy, Sparkles, Check, X, Minus, Plus, Gamepad2, AlertCircle, AlertTriangle } from 'lucide-react'
 import GameLobbyModal from '../components/GameLobbyModal'
+import { translateError } from '../utils/errorTranslator'
 
 const getMockResults = (sessionKey) => {
   const baseId = sessionKey === '30s' ? 3000 : sessionKey === '1m' ? 1001 : sessionKey === '2m' ? 2000 : 5000
@@ -23,6 +24,7 @@ const getMockResults = (sessionKey) => {
 
 // Mapping of numbers 1-10 to their colors
 const NUMBER_COLOR_MAP = {
+  0: 'purple',   // fallback for legacy 0 = violet/10
   1: 'red',      // odd = red
   2: 'emerald',  // even = green
   3: 'red',      // odd = red
@@ -36,19 +38,51 @@ const NUMBER_COLOR_MAP = {
 }
 
 export default function ColourPrediction({ onNavigate, routeData }) {
-  const { balance, setRealBalance, betsList, fetchUserHistory } = useUser()
+  const { user, balance, setRealBalance, betsList, fetchUserHistory } = useUser()
+  const [multipliers, setMultipliers] = useState({ green: 1.9, violet: 4.5, red: 1.9 });
+
+  useEffect(() => {
+    const fetchMultipliers = async () => {
+      try {
+        const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+        const res = await fetch(`${API_BASE}/api/games/multipliers`);
+        if (res.ok) {
+          const data = await res.json();
+          setMultipliers({
+            green: data.green || 1.9,
+            violet: data.violet || 4.5,
+            red: data.red || 1.9
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch dynamic multipliers:', err);
+      }
+    };
+    fetchMultipliers();
+  }, []);
+
+  const getBetType = (b) => {
+    if (!b) return '';
+    return b.betType || b.bet_type || (b.bet_color !== undefined || b.color !== undefined ? 'colour' : (b.bet_number !== undefined || b.number !== undefined ? 'number' : ''));
+  };
+
+  const getBetValue = (b) => {
+    if (!b) return '';
+    const val = b.betValue !== undefined ? b.betValue : (b.bet_value !== undefined ? b.bet_value : (b.bet_color !== undefined ? b.bet_color : (b.color !== undefined ? b.color : (b.bet_number !== undefined ? b.bet_number : (b.number !== undefined ? b.number : '')))));
+    return val !== undefined && val !== null ? String(val) : '';
+  };
+
+  const getBetAmount = (b) => {
+    if (!b) return 0;
+    const amt = b.betAmount !== undefined ? b.betAmount : (b.bet_amount !== undefined ? b.bet_amount : (b.amount !== undefined ? b.amount : 0));
+    return parseFloat(amt) || 0;
+  };
   
   // Lobby modal state
   const [showLobby, setShowLobby] = useState(routeData?.openLobby || false)
   
   // Active session mode
   const [activeSession, setActiveSession] = useState('1m')
-  const [activeBets, setActiveBets] = useState({
-    '30s': [],
-    '1m': [],
-    '2m': [],
-    '5m': []
-  })
   
   const [loading, setLoading] = useState(false)
   const [errorToast, setErrorToast] = useState(null)
@@ -58,7 +92,21 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   // Betting states (Inline, no drawers)
   const [selectedTargets, setSelectedTargets] = useState([]) // array of { type: 'colour'|'number', value: string|number }
   const [betAmount, setBetAmount] = useState(10)
-  const [quantity, setQuantity] = useState(1)
+  const [quantities, setQuantities] = useState({
+    '30s': 1,
+    '1m': 1,
+    '2m': 1,
+    '5m': 1
+  })
+  const quantity = quantities[activeSession] ?? 1
+  const setQuantity = (val) => {
+    setQuantities(prev => ({
+      ...prev,
+      [activeSession]: typeof val === 'function' ? val(prev[activeSession] ?? 1) : val
+    }))
+  }
+  const [selectedColour, setSelectedColour] = useState(null)
+  const [selectedNumber, setSelectedNumber] = useState(null)
 
   // Personal betting history states
   const [activeTab, setActiveTab] = useState('drawHistory') // 'drawHistory' | 'myBets'
@@ -67,7 +115,97 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   const [showMoreResults, setShowMoreResults] = useState(false)
   const [myBetsFilter, setMyBetsFilter] = useState('all') // 'all' | 'wins'
 
-  const { colourSessions } = useGame()
+  const { colourSessions, socket } = useGame()
+
+  // --- Admin Live Metrics Overlay State ---
+  const [liveMetrics, setLiveMetrics] = useState({});
+  const [adminConfirmModal, setAdminConfirmModal] = useState(null); // { type, val }
+
+  // Global toast notification engine state
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (message, type = 'error') => {
+    const finalMsg = type === 'error' ? translateError(message) : message;
+    const id = Date.now() + Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message: finalMsg, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
+
+  const shouldHighlight = (type, val) => {
+    if (!liveMetrics || !liveMetrics.forcedOutcome) return false;
+    const forced = String(liveMetrics.forcedOutcome).toLowerCase().trim();
+    const cleanVal = String(val).toLowerCase().trim();
+
+    if (type === 'colour') {
+      if (forced === cleanVal) return true;
+      if (forced.includes(' ') && forced.split(' ')[1].toLowerCase() === cleanVal) return true;
+    } else if (type === 'number') {
+      if (forced === cleanVal) return true;
+      if (forced.split(' ')[0] === cleanVal) return true;
+    }
+    return false;
+  };
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
+  useEffect(() => {
+    if (isAdmin && socket) {
+      socket.on('live_bet_metrics', (data) => {
+         const currentRoundId = colourSessions[activeSession]?.gameId;
+         if (data && data.colour && data.colour[currentRoundId]) {
+           setLiveMetrics(data.colour[currentRoundId]);
+         } else {
+           setLiveMetrics({});
+         }
+      });
+    }
+    return () => {
+      if (isAdmin && socket) {
+        socket.off('live_bet_metrics');
+      }
+    };
+  }, [isAdmin, socket, activeSession, colourSessions]);
+
+  const handleAdminOverride = (type, val) => {
+    if (!isAdmin) return;
+    setAdminConfirmModal({ type, val });
+  };
+
+  const executeAdminOverride = async () => {
+    if (!adminConfirmModal) return;
+    const { type, val } = adminConfirmModal;
+    setAdminConfirmModal(null);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/admin/game/overwrite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          gameType: 'colour',
+          session: activeSession,
+          roundId: colourSessions[activeSession].gameId,
+          outcome: val
+        })
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {}
+      
+      if (res.ok) {
+        showToast('⚡ Super Admin Override outcome forced successfully!', 'success');
+      } else {
+        showToast('❌ Override failed: ' + (data.error || res.statusText || 'HTTP Error ' + res.status), 'error');
+      }
+    } catch(err) {
+      showToast('⚠️ Override connection or network failure.', 'warning');
+    }
+  };
   const activeSessState = colourSessions[activeSession]
   const timeLeft = activeSessState?.timeLeft ?? 60
   const gameId = activeSessState?.gameId ?? '1002'
@@ -75,12 +213,29 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   const results = activeSessState?.results && activeSessState.results.length > 0
     ? activeSessState.results
     : getMockResults(activeSession)
-  const betsPlaced = activeBets[activeSession] || []
+
+  // Derive active bets directly from database betsList where status is pending and matches the active round ID
+  const betsPlaced = betsList.filter(b => {
+    if (!b) return false;
+    const gType = b.gameType || b.game_type;
+    const sess = b.session;
+    const status = b.status;
+    const roundIdMatch = String(b.roundId || b.round_id || b.gameRoundId || b.game_round_id) === String(gameId);
+    return gType === 'colour' && String(sess).toLowerCase() === String(activeSession).toLowerCase() && status === 'pending' && roundIdMatch;
+  })
+
+  const betsPlacedRef = useRef(betsPlaced);
+  const gameIdRef = useRef(gameId);
+  
+  useEffect(() => {
+    betsPlacedRef.current = betsPlaced;
+    gameIdRef.current = gameId;
+  }, [betsPlaced, gameId]);
 
   const getBetAmountOnTarget = (type, val) => {
     return betsPlaced
-      .filter((bet) => bet.type === type && bet.value === val)
-      .reduce((sum, bet) => sum + bet.amount, 0)
+      .filter((bet) => bet.betType === type && String(bet.betValue).toLowerCase() === String(val).toLowerCase())
+      .reduce((sum, bet) => sum + bet.betAmount, 0)
   }
 
   const activeSessionRef = useRef(activeSession)
@@ -97,91 +252,123 @@ export default function ColourPrediction({ onNavigate, routeData }) {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  const lockThreshold = activeSession === '30s' ? 5 : activeSession === '1m' ? 10 : activeSession === '2m' ? 15 : 30
+  const lockThreshold = String(activeSession).toLowerCase() === '30s' ? 5 : String(activeSession).toLowerCase() === '1m' ? 10 : String(activeSession).toLowerCase() === '2m' ? 15 : 20
   const isLocked = phase === 'locked' || timeLeft <= lockThreshold
 
   // Listen to game result events from socket layer
   useEffect(() => {
     const handleColourResult = (e) => {
-      const data = e.detail
-      const sessionKey = data.session || '1m'
-      const winColor = data.details?.colour
-      const winNumber = data.outcome
+      const data = e.detail;
+      const key = activeSessionRef.current;
+      if (data.session && data.session !== key) return;
 
-      // Find if we had active bets for this session
-      const betsInSession = activeBets[sessionKey] || []
-      
-      let totalWagered = 0
-      let totalPayout = 0
+      setGlowOutcome({ colour: data.details.colour, number: data.outcome });
+      setTimeout(() => setGlowOutcome(null), 3000);
+      fetchUserHistory();
 
-      if (betsInSession.length > 0) {
-        betsInSession.forEach((bet) => {
-          totalWagered += bet.amount
-          let won = false
-          let payout = 0
+      // Show win/loss toast details based on the betsPlacedRef wagers
+      const currentBets = betsPlacedRef.current || [];
+      if (currentBets.length > 0) {
+        let totalWon = 0;
+        let totalInvested = 0;
+        let hasActiveBets = false;
 
-          if (bet.type === 'colour') {
-            won = (bet.value === winColor) || (winNumber === 5 && (bet.value === 'red' || bet.value === 'violet'))
-            const multiplier = bet.value === 'violet' ? 4.5 : 1.9
-            payout = Math.floor(bet.amount * multiplier)
-          } else if (bet.type === 'number') {
-            won = parseInt(bet.value, 10) === winNumber
-            payout = bet.amount * 8
-          }
+        for (const bet of currentBets) {
+          const betRoundId = bet.roundId || bet.round_id || bet.gameRoundId || bet.game_round_id;
+          if (String(betRoundId) === String(data.gameId)) {
+            hasActiveBets = true;
+            const amount = getBetAmount(bet);
+            totalInvested += amount;
 
-          if (won) {
-            totalPayout += payout
-          }
-        })
+            let won = false;
+            let multiplier = parseFloat(bet.multiplier || bet.payout_multiplier || multipliers.green);
 
-        // If the resolved session is the active one, show result popup and toast
-        if (sessionKey === activeSessionRef.current) {
-          setRoundResultPopup({
-            period: data.gameId,
-            winColor,
-            winNumber,
-            wager: totalWagered,
-            payout: totalPayout,
-            netProfit: totalPayout - totalWagered,
-            won: totalPayout > 0,
-            session: sessionKey,
-            bets: betsInSession.map(bet => {
-              let won = false
-              let payout = 0
-              if (bet.type === 'colour') {
-                won = (bet.value === winColor) || (winNumber === 5 && (bet.value === 'red' || bet.value === 'violet'))
-                payout = Math.floor(bet.amount * (bet.value === 'violet' ? 4.5 : 1.9))
-              } else if (bet.type === 'number') {
-                won = parseInt(bet.value, 10) === winNumber
-                payout = bet.amount * 8
+            const bType = getBetType(bet);
+            const bVal = getBetValue(bet);
+
+            if (bType === 'number') {
+              won = parseInt(bVal, 10) === data.outcome;
+              multiplier = 8.0;
+            } else if (bType === 'colour') {
+              const chosenColor = String(bVal).toLowerCase();
+              const winColor = String(data.details.colour).toLowerCase();
+              const winNum = data.outcome;
+
+              if (winNum === 5) {
+                if (chosenColor === 'violet') {
+                  won = true;
+                  multiplier = multipliers.violet;
+                } else if (chosenColor === 'green') {
+                  won = true;
+                  multiplier = parseFloat((multipliers.green * 0.75).toFixed(2));
+                }
+              } else if (winNum === 10 || winNum === 0) {
+                if (chosenColor === 'violet') {
+                  won = true;
+                  multiplier = multipliers.violet;
+                } else if (chosenColor === 'red') {
+                  won = true;
+                  multiplier = parseFloat((multipliers.red * 0.75).toFixed(2));
+                }
+              } else {
+                won = chosenColor === winColor;
+                multiplier = chosenColor === 'violet' ? multipliers.violet : (chosenColor === 'green' ? multipliers.green : multipliers.red);
               }
-              return { ...bet, won, payout }
-            })
-          })
-          setToastResult({ won: totalPayout > 0, amount: totalPayout > 0 ? (totalPayout - totalWagered) : totalWagered })
+            }
+
+            if (won) {
+              totalWon += amount * multiplier;
+            }
+          }
+        }
+
+        if (hasActiveBets) {
+          const netGain = totalWon - totalInvested;
+          const userWon = netGain >= 0;
+          setToastResult({
+            won: userWon,
+            amount: Math.abs(netGain)
+          });
+          setTimeout(() => setToastResult(null), 4000);
         }
       }
-
-      // If the resolved session is active, glow the outcome
-      if (sessionKey === activeSessionRef.current) {
-        setGlowOutcome({ colour: winColor, number: winNumber })
+    }
+    
+    const handleRoundEnded = (e) => {
+      const data = e.detail;
+      if (data.gameType === 'colour' && (!data.session || data.session === activeSessionRef.current)) {
+        setSelectedTargets([]);
+        setBetAmount('');
+        setTotalBetAmount(0);
       }
-
-      // Resolve matching wagers in personal wagers log
-      fetchUserHistory()
-
-      // Reset active bets for the resolved session
-      setActiveBets(prev => ({
-        ...prev,
-        [sessionKey]: []
-      }))
     }
 
     window.addEventListener('colour_game_result', handleColourResult)
+    window.addEventListener('round_ended', handleRoundEnded)
     return () => {
       window.removeEventListener('colour_game_result', handleColourResult)
+      window.removeEventListener('round_ended', handleRoundEnded)
     }
-  }, [activeBets])
+  }, [betsList])
+
+  // Listen to the round started / timer reset event to clear user selection states
+  useEffect(() => {
+    const handleRoundStarted = (e) => {
+      const data = e.detail
+      const sessionKey = data.session || '1m'
+      if (sessionKey === activeSessionRef.current) {
+        setSelectedColour(null);
+        setSelectedNumber(null);
+        setBetAmount(10);
+        setSelectedTargets([]);
+      }
+    }
+
+    window.addEventListener('colour_round_started', handleRoundStarted)
+    return () => {
+      window.removeEventListener('colour_round_started', handleRoundStarted)
+    }
+  }, [])
 
   // Toast Result Auto-Dismiss
   useEffect(() => {
@@ -212,8 +399,12 @@ export default function ColourPrediction({ onNavigate, routeData }) {
     setSelectedTargets((prev) => {
       const exists = prev.some((t) => t.type === type && t.value === val)
       if (exists) {
+        if (type === 'colour') setSelectedColour(null)
+        if (type === 'number') setSelectedNumber(null)
         return prev.filter((t) => !(t.type === type && t.value === val))
       } else {
+        if (type === 'colour') setSelectedColour(val)
+        if (type === 'number') setSelectedNumber(val)
         return [...prev, { type, value: val }]
       }
     })
@@ -267,12 +458,10 @@ export default function ColourPrediction({ onNavigate, routeData }) {
       // Fetch latest bets immediately to display the new pending bet in the list
       fetchUserHistory()
       
-      setActiveBets(prev => ({
-        ...prev,
-        [activeSession]: [...(prev[activeSession] || []), ...newBets]
-      }))
-
       setSelectedTargets([])
+      setSelectedColour(null)
+      setSelectedNumber(null)
+      setBetAmount(10)
     } catch (err) {
       console.error(err)
       setErrorToast(err.message || 'An error occurred while placing bet')
@@ -286,36 +475,15 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-800 font-sans pb-20 relative select-none">
-      
-      {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/85 px-4 py-4 flex items-center justify-between shadow-sm">
-        <div className="w-9 h-9" />
-        <div className="flex flex-col items-center">
-          <h1 className="text-base font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
-            <Sparkles size={16} className="text-primary animate-pulse" /> Colour Prediction
-          </h1>
-          <div className="flex items-center gap-1 mt-0.5">
-            <Shield size={10} className="text-emerald-500" />
-            <span className="text-[9px] text-slate-400 font-medium">Provably Fair System</span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowLobby(true)}
-            title="Games Lobby"
-            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-          >
-            <Gamepad2 size={16} className="text-slate-600" />
-          </button>
-          <button
-            onClick={() => setShowRules(true)}
-            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-          >
-            <HelpCircle size={18} className="text-slate-500" />
-          </button>
-        </div>
-      </header>
+    <div className="flex flex-col min-h-screen bg-transparent text-slate-800 font-sans pb-20 relative select-none">
+      {/* Floating Rules Button aligned symmetrically with back button */}
+      <button
+        onClick={() => setShowRules(true)}
+        className="absolute -top-12 right-4 z-40 w-10 h-10 rounded-full bg-slate-950/60 hover:bg-slate-900/80 flex items-center justify-center border border-slate-800 shadow-lg backdrop-blur-sm cursor-pointer text-slate-300 hover:text-white transition-all active:scale-95"
+        title="Rules"
+      >
+        <HelpCircle size={20} />
+      </button>
       
       {/* ── RULES MODAL ── */}
       {showRules && (
@@ -333,8 +501,9 @@ export default function ColourPrediction({ onNavigate, routeData }) {
             <div className="space-y-3 text-xs text-slate-600 leading-relaxed max-h-[50vh] overflow-y-auto pr-1">
               <p>• <strong>Automatic 60s Cycle:</strong> A new outcome is drawn automatically every minute.</p>
               <p>• <strong>Colour Betting:</strong> Bet on Green, Red, or Violet.
-                <br />- <strong>Green / Red Wins:</strong> Pays <strong>1.9x</strong> your bet amount.
-                <br />- <strong>Violet Wins:</strong> Pays <strong>4.5x</strong> your bet amount.
+                <br />- <strong>Green Wins:</strong> Pays <strong>{multipliers.green}x</strong> your bet amount.
+                <br />- <strong>Red Wins:</strong> Pays <strong>{multipliers.red}x</strong> your bet amount.
+                <br />- <strong>Violet Wins:</strong> Pays <strong>{multipliers.violet}x</strong> your bet amount.
               </p>
               <p>• <strong>Number Betting (1 to 10):</strong> Bet on any specific number from 1 to 10.
                 <br />- If the outcome matches your number, you receive a massive **8x payout**!
@@ -350,6 +519,44 @@ export default function ColourPrediction({ onNavigate, routeData }) {
             <button onClick={() => setShowRules(false)} className="w-full mt-5 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-100 cursor-pointer">
               Got It
             </button>
+          </div>
+        </div>
+      )}
+      
+      
+      {/* ADMIN HUD OVERLAY */}
+      {isAdmin && (
+        <div className="px-4 pt-4 relative z-10">
+          <div className="bg-gray-900/95 border border-red-500/50 rounded-2xl p-4 relative overflow-hidden backdrop-blur-xl shadow-lg">
+             <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-widest shadow-md">
+               ADMIN HUD ACTIVE
+             </div>
+             <h3 className="text-white font-bold mb-3 text-sm flex items-center gap-2">
+               <Shield size={16} className="text-red-500" /> LIVE CASH POOL AGGREGATES
+             </h3>
+             <div className="flex gap-3 mb-4">
+                <button onClick={() => handleAdminOverride('colour', 'red')} className={`flex-1 bg-red-500/20 hover:bg-red-500/40 border ${shouldHighlight('colour', 'red') ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-red-500/30'} rounded-xl p-2 transition-all cursor-pointer`}>
+                   <div className="text-red-400 font-bold text-xs">🔴 RED</div>
+                   <div className="text-white font-mono mt-1">₹{liveMetrics.red || 0}</div>
+                </button>
+                <button onClick={() => handleAdminOverride('colour', 'green')} className={`flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 border ${shouldHighlight('colour', 'green') ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-emerald-500/30'} rounded-xl p-2 transition-all cursor-pointer`}>
+                   <div className="text-emerald-400 font-bold text-xs">🟢 GREEN</div>
+                   <div className="text-white font-mono mt-1">₹{liveMetrics.green || 0}</div>
+                </button>
+                <button onClick={() => handleAdminOverride('colour', 'violet')} className={`flex-1 bg-purple-500/20 hover:bg-purple-500/40 border ${shouldHighlight('colour', 'violet') ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-purple-500/30'} rounded-xl p-2 transition-all cursor-pointer`}>
+                   <div className="text-purple-400 font-bold text-xs">🟣 VIOLET</div>
+                   <div className="text-white font-mono mt-1">₹{liveMetrics.violet || 0}</div>
+                </button>
+             </div>
+             
+             <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                  <button onClick={() => handleAdminOverride('number', num)} key={num} className={`bg-gray-800 hover:bg-gray-700 border ${shouldHighlight('number', num) ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-gray-700'} rounded-lg p-2 text-center transition-all cursor-pointer`}>
+                    <div className="text-gray-400 font-bold text-xs"># {num}</div>
+                    <div className="text-white font-mono text-[10px] mt-1">₹{liveMetrics[num] || 0}</div>
+                  </button>
+                ))}
+             </div>
           </div>
         </div>
       )}
@@ -383,6 +590,9 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                 onClick={() => {
                   setActiveSession(sess)
                   setSelectedTargets([])
+                  setSelectedColour(null)
+                  setSelectedNumber(null)
+                  setBetAmount(10)
                   setGlowOutcome(null)
                 }}
                 className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all cursor-pointer border-0 outline-none ${
@@ -472,7 +682,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                   NUMBER_COLOR_MAP[results[0].number] === 'red' ? 'bg-rose-500 border border-rose-400' :
                   'bg-purple-500 border border-purple-400'
                 }`}>
-                  {results[0].number}
+                  {results[0].number === 0 ? 10 : results[0].number}
                 </span>
               </div>
             </div>
@@ -519,7 +729,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                   </span>
                 )}
                 {isTargetSelected('colour', 'green') && <Check size={12} strokeWidth={3.5} />}
-                Green (1.9x)
+                Green ({multipliers.green}x)
               </button>
               
               {/* Violet */}
@@ -545,7 +755,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                   </span>
                 )}
                 {isTargetSelected('colour', 'violet') && <Check size={12} strokeWidth={3.5} />}
-                Violet (4.5x)
+                Violet ({multipliers.violet}x)
               </button>
               
               {/* Red */}
@@ -571,7 +781,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                   </span>
                 )}
                 {isTargetSelected('colour', 'red') && <Check size={12} strokeWidth={3.5} />}
-                Red (1.9x)
+                Red ({multipliers.red}x)
               </button>
             </div>
           </div>
@@ -737,13 +947,18 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                 Active Bets (Period #{gameId})
               </span>
               <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto pr-1">
-                {betsPlaced.map((b, idx) => (
-                  <div key={idx} className="bg-white border border-emerald-200/45 px-2 py-1 rounded-xl text-slate-600 flex items-center gap-1.5 text-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
-                    <span className="font-extrabold">{b.type === 'colour' ? b.value.toUpperCase() : `#${b.value}`}</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-emerald-600 font-black font-mono">₹{b.amount}</span>
-                  </div>
-                ))}
+                {betsPlaced.map((b, idx) => {
+                  const bType = getBetType(b);
+                  const bVal = getBetValue(b) || 'N/A';
+                  const bAmt = getBetAmount(b);
+                  return (
+                    <div key={idx} className="bg-white border border-emerald-200/45 px-2 py-1 rounded-xl text-slate-600 flex items-center gap-1.5 text-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
+                      <span className="font-extrabold">{bType === 'colour' ? bVal.toUpperCase() : `#${bVal}`}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      <span className="text-emerald-600 font-black font-mono">₹{bAmt}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -826,7 +1041,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                       NUMBER_COLOR_MAP[res.number] === 'red' ? 'bg-rose-500 border border-rose-400' :
                       'bg-purple-500 border border-purple-400'
                     }`}>
-                      {res.number}
+                      {res.number === 0 ? 10 : res.number}
                     </span>
                   </div>
                 </div>
@@ -877,11 +1092,11 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                   .map(b => {
                     const formattedDate = new Date(b.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                     return {
-                      id: b._id ? `BET-${b._id.slice(-6).toUpperCase()}` : '',
+                      id: b.id ? `BET-${b.id}` : (b._id ? `BET-${b._id}` : `BET-${Math.floor(10000 + Math.random() * 90000)}`),
                       period: b.roundId,
                       session: b.session,
-                      target: b.betType === 'colour' ? b.betValue.toUpperCase() : `#${b.betValue}`,
-                      wager: b.betAmount,
+                      target: getBetType(b) === 'colour' ? (getBetValue(b) || 'N/A').toUpperCase() : `#${getBetValue(b) || 'N/A'}`,
+                      wager: getBetAmount(b),
                       outcome: b.outcome || 'Waiting...',
                       profit: b.status === 'pending' ? 0 : b.status === 'won' ? parseFloat((b.payout - b.betAmount).toFixed(2)) : -b.betAmount,
                       status: b.status === 'pending' ? 'Pending' : b.status === 'won' ? 'Won' : 'Lost',
@@ -1092,6 +1307,75 @@ export default function ColourPrediction({ onNavigate, routeData }) {
           </div>
         </div>
       )}
+
+      
+      {/* Custom Admin Override Modal */}
+      {adminConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md transition-opacity duration-300">
+          <div className="bg-slate-900 border border-slate-800 text-white p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl animate-fade-in mx-4">
+            <div className="flex items-center justify-center mb-4 text-amber-500">
+              <Shield size={40} className="animate-pulse" />
+            </div>
+            <h3 className="text-white font-black text-lg mb-2 tracking-wide uppercase">
+              Confirm Override
+            </h3>
+            <p className="text-slate-300 text-xs mb-6 leading-relaxed">
+              {adminConfirmModal.type === 'clear' 
+                ? `⚡ [SUPER ADMIN OVERRIDE] Clear forced outcome for interval ${activeSession}?`
+                : `⚡ [SUPER ADMIN OVERRIDE] Lock incoming round output to ${adminConfirmModal.val} for interval ${activeSession}?`
+              }
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setAdminConfirmModal(null)}
+                className="flex-grow py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all cursor-pointer border-0"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeAdminOverride}
+                className="flex-grow py-3 bg-gradient-to-r from-emerald-500 to-teal-550 hover:from-emerald-600 hover:to-teal-650 text-white text-xs font-bold rounded-xl shadow-lg transition-all cursor-pointer border-0 font-black"
+              >
+                Confirm Lockout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Toast Stack */}
+      <div className="fixed top-4 right-4 z-55 flex flex-col gap-2 pointer-events-none select-none max-w-sm w-[90%] md:w-full">
+        {toasts.map((t) => {
+          let bgClass = 'bg-rose-50 border-rose-200 text-rose-700';
+          let icon = <AlertCircle size={16} className="text-rose-500 shrink-0" />;
+
+          if (t.type === 'success') {
+            bgClass = 'bg-emerald-50 border-emerald-200 text-emerald-700';
+            icon = <Check size={16} className="text-emerald-500 shrink-0" />;
+          } else if (t.type === 'warning') {
+            bgClass = 'bg-amber-50 border-amber-200 text-amber-700';
+            icon = <AlertTriangle size={16} className="text-amber-500 shrink-0" />;
+          }
+
+          return (
+            <div
+              key={t.id}
+              className={`pointer-events-auto flex items-center justify-between px-4 py-3 rounded-2xl border text-xs font-semibold shadow-xl backdrop-blur-md transition-all duration-300 ${bgClass}`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {icon}
+                <span className="truncate">{t.message}</span>
+              </div>
+              <button
+                onClick={() => setToasts((prev) => prev.filter((toast) => toast.id !== t.id))}
+                className="ml-3 text-slate-400 hover:text-slate-600 transition-colors border-0 bg-transparent cursor-pointer p-0 flex items-center justify-center shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Floating Game Lobby Grid Overlay */}
       <GameLobbyModal 
