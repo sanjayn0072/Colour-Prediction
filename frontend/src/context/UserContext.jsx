@@ -690,9 +690,36 @@ export function UserProvider({ children }) {
             ] : uc.type === 'FEE_WAIVER' ? [
               `Waives withdrawal fee!`,
               `Triggers on next withdrawal`
+            ] : uc.code === 'WELCOME150' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹150.00 Real Cash`
+            ] : uc.code === 'HIGHROLLER500' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹300.00 Real Cash + ₹200.00 Bonus`
+            ] : uc.code === 'CASHBACK200' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹140.00 Real Cash + ₹60.00 Bonus`
+            ] : uc.code === 'SURVIVAL100' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹25.00 Real Cash + ₹25.00 Bonus`
+            ] : uc.code === 'COMEBACK200' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹120.00 Real Cash + ₹80.00 Bonus`
+            ] : uc.code === 'ACTIVEPLAY50' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹45.00 Real Cash + ₹5.00 Bonus`
+            ] : uc.code === 'LOYALTY250' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹162.50 Real Cash + ₹87.50 Bonus`
+            ] : uc.code === 'WEEKEND50' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹37.50 Real Cash + ₹12.50 Bonus`
+            ] : uc.code === 'RELOAD999' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹549.45 Real Cash + ₹449.55 Bonus`
             ] : [
               `Min Deposit: ₹${uc.minDepositRequired}`,
-              `Get Extra ₹${uc.rewardAmount} cash bonus`
+              `Get Extra ₹${uc.rewardAmount} Bonus`
             ],
             expiry: `Expire At ${expiryDate.toLocaleDateString()} ${expiryDate.toLocaleTimeString()}`,
             countdownText: countdown

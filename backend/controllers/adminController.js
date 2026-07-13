@@ -6,6 +6,7 @@ import speakeasy from 'speakeasy';
 import { createNotification } from '../utils/notifier.js';
 import crypto from 'crypto';
 import { encryptConfigValue, decryptConfigValue } from '../utils/configEncryption.js';
+import { getCouponSplit, processReferralReward } from './depositController.js';
 
 const decryptSecret = (cipherText) => {
   if (!cipherText) return '';
@@ -1160,8 +1161,8 @@ export const verifyPay0DepositStatus = async (req, res) => {
     const queryParam = depositId || transactionId;
     const [deposits] = await pool.query(
       depositId
-        ? 'SELECT id, user_id, amount, transaction_id, status FROM deposits WHERE id = ? LIMIT 1'
-        : 'SELECT id, user_id, amount, transaction_id, status FROM deposits WHERE transaction_id = ? LIMIT 1',
+        ? 'SELECT id, user_id, amount, transaction_id, status, coupon_code FROM deposits WHERE id = ? LIMIT 1'
+        : 'SELECT id, user_id, amount, transaction_id, status, coupon_code FROM deposits WHERE transaction_id = ? LIMIT 1',
       [queryParam]
     );
     if (!deposits || deposits.length === 0) {
@@ -1204,48 +1205,122 @@ export const verifyPay0DepositStatus = async (req, res) => {
 
         // Re-lock deposit row
         const [lockedDeps] = await connection.query(
-          'SELECT id, status FROM deposits WHERE id = ? FOR UPDATE',
+          'SELECT id, user_id, amount, status, coupon_code FROM deposits WHERE id = ? FOR UPDATE',
           [deposit.id]
         );
-        if (lockedDeps[0].status === 'completed') {
+        const activeDep = lockedDeps[0];
+        if (activeDep.status === 'completed') {
           await connection.rollback();
           return res.json({ success: true, status: 'completed', message: 'Deposit already completed' });
         }
 
+        const userId = activeDep.user_id;
+        const depositAmount = parseFloat(activeDep.amount);
+
         // Lock wallet
         const [wallets] = await connection.query(
-          'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-          [deposit.user_id]
+          'SELECT id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? FOR UPDATE',
+          [userId]
         );
 
-        const currentBalance = parseFloat(wallets[0].balance || 0);
-        const newBalance = parseFloat((currentBalance + parseFloat(deposit.amount)).toFixed(4));
+        if (!wallets || wallets.length === 0) {
+          await connection.rollback();
+          return res.status(404).json({ error: 'User wallet not found.' });
+        }
 
+        const wallet = wallets[0];
+        const currentBalance = parseFloat(wallet.balance || 0);
+        const currentBonusBalance = parseFloat(wallet.bonus_balance || 0);
+        const currentRequiredWager = parseFloat(wallet.required_wager || 0);
+        const currentRequiredBonusWager = parseFloat(wallet.required_bonus_wager || 0);
+
+        // Verify and process coupon code if applied
+        let rewardAmount = 0;
+        let userCouponId = null;
+        let cashReward = 0;
+        let bonusReward = 0;
+
+        if (activeDep.coupon_code) {
+          const [userCoupons] = await connection.query(
+            'SELECT uc.id, c.reward_amount, c.min_deposit_required ' +
+            'FROM user_coupons uc ' +
+            'JOIN coupons c ON uc.coupon_id = c.id ' +
+            'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+            'LIMIT 1 FOR UPDATE',
+            [userId, activeDep.coupon_code]
+          );
+
+          if (userCoupons && userCoupons.length > 0) {
+            const uCoupon = userCoupons[0];
+            if (depositAmount >= parseFloat(uCoupon.min_deposit_required)) {
+              rewardAmount = parseFloat(uCoupon.reward_amount);
+              userCouponId = uCoupon.id;
+              const split = getCouponSplit(activeDep.coupon_code, rewardAmount);
+              cashReward = split.cashReward;
+              bonusReward = split.bonusReward;
+            }
+          }
+        }
+
+        const newBalance = parseFloat((currentBalance + depositAmount + cashReward).toFixed(4));
+        const newBonusBalance = parseFloat((currentBonusBalance + bonusReward).toFixed(4));
+        const newRequiredWager = parseFloat((currentRequiredWager + depositAmount + cashReward).toFixed(4));
+        const newRequiredBonusWager = parseFloat((currentRequiredBonusWager + bonusReward * 10).toFixed(4));
+
+        // Update wallets
         await connection.query(
-          'UPDATE wallets SET balance = ? WHERE user_id = ?',
-          [newBalance, deposit.user_id]
+          'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ?, required_bonus_wager = ? WHERE user_id = ?',
+          [newBalance, newBonusBalance, newRequiredWager, newRequiredBonusWager, userId]
         );
 
+        // Update deposit record to completed
         await connection.query(
           'UPDATE deposits SET status = "completed" WHERE id = ?',
-          [deposit.id]
+          [activeDep.id]
         );
 
+        // Mark user coupon as USED if successfully verified
+        if (userCouponId) {
+          await connection.query(
+            'UPDATE user_coupons SET status = "USED" WHERE id = ?',
+            [userCouponId]
+          );
+        }
+
+        // Write ledger transaction log for deposit
         await connection.query(
           'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
           'VALUES (?, ?, ?, "deposit", "deposits", ?, ?, ?, ?)',
-          [deposit.user_id, wallets[0].id, deposit.amount, deposit.id, currentBalance, newBalance, `Manually verified Pay0 deposit of ₹${deposit.amount} (Order: ${deposit.transaction_id})`]
+          [userId, wallet.id, depositAmount, activeDep.id, currentBalance, currentBalance + depositAmount, `Manually verified Pay0 deposit of ₹${depositAmount} (Order: ${deposit.transaction_id})`]
         );
 
+        // Write ledger transaction log for coupon cash reward if applicable
+        if (cashReward > 0 && userCouponId) {
+          await connection.query(
+            'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+            'VALUES (?, ?, ?, "bonus_claim", "user_coupons", ?, ?, ?, ?)',
+            [userId, wallet.id, cashReward, userCouponId, currentBalance + depositAmount, newBalance, `Applied coupon cash reward via manual verification (Code: ${activeDep.coupon_code})`]
+          );
+        }
+
+        // Update total deposits & bonus claimed stats
         await connection.query(
-          'UPDATE user_stats SET total_deposits = total_deposits + ? WHERE user_id = ?',
-          [deposit.amount, deposit.user_id]
+          'UPDATE user_stats SET total_deposits = total_deposits + ?, total_bonus_claimed = total_bonus_claimed + ? WHERE user_id = ?',
+          [depositAmount, rewardAmount, userId]
         );
+
+        // Process referral commission reward for the referrer if applicable
+        await processReferralReward(connection, userId);
+
+        // Send app notification
+        const notificationMsg = rewardAmount > 0
+          ? `Wallet Recharged! Recharge of ₹${depositAmount} + Coupon reward of ₹${rewardAmount} was successfully verified and credited.`
+          : `Wallet Recharged! Recharge of ₹${depositAmount} was successfully verified and credited.`;
 
         await createNotification(
-          deposit.user_id,
+          userId,
           'Wallet Recharged!',
-          `Wallet Recharged! ₹${deposit.amount} added.`,
+          notificationMsg,
           'WALLET',
           connection
         );

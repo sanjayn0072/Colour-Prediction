@@ -145,15 +145,15 @@ export const createWithdrawal = async (req, res) => {
       }
     }
 
-    // B. Check for existing pending withdrawals to block duplicates
-    const [pending] = await connection.query(
-      'SELECT id FROM withdrawals WHERE user_id = ? AND status = "PENDING" FOR UPDATE',
+    // B. Check daily withdrawal limit (max 20 requests per day, excluding REJECTED ones)
+    const [dailyWithdrawals] = await connection.query(
+      'SELECT COUNT(*) as count FROM withdrawals WHERE user_id = ? AND created_at >= CURDATE() AND status != "REJECTED"',
       [req.user.id]
     );
-
-    if (pending.length > 0) {
+    const dailyCount = dailyWithdrawals[0]?.count || 0;
+    if (dailyCount >= 20) {
       await connection.rollback();
-      return res.status(400).json({ success: false, message: 'You already have a pending withdrawal request.' });
+      return res.status(400).json({ success: false, message: 'You have reached the maximum daily limit of 20 withdrawals.' });
     }
 
     let processingFee = calculateWithdrawalFee(withdrawalAmount);
