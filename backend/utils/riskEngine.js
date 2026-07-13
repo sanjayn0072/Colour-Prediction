@@ -176,3 +176,27 @@ export async function assessUserRisk(userId, gameRoundId) {
     connection.release();
   }
 }
+
+/**
+ * Logs a suspicious attempt to mutate an immutable user profile name.
+ */
+export async function logSuspiciousNameChange(userId, currentName, attemptedName) {
+  try {
+    // 1. Log structured JSON via Pino
+    logger.error({
+      event: 'SUSPICIOUS_NAME_CHANGE_ATTEMPT',
+      userId,
+      currentName,
+      attemptedName,
+      timestamp: new Date().toISOString()
+    }, `User ID ${userId} attempted to bypass client rules and modify immutable profile name from "${currentName}" to "${attemptedName}"`);
+
+    // 2. Persist risk alert in database
+    await pool.query(
+      'INSERT INTO admin_risk_alerts (user_id, trigger_type, risk_score, details) VALUES (?, "SUSPICIOUS_NAME_CHANGE", 90, ?)',
+      [userId, `Attempted to change immutable name from "${currentName}" to "${attemptedName}"`]
+    );
+  } catch (err) {
+    logger.error(err, 'Error persisting suspicious name change risk alert');
+  }
+}

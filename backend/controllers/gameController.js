@@ -282,27 +282,36 @@ export const placeBet = async (req, res) => {
   if (gameType === 'colour') {
     // Will be calculated inside transaction context using db query
   } else { // dice
-    const typeUpper = String(betType).toUpperCase();
-    
-    if (typeUpper === 'ABOVE') {
-      const target = parseInt(betValue, 10);
+    let normalizedType = String(betType).toUpperCase();
+    if (normalizedType === 'OVER') normalizedType = 'ABOVE';
+    if (normalizedType === 'UNDER') normalizedType = 'BELOW';
+    if (normalizedType === 'RANGE') normalizedType = 'CUSTOM';
+
+    let normalizedValue = String(betValue);
+    if (normalizedType === 'CUSTOM' && !normalizedValue.includes('-')) {
+      const baseVal = Math.floor(parseFloat(normalizedValue));
+      normalizedValue = `${baseVal}-${baseVal + 10}`;
+    }
+
+    if (normalizedType === 'ABOVE') {
+      const target = Math.floor(parseFloat(normalizedValue));
       if (isNaN(target) || target < 1 || target > 99) {
         return res.status(400).json({ error: 'Invalid target value for ABOVE bet' });
       }
       winChance = 100 - target;
-    } else if (typeUpper === 'BELOW') {
-      const target = parseInt(betValue, 10);
+    } else if (normalizedType === 'BELOW') {
+      const target = Math.floor(parseFloat(normalizedValue));
       if (isNaN(target) || target < 2 || target > 100) {
         return res.status(400).json({ error: 'Invalid target value for BELOW bet' });
       }
       winChance = target - 1;
-    } else if (typeUpper === 'CUSTOM') {
-      const parts = String(betValue).split('-');
+    } else if (normalizedType === 'CUSTOM') {
+      const parts = normalizedValue.split('-');
       if (parts.length !== 2) {
         return res.status(400).json({ error: 'Invalid target value format for CUSTOM bet (expected e.g. 33-44)' });
       }
-      const low = parseInt(parts[0], 10);
-      const high = parseInt(parts[1], 10);
+      const low = Math.floor(parseFloat(parts[0]));
+      const high = Math.floor(parseFloat(parts[1]));
       if (isNaN(low) || isNaN(high) || low < 1 || high > 100 || low > high) {
         return res.status(400).json({ error: 'Invalid bounds for CUSTOM bet range' });
       }
@@ -334,7 +343,7 @@ export const placeBet = async (req, res) => {
 
     // 1. Lock user's wallet
     const [wallets] = await connection.query(
-      'SELECT id, balance, bonus_balance, required_wager FROM wallets WHERE user_id = ? FOR UPDATE',
+      'SELECT id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? FOR UPDATE',
       [req.user.id]
     );
     if (!wallets || wallets.length === 0) {
@@ -345,7 +354,8 @@ export const placeBet = async (req, res) => {
     const currentBalance = parseFloat(wallets[0].balance);
     const currentBonusBalance = parseFloat(wallets[0].bonus_balance);
     const currentRequiredWager = parseFloat(wallets[0].required_wager);
-    const totalAvailable = parseFloat((currentBalance + currentBonusBalance).toFixed(4));
+    const currentRequiredBonusWager = parseFloat(wallets[0].required_bonus_wager || 0);
+    const totalAvailable = parseFloat((currentBalance + currentBonusBalance).toFixed(2));
 
     if (totalAvailable < betAmount) {
       await connection.rollback();
@@ -353,30 +363,39 @@ export const placeBet = async (req, res) => {
     }
 
     const realUsed = Math.min(currentBalance, betAmount);
-    const bonusUsed = parseFloat((betAmount - realUsed).toFixed(4));
+    const bonusUsed = parseFloat((betAmount - realUsed).toFixed(2));
 
-    let newBalance = parseFloat((currentBalance - realUsed).toFixed(4));
-    let newBonusBalance = parseFloat((currentBonusBalance - bonusUsed).toFixed(4));
+    let newBalance = parseFloat((currentBalance - realUsed).toFixed(2));
+    let newBonusBalance = parseFloat((currentBonusBalance - bonusUsed).toFixed(2));
     let newRequiredWager = currentRequiredWager;
+    let newRequiredBonusWager = currentRequiredBonusWager;
 
-    if (currentRequiredWager > 0) {
-      newRequiredWager = Math.max(0, parseFloat((currentRequiredWager - betAmount).toFixed(4)));
-      if (newRequiredWager === 0) {
+    if (currentRequiredWager > 0 && realUsed > 0) {
+      newRequiredWager = Math.max(0, parseFloat((currentRequiredWager - realUsed).toFixed(2)));
+    }
+
+    if (currentRequiredBonusWager > 0 && bonusUsed > 0) {
+      newRequiredBonusWager = Math.max(0, parseFloat((currentRequiredBonusWager - bonusUsed).toFixed(2)));
+      if (newRequiredBonusWager === 0) {
         // Convert remaining bonus balance to real balance!
-        newBalance = parseFloat((newBalance + newBonusBalance).toFixed(4));
-        newBonusBalance = 0;
+        newBalance = parseFloat((newBalance + newBonusBalance).toFixed(2));
+        newBonusBalance = 0.00;
       }
     }
 
-    // 2. Update wallet balance, bonus balance, and required wager
+    // 2. Update wallet balance, bonus balance, required wager, and required bonus wager
     await connection.query(
-      'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ? WHERE user_id = ?',
-      [newBalance, newBonusBalance, newRequiredWager, req.user.id]
+      'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ?, required_bonus_wager = ? WHERE user_id = ?',
+      [newBalance, newBonusBalance, newRequiredWager, newRequiredBonusWager, req.user.id]
     );
 
     // 3. Find/Create Game record and get Game ID
     const gameName = gameType === 'colour' ? `colour_${session || '1m'}` : 'dice';
-    const [games] = await connection.query('SELECT id FROM games WHERE name = ? LIMIT 1', [gameName]);
+    const [games] = await connection.query('SELECT id, is_active FROM games WHERE name = ? LIMIT 1', [gameName]);
+    if (games.length > 0 && games[0].is_active === 0) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'This game is currently disabled by administrator.' });
+    }
     const gameDbId = games[0]?.id || (gameType === 'colour' ? 2 : 5);
 
     // 4. Find or Create Game Round (Atomic find-or-create with repeatable-read bypass)
@@ -540,11 +559,29 @@ export const initializeGameLoop = async (io) => {
     logger.error(err, 'Failed to initialize smart game start round IDs from database');
   }
 
+  let cachedDailyPayout = 0;
+  let lastDailyPayoutFetch = 0;
+
   // ─── ADMIN ANALYTICS LOOP ───
   setInterval(async () => {
     if (!ioInstance) return;
     
     try {
+      // Fetch rolling 24h payout volume (cached for 10 seconds)
+      const now = Date.now();
+      if (now - lastDailyPayoutFetch > 10000) {
+        try {
+          const [payoutResult] = await pool.query(
+            "SELECT COALESCE(SUM(amount), 0) as daily_payout FROM wallet_transactions WHERE type = 'bet_payout' AND created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)"
+          );
+          cachedDailyPayout = parseFloat(payoutResult[0]?.daily_payout || 0);
+          lastDailyPayoutFetch = now;
+        } catch (dbErr) {
+          logger.error('Failed to fetch rolling 24h payout volume:', dbErr);
+        }
+      }
+
+      const activeUsersCount = ioInstance.sockets.sockets.size || ioInstance.engine.clientsCount || 0;
       const activeIds = [];
       for (const key of Object.keys(currentColourGames)) {
         if (currentColourGames[key].gameId) activeIds.push(currentColourGames[key].gameId);
@@ -572,7 +609,12 @@ export const initializeGameLoop = async (io) => {
         betsByRound[bet.round_id].push(bet);
       }
       
-      const metrics = { colour: {}, dice: {} };
+      const metrics = { 
+        colour: {}, 
+        dice: {},
+        activeUsers: activeUsersCount,
+        dailyPayout: cachedDailyPayout
+      };
       
       // Initialize colour objects
       for (const key of Object.keys(currentColourGames)) {
@@ -1125,82 +1167,97 @@ export const triggerSpin = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // 1. Check user deposits and spin counts
+    // 1. Check user deposits and spin counts (Valid ONLY for today, midnight to midnight CURDATE())
     const [depositsResult] = await connection.query(
-      'SELECT COALESCE(SUM(amount), 0) as totalDeposits FROM deposits WHERE user_id = ? AND status = "completed"',
+      'SELECT COALESCE(SUM(amount), 0) as todayDeposits FROM deposits WHERE user_id = ? AND status = "completed" AND created_at >= CURDATE()',
       [req.user.id]
     );
-    const totalDeposits = parseFloat(depositsResult[0].totalDeposits);
+    const todayDeposits = parseFloat(depositsResult[0].todayDeposits);
 
-    const [statsResult] = await connection.query(
-      'SELECT spins_count FROM user_stats WHERE user_id = ?',
+    const [spinsUsedResult] = await connection.query(
+      'SELECT COUNT(*) as todaySpinsUsed FROM spin_rewards WHERE user_id = ? AND created_at >= CURDATE()',
       [req.user.id]
     );
-    const spinsCount = statsResult[0]?.spins_count || 0;
+    const todaySpinsUsed = parseInt(spinsUsedResult[0].todaySpinsUsed || 0, 10);
 
-    const totalSpinsEarned = Math.floor(totalDeposits / 200);
-    const spinsLeft = totalSpinsEarned - spinsCount;
+    const totalSpinsEarned = Math.floor(todayDeposits / 200);
+    const spinsLeft = totalSpinsEarned - todaySpinsUsed;
 
     if (spinsLeft <= 0) {
-      return res.status(400).json({ error: 'You do not have any lucky spins remaining. Deposit ₹200 or more to earn spins!' });
+      await connection.rollback();
+      return res.status(400).json({ error: 'You do not have any lucky spins remaining for today. Deposit ₹200 or more today to earn spins!' });
     }
 
-    // 2. Ensure configs are seeded
-    const [configsCheck] = await connection.query('SELECT COUNT(*) as count FROM spin_configs');
-    if (configsCheck[0].count === 0) {
+    // 2. Ensure configs are seeded with correct new weights and prizes
+    const [firstConfig] = await connection.query('SELECT prize_name FROM spin_configs LIMIT 1');
+    if (firstConfig.length === 0 || firstConfig[0].prize_name !== 'Bonus ₹250') {
+      await connection.query('DELETE FROM spin_configs');
       const defaultPrizes = [
-        { prize_name: 'Bonus ₹500', type: 'bonus', value: 500 },
-        { prize_name: 'Cash ₹10', type: 'cash', value: 10 },
-        { prize_name: 'Voucher 50%', type: 'empty', value: 0 },
-        { prize_name: 'Cash ₹50', type: 'cash', value: 50 },
-        { prize_name: 'Bonus ₹100', type: 'bonus', value: 100 },
-        { prize_name: 'Voucher 25%', type: 'empty', value: 0 },
-        { prize_name: 'Cash ₹20', type: 'cash', value: 20 },
-        { prize_name: 'Bonus ₹250', type: 'bonus', value: 250 }
+        { prize_name: 'Bonus ₹250', type: 'bonus', value: 250, weight: 1 },
+        { prize_name: 'Bonus ₹100', type: 'bonus', value: 100, weight: 5 },
+        { prize_name: 'Cash ₹20', type: 'cash', value: 20, weight: 8 },
+        { prize_name: 'Cash ₹10', type: 'cash', value: 10, weight: 10 },
+        { prize_name: 'Cash ₹5', type: 'cash', value: 5, weight: 25 },
+        { prize_name: 'Voucher 10%', type: 'empty', value: 0, weight: 25 },
+        { prize_name: 'Voucher 5%', type: 'empty', value: 0, weight: 50 },
+        { prize_name: 'Voucher 15%', type: 'empty', value: 0, weight: 15 }
       ];
       for (const p of defaultPrizes) {
         await connection.query(
-          'INSERT INTO spin_configs (prize_name, type, value, weight, is_active) VALUES (?, ?, ?, 100, 1)',
-          [p.prize_name, p.type, p.value]
+          'INSERT INTO spin_configs (prize_name, type, value, weight, is_active) VALUES (?, ?, ?, ?, 1)',
+          [p.prize_name, p.type, p.value, p.weight]
         );
       }
     }
 
     // 3. Fetch configurations
     const [spinPrizes] = await connection.query(
-      'SELECT id, prize_name, type, value FROM spin_configs ORDER BY id ASC'
+      'SELECT id, prize_name, type, value, weight FROM spin_configs WHERE is_active = 1 ORDER BY id ASC'
     );
 
-    // 4. Roll a random segment
-    const prizeIndex = Math.floor(Math.random() * 8);
-    const selectedPrize = spinPrizes[prizeIndex];
+    // 4. Roll a random segment using weight coefficients
+    const totalWeight = spinPrizes.reduce((sum, p) => sum + parseFloat(p.weight || 0), 0);
+    let roll = Math.random() * totalWeight;
+    let selectedPrize = spinPrizes[0];
+    let prizeIndex = 0;
+    for (let i = 0; i < spinPrizes.length; i++) {
+      roll -= parseFloat(spinPrizes[i].weight || 0);
+      if (roll <= 0) {
+        selectedPrize = spinPrizes[i];
+        prizeIndex = i;
+        break;
+      }
+    }
 
-    // 5. Lock and load user wallet
+     // 5. Lock and load user wallet
     const [wallets] = await connection.query(
-      'SELECT id, balance, bonus_balance, required_wager FROM wallets WHERE user_id = ? FOR UPDATE',
+      'SELECT id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? FOR UPDATE',
       [req.user.id]
     );
     const wallet = wallets[0];
     const currentBalance = parseFloat(wallet.balance);
     const currentBonusBalance = parseFloat(wallet.bonus_balance);
     const currentRequiredWager = parseFloat(wallet.required_wager);
+    const currentRequiredBonusWager = parseFloat(wallet.required_bonus_wager || 0);
     const prizeVal = parseFloat(selectedPrize.value);
 
     let newBalance = currentBalance;
     let newBonusBalance = currentBonusBalance;
     let newRequiredWager = currentRequiredWager;
+    let newRequiredBonusWager = currentRequiredBonusWager;
     let bonusId = null;
 
     if (selectedPrize.type === 'cash') {
-      newBalance = parseFloat((currentBalance + prizeVal).toFixed(4));
+      newBalance = parseFloat((currentBalance + prizeVal).toFixed(2));
       await connection.query('UPDATE wallets SET balance = ? WHERE user_id = ?', [newBalance, req.user.id]);
     } else if (selectedPrize.type === 'bonus') {
-      newBonusBalance = parseFloat((currentBonusBalance + prizeVal).toFixed(4));
-      const addedWager = prizeVal * 10;
-      newRequiredWager = parseFloat((currentRequiredWager + addedWager).toFixed(4));
+      newBonusBalance = parseFloat((currentBonusBalance + prizeVal).toFixed(2));
+      // Custom wagering: Bonus 250 requires 25x, Bonus 100 requires 20x
+      const addedWager = prizeVal === 250 ? prizeVal * 25 : (prizeVal === 100 ? prizeVal * 20 : prizeVal * 10);
+      newRequiredBonusWager = parseFloat((currentRequiredBonusWager + addedWager).toFixed(2));
       await connection.query(
-        'UPDATE wallets SET bonus_balance = ?, required_wager = ? WHERE user_id = ?',
-        [newBonusBalance, newRequiredWager, req.user.id]
+        'UPDATE wallets SET bonus_balance = ?, required_bonus_wager = ? WHERE user_id = ?',
+        [newBonusBalance, newRequiredBonusWager, req.user.id]
       );
       
       const [bonusResult] = await connection.query(
@@ -1239,8 +1296,10 @@ export const triggerSpin = async (req, res) => {
     return res.json({
       message: `You won: ${selectedPrize.prize_name}`,
       prizeIndex,
-      type: selectedPrize.type,
-      value: selectedPrize.type === 'empty' ? (prizeIndex === 2 ? 'SPIN50' : 'LUCKY25') : prizeVal,
+      type: selectedPrize.type === 'empty' ? 'voucher' : selectedPrize.type,
+      value: selectedPrize.type === 'empty'
+        ? (prizeIndex === 5 ? 'LUCKY10' : (prizeIndex === 6 ? 'LUCKY5' : 'LUCKY15'))
+        : prizeVal,
       walletBalance: newBalance,
       bonusBalance: newBonusBalance
     });
@@ -1667,9 +1726,80 @@ export const getMultipliers = async (conn = null) => {
 export const getPublicMultipliers = async (req, res) => {
   try {
     const data = await getMultipliers();
-    return res.json(data);
+    const [gameRows] = await pool.query('SELECT name, is_active FROM games');
+    const activeStates = {};
+    gameRows.forEach(r => {
+      activeStates[r.name] = r.is_active === 1;
+    });
+    return res.json({
+      ...data,
+      activeStates
+    });
   } catch (err) {
     logger.error(err, 'Failed to fetch public multipliers');
     return res.status(500).json({ error: 'Failed to retrieve multipliers.' });
+  }
+};
+
+export const getWinLossStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Today's stats
+    const [todayRow] = await pool.query(
+      'SELECT COALESCE(SUM(payout_amount), 0) as totalWon, COALESCE(SUM(bet_amount), 0) as totalWagered ' +
+      'FROM bets WHERE user_id = ? AND created_at >= DATE(NOW())',
+      [userId]
+    );
+
+    // 2. Last week's (last 7 days) stats
+    const [weekRow] = await pool.query(
+      'SELECT COALESCE(SUM(payout_amount), 0) as totalWon, COALESCE(SUM(bet_amount), 0) as totalWagered ' +
+      'FROM bets WHERE user_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
+      [userId]
+    );
+
+    // 3. Last month's (last 30 days) stats
+    const [monthRow] = await pool.query(
+      'SELECT COALESCE(SUM(payout_amount), 0) as totalWon, COALESCE(SUM(bet_amount), 0) as totalWagered ' +
+      'FROM bets WHERE user_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
+      [userId]
+    );
+
+    // 4. Lifetime aggregate stats
+    const [lifetimeRow] = await pool.query(
+      'SELECT COALESCE(SUM(payout_amount), 0) as totalWon, COALESCE(SUM(bet_amount), 0) as totalWagered, COUNT(id) as totalGames ' +
+      'FROM bets WHERE user_id = ?',
+      [userId]
+    );
+
+    const stats = {
+      today: {
+        won: parseFloat(todayRow[0].totalWon),
+        wagered: parseFloat(todayRow[0].totalWagered),
+        net: parseFloat((todayRow[0].totalWon - todayRow[0].totalWagered).toFixed(2))
+      },
+      week: {
+        won: parseFloat(weekRow[0].totalWon),
+        wagered: parseFloat(weekRow[0].totalWagered),
+        net: parseFloat((weekRow[0].totalWon - weekRow[0].totalWagered).toFixed(2))
+      },
+      month: {
+        won: parseFloat(monthRow[0].totalWon),
+        wagered: parseFloat(monthRow[0].totalWagered),
+        net: parseFloat((monthRow[0].totalWon - monthRow[0].totalWagered).toFixed(2))
+      },
+      lifetime: {
+        won: parseFloat(lifetimeRow[0].totalWon),
+        wagered: parseFloat(lifetimeRow[0].totalWagered),
+        net: parseFloat((lifetimeRow[0].totalWon - lifetimeRow[0].totalWagered).toFixed(2)),
+        totalGames: parseInt(lifetimeRow[0].totalGames || 0, 10)
+      }
+    };
+
+    return res.json(stats);
+  } catch (err) {
+    logger.error(err, 'Failed to compute win-loss stats');
+    return res.status(500).json({ error: 'Failed to retrieve game stats.' });
   }
 };

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Mail, Lock, LogIn, Sparkles, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, LogIn, Sparkles } from 'lucide-react'
 import { translateError } from '../utils/errorTranslator'
 
 export default function Login({ onLogin, onNavigate }) {
@@ -158,16 +158,6 @@ export default function Login({ onLogin, onNavigate }) {
               Sign Up
             </button>
           </p>
-        </div>
-
-        {/* Administrative Portal Link */}
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => onNavigate('admin-login')}
-            className="text-xs text-slate-400 hover:text-slate-600 transition-colors inline-flex items-center justify-center gap-1 mx-auto"
-          >
-            <KeyRound size={12} /> Administrative Access Portal
-          </button>
         </div>
       </div>
     </div>

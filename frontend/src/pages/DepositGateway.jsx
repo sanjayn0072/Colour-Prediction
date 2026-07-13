@@ -20,7 +20,10 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
   const voucher = depositData?.voucher || null
 
   // ── Create Pay0 Order on Mount ──
+
   useEffect(() => {
+
+    const abortController = new AbortController()
     let active = true
     const createOrder = async () => {
       setLoading(true)
@@ -34,14 +37,20 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ amount })
+          signal: abortController.signal,
+          body: JSON.stringify({ 
+            amount,
+            couponCode: voucher ? voucher.id : null
+          })
         })
+        if (!active) return
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
-          throw new Error(errData.error || `Server returned ${res.status}`)
+          throw new Error(errData.message || errData.error || `Server returned ${res.status}`)
         }
         const data = await res.json()
-        if (active && data.success && data.payment_url) {
+        if (!active) return
+        if (data.success && data.payment_url) {
           setPaymentUrl(data.payment_url)
           setOrderInfo({ orderId: data.orderId, amount: data.amount })
           setDepositStatus('pending')
@@ -56,6 +65,7 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
           throw new Error(data.error || data.message || 'Failed to create payment order')
         }
       } catch (err) {
+        if (err.name === 'AbortError') return
         if (active) {
           setError(translateError(err.message))
           setLoading(false)
@@ -63,7 +73,10 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
       }
     }
     createOrder()
-    return () => { active = false }
+    return () => { 
+      active = false 
+      abortController.abort()
+    }
   }, [amount, retryCount])
 
   // ── Auto-poll deposit status every 10 seconds ──
@@ -326,26 +339,43 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
           </p>
 
           {/* Open Gateway / Re-open Button */}
-          <button
-            onClick={handleOpenGateway}
-            style={{
-              marginTop: 20, padding: '14px 28px',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: 'white', fontWeight: 700, fontSize: 13, borderRadius: 12,
-              border: 'none', cursor: 'pointer', display: 'inline-flex',
-              alignItems: 'center', gap: 8,
-              boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
-              transition: 'all 0.2s'
-            }}
-          >
-            <ExternalLink size={16} />
-            {gatewayOpened ? 'Re-open Payment Page' : 'Open Payment Gateway'}
-          </button>
+          {gatewayOpened ? (
+            <div style={{
+              marginTop: 20, padding: '14px 20px',
+              background: '#faf5ff', border: '1px solid #e9d5ff',
+              borderRadius: 14, display: 'inline-flex', flexDirection: 'column',
+              alignItems: 'center', gap: 6, width: '100%', boxSizing: 'border-box'
+            }}>
+              <CheckCircle size={20} color="#7c3aed" className="animate-pulse" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#6b21a8' }}>
+                Payment Link Opened
+              </span>
+              <span style={{ fontSize: 11, color: '#8b5cf6', lineHeight: 1.4, maxWidth: 260 }}>
+                The payment gateway has been opened in a new window. Please complete your transaction there.
+              </span>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={handleOpenGateway}
+                style={{
+                  marginTop: 20, padding: '14px 28px',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: 'white', fontWeight: 700, fontSize: 13, borderRadius: 12,
+                  border: 'none', cursor: 'pointer', display: 'inline-flex',
+                  alignItems: 'center', gap: 8,
+                  boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <ExternalLink size={16} />
+                Open Payment Gateway
+              </button>
 
-          {gatewayOpened && (
-            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>
-              If the tab was blocked by your browser, click the button above to open it manually.
-            </p>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>
+                If the payment page did not open automatically, click the button above to open it manually.
+              </p>
+            </>
           )}
         </div>
 

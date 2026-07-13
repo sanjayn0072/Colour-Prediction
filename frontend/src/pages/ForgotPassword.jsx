@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { ArrowLeft, Phone, Lock, Eye, EyeOff, KeyRound, ShieldCheck, Send } from 'lucide-react'
+import { ArrowLeft, Phone, Lock, Eye, EyeOff, KeyRound, ShieldCheck, Send, AlertCircle } from 'lucide-react'
 import { translateError } from '../utils/errorTranslator'
+import { Alert, AlertDescription } from '../components/ui/Alert'
 
 const STEPS = ['phone', 'otp', 'reset']
 
@@ -265,9 +266,10 @@ export default function ForgotPassword({ onNavigate }) {
       <div className="flex-1 px-6 pt-6 pb-8">
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-xs font-medium px-4 py-2.5 rounded-xl mb-4 animate-[fadeIn_0.2s_ease-out]">
-            {error}
-          </div>
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {/* ── Step 1: Phone ──────────── */}

@@ -300,7 +300,7 @@ const PRODUCTS = [
 ]
 
 /* ─── Home Page ───────────────────────────────────────────── */
-export default function Home({ onNavigate }) {
+export default function Home({ onNavigate, unreadNotificationsCount }) {
   const { user, balance, setRealBalance, fetchUserHistory, setOrders, banners: contextBanners, products: contextProducts } = useUser()
   const activeBanners = contextBanners || BANNERS
   const activeProducts = contextProducts || PRODUCTS
@@ -328,6 +328,7 @@ export default function Home({ onNavigate }) {
   const [deliveryType, setDeliveryType] = useState(() => localStorage.getItem('cp_delivery_type') || 'Home')
   
   const [checkoutStep, setCheckoutStep] = useState('detail') // 'detail' | 'address' | 'success'
+  const [showOrderSuccessAlert, setShowOrderSuccessAlert] = useState(false)
   const [orderId, setOrderId] = useState('')
   const [deliveryDate, setDeliveryDate] = useState('')
   const [isOrdering, setIsOrdering] = useState(false)
@@ -343,7 +344,16 @@ export default function Home({ onNavigate }) {
   useEffect(() => {
     if (scrollRef.current) {
       const card = scrollRef.current.children[bannerIdx]
-      if (card) card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+      if (card) {
+        const container = scrollRef.current
+        const cardOffset = card.offsetLeft
+        const containerWidth = container.clientWidth
+        const cardWidth = card.clientWidth
+        container.scrollTo({
+          left: cardOffset - (containerWidth / 2) + (cardWidth / 2),
+          behavior: 'smooth'
+        })
+      }
     }
   }, [bannerIdx])
 
@@ -413,6 +423,7 @@ export default function Home({ onNavigate }) {
       // Add to global orders array
       setOrders((prev) => [data.order, ...prev])
       setCheckoutStep('success')
+      setShowOrderSuccessAlert(true)
       setToast(`🎉 Order placed for ${product.title}!`)
       await fetchUserHistory() // Sync stats
     } catch (err) {
@@ -520,7 +531,7 @@ export default function Home({ onNavigate }) {
             )}
 
             {/* Modal Body (Scrollable) */}
-            <div className="overflow-y-auto p-6 flex-1">
+            <div className="overflow-y-auto p-6 flex-1 scrollbar-hide">
               
               {/* STEP 1: PRODUCT DETAILS */}
               {checkoutStep === 'detail' && (
@@ -857,7 +868,9 @@ export default function Home({ onNavigate }) {
             className="relative p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer border-0 outline-none bg-transparent"
           >
             <Bell size={20} className="text-muted-foreground" />
-            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
+            )}
           </button>
         </div>
       </header>
@@ -953,6 +966,27 @@ export default function Home({ onNavigate }) {
           ))}
         </div>
       </section>
+
+      {/* Order Success Custom Alert Popup */}
+      {showOrderSuccessAlert && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
+          <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-2xl max-w-sm w-full text-center space-y-4 animate-[scaleIn_0.2s_ease-out]">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 border border-emerald-100 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+              <Check size={32} strokeWidth={3} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-extrabold text-slate-800">Order Placed!</h3>
+              <p className="text-xs text-slate-500">Your order has been placed successfully and is being processed.</p>
+            </div>
+            <button
+              onClick={() => setShowOrderSuccessAlert(false)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all cursor-pointer border-0 outline-none active:scale-95"
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ export default function DiceGame({ onNavigate }) {
   const { user, balance, setRealBalance, betsList, fetchUserHistory } = useUser()
   const [loading, setLoading] = useState(false)
   const [diceHouseFee, setDiceHouseFee] = useState(2.0)
+  const [isGameActive, setIsGameActive] = useState(true)
 
   useEffect(() => {
     const fetchMultipliers = async () => {
@@ -18,6 +19,9 @@ export default function DiceGame({ onNavigate }) {
         if (res.ok) {
           const data = await res.json()
           setDiceHouseFee(data.diceHouseFee !== undefined ? parseFloat(data.diceHouseFee) : 2.0)
+          if (data.activeStates && data.activeStates.dice !== undefined) {
+            setIsGameActive(data.activeStates.dice)
+          }
         }
       } catch (err) {
         console.error('Failed to fetch dice edge multiplier config:', err)
@@ -42,15 +46,25 @@ export default function DiceGame({ onNavigate }) {
 
   // --- Admin Live Metrics Overlay State ---
   const [liveMetrics, setLiveMetrics] = useState({});
+  const [activeUsers, setActiveUsers] = useState(0);
+  const [dailyPayout, setDailyPayout] = useState(0);
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   useEffect(() => {
     if (isAdmin && socket) {
       socket.on('live_bet_metrics', (data) => {
-         if (data && data.dice && data.dice[diceRoundId]) {
-           setLiveMetrics(data.dice[diceRoundId]);
-         } else {
-           setLiveMetrics({});
+         if (data) {
+           if (data.dice && data.dice[diceRoundId]) {
+             setLiveMetrics(data.dice[diceRoundId]);
+           } else {
+             setLiveMetrics({});
+           }
+           if (data.activeUsers !== undefined) {
+             setActiveUsers(data.activeUsers);
+           }
+           if (data.dailyPayout !== undefined) {
+             setDailyPayout(data.dailyPayout);
+           }
          }
       });
     }
@@ -293,12 +307,64 @@ export default function DiceGame({ onNavigate }) {
   const isLocked = dicePhase === 'locked' || diceTimeLeft <= 5
   const isBettingDisabled = isRolling || betPlaced || isLocked
 
+  if (!isGameActive) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#070b13] flex flex-col items-center justify-center p-6 text-center font-sans">
+        {/* Immersive background glow */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[120%] h-[40vh] bg-gradient-to-b from-indigo-500/5 to-transparent rounded-full blur-[100px] pointer-events-none" />
+        
+        <div className="bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-3xl p-8 max-w-sm w-full space-y-6 shadow-2xl relative z-10">
+          {/* Cute Animated Maintenance Robot */}
+          <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+            <div className="absolute inset-0 bg-indigo-500/10 rounded-full animate-ping opacity-45" style={{ animationDuration: '3s' }} />
+            <svg viewBox="0 0 100 100" className="w-24 h-24 relative z-10">
+              {/* Antenna */}
+              <line x1="50" y1="22" x2="50" y2="10" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="50" cy="8" r="4.5" fill="#a855f7" className="animate-pulse" />
+              
+              {/* Head */}
+              <rect x="22" y="22" width="56" height="46" rx="14" fill="#0f172a" stroke="#6366f1" strokeWidth="2.5" />
+              
+              {/* Eyes */}
+              <rect x="31" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
+              <circle cx="38" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
+              
+              <rect x="55" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
+              <circle cx="62" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
+              
+              {/* Cute digital mouth curve */}
+              <path d="M 43 55 Q 50 59 57 55" fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+              
+              {/* Controller buttons cheeks */}
+              <circle cx="28" cy="56" r="2" fill="#ef4444" />
+              <circle cx="72" cy="56" r="2" fill="#22c55e" />
+            </svg>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-white tracking-tight">Game under maintenance</h2>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              This game is under maintenance. Please try again later.
+            </p>
+          </div>
+          
+          <button
+            onClick={() => onNavigate?.('home')}
+            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-black rounded-xl shadow-md cursor-pointer transition-all active:scale-98 border-0 outline-none uppercase tracking-wider"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-slate-800 font-sans pb-20 relative select-none">
       {/* Floating Rules Button aligned symmetrically with back button */}
       <button
         onClick={() => setShowRules(true)}
-        className="absolute -top-12 right-4 z-40 w-10 h-10 rounded-full bg-slate-950/60 hover:bg-slate-900/80 flex items-center justify-center border border-slate-800 shadow-lg backdrop-blur-sm cursor-pointer text-slate-300 hover:text-white transition-all active:scale-95"
+        className="absolute -top-12 right-4 z-40 w-10 h-10 rounded-full bg-white hover:bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm cursor-pointer text-slate-650 hover:text-slate-800 transition-all active:scale-95"
         title="Rules"
       >
         <HelpCircle size={20} />
@@ -334,32 +400,48 @@ export default function DiceGame({ onNavigate }) {
         </div>
       )}
 
-      
       {/* ADMIN HUD OVERLAY */}
       {isAdmin && (
         <div className="px-4 pt-4 relative z-10">
-          <div className="bg-gray-900/95 border border-indigo-500/50 rounded-2xl p-4 relative overflow-hidden backdrop-blur-xl shadow-lg">
-             <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-widest shadow-md">
-               ADMIN HUD ACTIVE
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 relative overflow-hidden shadow-md shadow-slate-100/80">
+             <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] font-bold px-3 py-1 rounded-bl-lg tracking-widest uppercase shadow-sm">
+                ADMIN HUD ACTIVE
              </div>
-             <h3 className="text-white font-bold mb-3 text-sm flex items-center gap-2">
-               <Shield size={16} className="text-indigo-500" /> LIVE DICE STAKED POOLS
+             <h3 className="text-slate-850 font-bold mb-3 text-sm flex items-center gap-2">
+                <Shield size={16} className="text-indigo-600 animate-pulse" /> LIVE DICE STAKED POOLS
              </h3>
              
              <div className="flex gap-3 mb-2">
-                <button onClick={() => handleAdminOverride('10')} className="flex-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-2 transition-all cursor-pointer">
-                   <div className="text-gray-400 font-bold text-xs">CRASH (10)</div>
+                <button onClick={() => handleAdminOverride('10')} className="flex-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl p-2.5 transition-all cursor-pointer">
+                   <div className="text-slate-600 font-bold text-xs">CRASH (10)</div>
                 </button>
-                <button onClick={() => handleAdminOverride('50')} className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-500/30 rounded-xl p-2 transition-all cursor-pointer">
-                   <div className="text-indigo-400 font-bold text-xs">MID (50)</div>
+                <button onClick={() => handleAdminOverride('50')} className="flex-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl p-2.5 transition-all cursor-pointer">
+                   <div className="text-indigo-600 font-bold text-xs">MID (50)</div>
                 </button>
-                <button onClick={() => handleAdminOverride('90')} className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-xl p-2 transition-all cursor-pointer">
-                   <div className="text-emerald-400 font-bold text-xs">HIGH (90)</div>
+                <button onClick={() => handleAdminOverride('90')} className="flex-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl p-2.5 transition-all cursor-pointer">
+                   <div className="text-emerald-600 font-bold text-xs">HIGH (90)</div>
                 </button>
              </div>
-             <div className="text-white text-xs mt-3 flex justify-between bg-black/30 p-2 rounded-lg border border-white/5">
-                <span><span className="text-emerald-400 font-bold">ABOVE 50:</span> ₹{liveMetrics['above_50'] || 0}</span>
-                <span><span className="text-red-400 font-bold">BELOW 50:</span> ₹{liveMetrics['below_50'] || 0}</span>
+             <div className="text-slate-700 text-xs mt-3 flex justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span><span className="text-emerald-600 font-bold">ABOVE 50:</span> ₹{liveMetrics['above_50'] || 0}</span>
+                <span><span className="text-red-500 font-bold">BELOW 50:</span> ₹{liveMetrics['below_50'] || 0}</span>
+             </div>
+
+             {/* Live Analytics Dashboard Details */}
+             <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100">
+               <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                 <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Active Users</div>
+                 <div className="text-xs font-extrabold text-slate-700 mt-0.5">{activeUsers.toLocaleString()} Players</div>
+               </div>
+               <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                 <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">24h Payouts</div>
+                 <div className="text-xs font-extrabold text-slate-700 mt-0.5">₹{dailyPayout.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+               </div>
+             </div>
+
+             <div className="mt-3 flex items-center justify-center gap-1.5 bg-emerald-50/50 border border-emerald-100 rounded-lg py-1.5 px-3">
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+               <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">100% Provably Fair Cryptographic Algorithm</span>
              </div>
           </div>
         </div>

@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import { query, pool } from '../config/db.js';
 import { ioInstance } from './gameController.js';
 import { createNotification } from '../utils/notifier.js';
+import { getCouponSplit, processReferralReward } from './depositController.js';
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'cplay_jwt_secret') {
   throw new Error('FATAL: JWT_SECRET environment variable is missing, undefined, or set to insecure default fallback.');
@@ -42,7 +43,7 @@ export const handleWithdrawal = async (req, res) => {
 
     // 1. Lock user's wallet for update
     const [wallets] = await connection.query(
-      'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      'SELECT id, balance, required_wager FROM wallets WHERE user_id = ? FOR UPDATE',
       [req.user.id]
     );
 
@@ -52,6 +53,15 @@ export const handleWithdrawal = async (req, res) => {
     }
 
     const currentBalance = parseFloat(wallets[0].balance);
+    const requiredWager = parseFloat(wallets[0].required_wager || 0);
+
+    if (requiredWager > 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: 'Wagering requirement not met',
+        message: `You must complete a total settled wager of ₹${requiredWager.toFixed(2)} before initiating a withdrawal.`
+      });
+    }
 
     if (currentBalance < totalDeduction) {
       await connection.rollback();
@@ -207,7 +217,7 @@ export const deposit = async (req, res) => {
 
     // 1. Lock user's wallet
     const [wallets] = await connection.query(
-      'SELECT id, balance, bonus_balance, required_wager FROM wallets WHERE user_id = ? FOR UPDATE',
+      'SELECT id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? FOR UPDATE',
       [req.user.id]
     );
 
@@ -216,41 +226,46 @@ export const deposit = async (req, res) => {
     }
 
     // Determine coupon code/percent
-    let bonusAmount = 0;
+    let rewardAmount = 0;
+    let cashReward = 0;
+    let bonusReward = 0;
+
     if (voucher) {
       const voucherCode = typeof voucher === 'object' ? voucher.id : voucher;
-      const vUpper = String(voucherCode || '').toUpperCase();
-      let percent = 0;
-      if (vUpper.includes('JUNE-14') || vUpper.includes('14JUNE')) percent = 1;
-      else if (vUpper.includes('SUPER')) percent = 3;
-      else if (vUpper.includes('PRO')) percent = 5;
-      else if (vUpper.includes('SPIN50')) percent = 50;
-      else if (vUpper.includes('LUCKY25')) percent = 25;
-
-      if (percent > 0) {
-        bonusAmount = Math.floor(depositAmount * (percent / 100));
+      const vUpper = String(voucherCode || '').toUpperCase().trim();
+      
+      // Let's check if there is a matching coupon in DB first to get its reward_amount
+      const [coupons] = await connection.query('SELECT reward_amount FROM coupons WHERE code = ? LIMIT 1', [vUpper]);
+      if (coupons && coupons.length > 0) {
+        rewardAmount = parseFloat(coupons[0].reward_amount);
       }
+
+      const split = getCouponSplit(vUpper, rewardAmount);
+      cashReward = split.cashReward;
+      bonusReward = split.bonusReward;
     }
 
-    const currentBalance = parseFloat(wallets[0].balance);
+    const currentBalance = parseFloat(wallets[0].balance || 0);
     const currentBonusBalance = parseFloat(wallets[0].bonus_balance || 0);
     const currentRequiredWager = parseFloat(wallets[0].required_wager || 0);
+    const currentRequiredBonusWager = parseFloat(wallets[0].required_bonus_wager || 0);
 
-    const newBalance = parseFloat((currentBalance + depositAmount).toFixed(4));
-    const newBonusBalance = parseFloat((currentBonusBalance + bonusAmount).toFixed(4));
-    const newRequiredWager = parseFloat((currentRequiredWager + bonusAmount * 10).toFixed(4));
+    const newBalance = parseFloat((currentBalance + depositAmount + cashReward).toFixed(2));
+    const newBonusBalance = parseFloat((currentBonusBalance + bonusReward).toFixed(2));
+    const newRequiredWager = parseFloat((currentRequiredWager + depositAmount + cashReward).toFixed(2));
+    const newRequiredBonusWager = parseFloat((currentRequiredBonusWager + bonusReward * 10).toFixed(2));
 
     // 2. Update wallet balances
     await connection.query(
-      'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ? WHERE user_id = ?',
-      [newBalance, newBonusBalance, newRequiredWager, req.user.id]
+      'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ?, required_bonus_wager = ? WHERE user_id = ?',
+      [newBalance, newBonusBalance, newRequiredWager, newRequiredBonusWager, req.user.id]
     );
 
     // If bonus is active, write to bonuses table
-    if (bonusAmount > 0) {
+    if (bonusReward > 0) {
       await connection.query(
         'INSERT INTO bonuses (user_id, type, amount, status) VALUES (?, "coupon", ?, "claimed")',
-        [req.user.id, bonusAmount]
+        [req.user.id, bonusReward]
       );
     }
 
@@ -272,14 +287,26 @@ export const deposit = async (req, res) => {
     await connection.query(
       'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
       'VALUES (?, ?, ?, "deposit", "deposits", ?, ?, ?, ?)',
-      [req.user.id, wallets[0].id, depositAmount, depositId, currentBalance, newBalance, `Completed deposit of ₹${depositAmount} (Txn: ${transactionId})`]
+      [req.user.id, wallets[0].id, depositAmount, depositId, currentBalance, currentBalance + depositAmount, `Completed deposit of ₹${depositAmount} (Txn: ${transactionId})`]
     );
+
+    // Write to ledger for coupon cash reward if applicable
+    if (cashReward > 0) {
+      await connection.query(
+        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+        'VALUES (?, ?, ?, "bonus_claim", "deposits", ?, ?, ?, ?)',
+        [req.user.id, wallets[0].id, cashReward, depositId, currentBalance + depositAmount, newBalance, `Applied coupon cash reward: ${voucher}`]
+      );
+    }
 
     // 6. Update user stats
     await connection.query(
-      'UPDATE user_stats SET total_deposits = total_deposits + ? WHERE user_id = ?',
-      [depositAmount, req.user.id]
+      'UPDATE user_stats SET total_deposits = total_deposits + ?, total_bonus_claimed = total_bonus_claimed + ? WHERE user_id = ?',
+      [depositAmount, cashReward + bonusReward, req.user.id]
     );
+
+    // Process referral commission reward for the referrer if applicable
+    await processReferralReward(connection, req.user.id);
 
     // Dynamic Wallet Notification inside the active transaction
     await createNotification(

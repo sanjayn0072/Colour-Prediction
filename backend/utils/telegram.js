@@ -71,3 +71,75 @@ export async function sendWithdrawalAlert({
     logger.error(err, 'Failed to dispatch Telegram withdrawal notification');
   }
 }
+
+/**
+ * Sends a Telegram notification when a user tries to mutate their name.
+ */
+export async function sendSuspiciousNameChangeAlert(userId, username, phone, currentName, attemptedName) {
+  let botToken = process.env.TELEGRAM_BOT_TOKEN;
+  let chatId = process.env.TELEGRAM_CHAT_ID;
+
+  try {
+    const configRows = await query('SELECT config_key, config_value FROM system_configs WHERE config_key IN ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")');
+    configRows.forEach(row => {
+      if (row.config_key === 'TELEGRAM_BOT_TOKEN' && row.config_value) botToken = decryptConfigValue(row.config_value);
+      if (row.config_key === 'TELEGRAM_CHAT_ID' && row.config_value) chatId = decryptConfigValue(row.config_value);
+    });
+  } catch (err) {
+    logger.error(err, 'Failed to fetch Telegram config from database');
+  }
+
+  if (!botToken || !chatId) return;
+
+  const message = `⚠️ SUSPICIOUS ACTIVITY: Attempted Name Change\nUser ID: ${userId}\nUsername: ${username}\nPhone: ${phone}\nCurrent Name: ${currentName}\nAttempted Name: ${attemptedName}\nStatus: BLOCKED & LOGGED`;
+
+  try {
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Telegram API error: ${response.status} - ${errorText}`);
+    }
+  } catch (err) {
+    logger.error(err, 'Failed to dispatch Telegram name mutation alert');
+  }
+}
+
+/**
+ * Sends a generic Telegram notification/alert to platform administrators.
+ */
+export async function sendAdminAlert(message) {
+  let botToken = process.env.TELEGRAM_BOT_TOKEN;
+  let chatId = process.env.TELEGRAM_CHAT_ID;
+
+  try {
+    const configRows = await query('SELECT config_key, config_value FROM system_configs WHERE config_key IN ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")');
+    configRows.forEach(row => {
+      if (row.config_key === 'TELEGRAM_BOT_TOKEN' && row.config_value) botToken = decryptConfigValue(row.config_value);
+      if (row.config_key === 'TELEGRAM_CHAT_ID' && row.config_value) chatId = decryptConfigValue(row.config_value);
+    });
+  } catch (err) {
+    logger.error(err, 'Failed to fetch Telegram config from database');
+  }
+
+  if (!botToken || !chatId) return;
+
+  try {
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Telegram API error in sendAdminAlert: ${response.status} - ${errorText}`);
+    }
+  } catch (err) {
+    logger.error(err, 'Failed to dispatch Telegram admin alert');
+  }
+}

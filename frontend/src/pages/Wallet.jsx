@@ -19,7 +19,7 @@ import { getVipLevel, getVipLimit } from '../utils/vipTiers'
 import {
   ArrowDownRight, ArrowUpRight, CreditCard, Check, X, AlertCircle,
   Building2, Smartphone, Lock, Upload, IndianRupee, Tag, ChevronRight,
-  RefreshCw, Info, Eye, EyeOff, Award, HelpCircle
+  RefreshCw, Info, Eye, EyeOff, Award, HelpCircle, Gift
 } from 'lucide-react'
 
 
@@ -91,13 +91,7 @@ export default function Wallet({ onNavigate, initialTab }) {
             <HelpCircle size={14} />
             Support
           </button>
-          <button
-            onClick={() => onNavigate?.('depositHistory')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 border border-indigo-200 transition-all cursor-pointer"
-          >
-            <CreditCard size={14} />
-            Deposits
-          </button>
+
           <button
             onClick={() => onNavigate?.('transactionRecords')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition-all cursor-pointer border border-slate-200"
@@ -244,10 +238,25 @@ function CompactVoucherSelector({ selectedVoucher, onSelectVoucher, onOpenDrawer
   const displayVoucher = selectedVoucher || vouchers?.[0]
   const isSelected = selectedVoucher !== null
 
+  if (!displayVoucher) {
+    return (
+      <div 
+        onClick={onOpenDrawer}
+        className="relative bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between hover:border-slate-300 transition-all cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-2">
+          <Tag size={16} className="text-slate-400 shrink-0" />
+          <span className="text-xs font-semibold text-slate-500">No active offer coupons available</span>
+        </div>
+        <span className="text-[10px] text-indigo-600 font-black">View Offers</span>
+      </div>
+    )
+  }
+
   return (
     <div 
       onClick={onOpenDrawer}
-      className={`relative bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-4 hover:border-slate-300 transition-all cursor-pointer select-none overflow-hidden ${
+      className={`relative bg-white border border-slate-200 rounded-2xl pl-6 pr-6 py-4 shadow-sm flex items-center gap-4 hover:border-slate-300 transition-all cursor-pointer select-none overflow-hidden ${
         isSelected ? 'border-emerald-500 bg-emerald-50/5 shadow-emerald-50/20' : ''
       }`}
     >
@@ -259,7 +268,11 @@ function CompactVoucherSelector({ selectedVoucher, onSelectVoucher, onOpenDrawer
       <div 
         onClick={(e) => {
           e.stopPropagation()
-          onSelectVoucher(displayVoucher)
+          if (displayVoucher.type !== 'GAMEPLAY_FREEBIE') {
+            onSelectVoucher(displayVoucher)
+          } else {
+            onOpenDrawer()
+          }
         }}
         className="shrink-0 z-10 pl-1 py-2"
       >
@@ -276,8 +289,12 @@ function CompactVoucherSelector({ selectedVoucher, onSelectVoucher, onOpenDrawer
       <div className="flex-1 min-w-0 pr-1 z-10">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-black text-slate-800 truncate">{displayVoucher.title}</span>
-          <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-md">
-            +{displayVoucher.percent}% Extra
+          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+            displayVoucher.type === 'GAMEPLAY_FREEBIE' 
+              ? 'text-indigo-600 bg-indigo-50 border border-indigo-100'
+              : 'text-rose-600 bg-rose-50 border border-rose-100'
+          }`}>
+            {displayVoucher.percent > 0 ? `+${displayVoucher.percent}% Extra` : `+₹${displayVoucher.rewardAmount} Flat`}
           </span>
         </div>
         
@@ -317,20 +334,17 @@ function CompactVoucherSelector({ selectedVoucher, onSelectVoucher, onOpenDrawer
   )
 }
 
-function VoucherSelectionDrawer({ show, onClose, selectedVoucher, onSelectVoucher, vouchers }) {
+function VoucherSelectionDrawer({ show, onClose, selectedVoucher, onSelectVoucher, vouchers, claimFreeVoucher, showToast }) {
   if (!show) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-end justify-center animate-[fadeIn_0.2s_ease-out]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" onClick={onClose}>
       <div 
-        className="w-full max-w-md bg-white rounded-t-[32px] border-t border-slate-200 max-h-[85vh] flex flex-col shadow-2xl animate-[slideUp_0.3s_ease-out] overflow-hidden" 
+        className="w-full max-w-md bg-white rounded-[32px] border border-slate-100 max-h-[85vh] flex flex-col shadow-2xl animate-[zoomIn_0.25s_ease-out] overflow-hidden" 
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Notch */}
-        <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-3 shrink-0" />
-        
         {/* Header */}
-        <div className="px-5 pb-3 flex items-center justify-between border-b border-slate-100 shrink-0">
+        <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 shrink-0">
           <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
             <Tag size={16} className="text-indigo-500" />
             Select Offer Voucher
@@ -344,43 +358,72 @@ function VoucherSelectionDrawer({ show, onClose, selectedVoucher, onSelectVouche
         </div>
 
         {/* Voucher list */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3 bg-slate-50 overscroll-contain">
-          {vouchers?.map((v) => {
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-5 py-4 space-y-3 bg-slate-50 overscroll-contain">
+          {vouchers?.length === 0 ? (
+            <div className="text-center py-10">
+              <Tag size={32} className="mx-auto text-slate-300 mb-2" />
+              <p className="text-xs text-slate-500 font-semibold">You have no active coupons available.</p>
+            </div>
+          ) : vouchers?.map((v) => {
             const isSelected = selectedVoucher?.id === v.id
+            const isFreebie = v.type === 'GAMEPLAY_FREEBIE'
+
             return (
               <div 
                 key={v.id}
-                onClick={() => {
-                  onSelectVoucher(v)
-                  onClose()
+                onClick={async () => {
+                  if (isFreebie) {
+                    const res = await claimFreeVoucher(v.id)
+                    if (res.success) {
+                      showToast(res.message || 'Free bet claimed successfully!', 'success')
+                      onClose()
+                    } else {
+                      showToast(res.error || 'Failed to claim coupon.', 'error')
+                    }
+                  } else {
+                    onSelectVoucher(v)
+                    onClose()
+                  }
                 }}
-                className={`relative bg-white border-2 rounded-2xl p-4 shadow-sm transition-all cursor-pointer select-none overflow-hidden flex items-center gap-4 ${
+                className={`relative bg-white border-2 rounded-2xl pl-6 pr-6 py-4 shadow-sm transition-all cursor-pointer select-none overflow-hidden flex items-center gap-4 ${
                   isSelected 
                     ? 'border-emerald-500 bg-emerald-500/5 shadow-emerald-50' 
-                    : 'border-slate-200 hover:border-slate-300'
+                    : isFreebie 
+                      ? 'border-indigo-200 bg-indigo-50/5 hover:border-indigo-300'
+                      : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
                 {/* Curved Ticket Cutouts (Left & Right) */}
                 <div className="absolute top-1/2 -translate-y-1/2 -left-2.5 w-5 h-5 rounded-full bg-slate-50 border-r border-slate-200 z-10" />
                 <div className="absolute top-1/2 -translate-y-1/2 -right-2.5 w-5 h-5 rounded-full bg-slate-50 border-l border-slate-200 z-10" />
 
-                {/* Radio Circle */}
+                {/* Radio Circle or Gift icon */}
                 <div className="shrink-0 z-10 pl-1">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                    isSelected 
-                      ? 'border-emerald-500 bg-emerald-500' 
-                      : 'border-slate-300 bg-white'
-                  }`}>
-                    {isSelected && <Check size={12} className="text-white font-bold" strokeWidth={3} />}
-                  </div>
+                  {isFreebie ? (
+                    <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center">
+                      <Gift size={12} className="text-indigo-600" />
+                    </div>
+                  ) : (
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      isSelected 
+                        ? 'border-emerald-500 bg-emerald-500' 
+                        : 'border-slate-300 bg-white'
+                    }`}>
+                      {isSelected && <Check size={12} className="text-white font-bold" strokeWidth={3} />}
+                    </div>
+                  )}
                 </div>
 
                 {/* Ticket Details */}
                 <div className="flex-1 min-w-0 pr-1 z-10">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-black text-slate-800 truncate">{v.title}</span>
-                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-md">
-                      +{v.percent}% Extra
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                      isFreebie 
+                        ? 'text-indigo-600 bg-indigo-50 border border-indigo-100'
+                        : 'text-rose-600 bg-rose-50 border border-rose-100'
+                    }`}>
+                      {v.percent > 0 ? `+${v.percent}% Extra` : `+₹${v.rewardAmount} Flat`}
                     </span>
                   </div>
                   
@@ -410,14 +453,18 @@ function VoucherSelectionDrawer({ show, onClose, selectedVoucher, onSelectVouche
 }
 
 function DepositTab({ onNavigate, showToast }) {
-  const { vouchers } = useUser()
+  const { vouchers, claimFreeVoucher } = useUser()
   const [amount, setAmount] = useState('')
   const [customAmount, setCustomAmount] = useState('')
   const [selectedVoucher, setSelectedVoucher] = useState(null)
   const [showVoucherDrawer, setShowVoucherDrawer] = useState(false)
 
   const selectedAmount = amount ? parseInt(amount) : customAmount ? parseInt(customAmount) : 0
-  const voucherBonus = selectedVoucher ? Math.floor(selectedAmount * (selectedVoucher.percent / 100)) : 0
+  const voucherBonus = selectedVoucher 
+    ? (selectedVoucher.percent > 0 
+        ? Math.floor(selectedAmount * (selectedVoucher.percent / 100)) 
+        : parseFloat(selectedVoucher.rewardAmount || 0))
+    : 0
 
   const hasValidationError = selectedAmount > 0 && (selectedAmount < 100 || selectedAmount > 5000 || selectedAmount % 100 !== 0)
   const canProceed = selectedAmount >= 100 && selectedAmount <= 5000 && selectedAmount % 100 === 0
@@ -462,6 +509,13 @@ function DepositTab({ onNavigate, showToast }) {
     }
     onNavigate?.('depositGateway', { amount: selectedAmount, voucher: selectedVoucher })
   }
+
+  // Auto-clear selectedVoucher if it is claimed or no longer in vouchers list
+  useEffect(() => {
+    if (selectedVoucher && !vouchers.some(v => v.id === selectedVoucher.id)) {
+      setSelectedVoucher(null)
+    }
+  }, [vouchers])
 
   return (
     <div className="space-y-5">
@@ -589,6 +643,8 @@ function DepositTab({ onNavigate, showToast }) {
         selectedVoucher={selectedVoucher}
         onSelectVoucher={handleSelectVoucher}
         vouchers={vouchers}
+        claimFreeVoucher={claimFreeVoucher}
+        showToast={showToast}
       />
     </div>
   )

@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser } from '../context/UserContext';
-import { ArrowLeft, Search, Star, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Search, Star, ShoppingCart, ArrowUp, ChevronDown } from 'lucide-react';
 
 export default function ProductsPage({ onBack }) {
   const { products } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [limit, setLimit] = useState(6);
+  const [hasClickedShowMore, setHasClickedShowMore] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 
@@ -19,6 +22,38 @@ export default function ProductsPage({ onBack }) {
     const matchesCategory = selectedCategory === 'All' || (product.category || 'Tech') === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const displayedProducts = filteredProducts.slice(0, limit);
+
+  // Handle infinite scroll & scroll to top button
+  useEffect(() => {
+    const handleScroll = () => {
+      // Toggle scroll to top button
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+
+      // Infinite scroll triggers if they've initiated show more and reach near bottom
+      if (hasClickedShowMore) {
+        const threshold = 150;
+        const reachedBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - threshold;
+        if (reachedBottom) {
+          setLimit(prev => Math.min(prev + 6, filteredProducts.length));
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasClickedShowMore, filteredProducts.length]);
+
+  // Reset limit when query or category changes
+  useEffect(() => {
+    setLimit(6);
+    setHasClickedShowMore(false);
+  }, [searchQuery, selectedCategory]);
 
   return (
     <div className="min-h-screen bg-[#070b13] text-slate-100 font-sans pb-10">
@@ -75,59 +110,87 @@ export default function ProductsPage({ onBack }) {
             <p className="text-xs font-semibold">No products found matching your criteria.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filteredProducts.map((product) => (
-              <div 
-                key={product.id} 
-                className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden hover:border-indigo-500/30 transition-all duration-200 group flex flex-col"
-              >
-                <div className="h-32 bg-slate-950 flex items-center justify-center relative p-4 border-b border-slate-800">
-                  <img 
-                    src={product.image_url ? `${API_BASE_URL}${product.image_url}` : (product.image ? product.image : '/uploads/placeholder.png')} 
-                    onError={(e) => { e.target.src = '/uploads/placeholder.png'; }}
-                    alt={product.title} 
-                    className="h-24 w-24 object-contain group-hover:scale-105 transition-transform duration-300" 
-                  />
-                  {product.badge && (
-                    <span className="absolute top-2 right-2 bg-rose-600 text-[9px] font-bold text-white px-1.5 py-0.5 rounded-md shadow-sm">
-                      {product.badge}
-                    </span>
-                  )}
-                </div>
-                
-                <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">
-                      {product.title}
-                    </h4>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[10px] text-amber-500 font-bold">★ {product.rating || '4.8'}</span>
-                      <span className="text-[9px] text-slate-500">({product.reviews || '120'})</span>
-                    </div>
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-3">
+              {displayedProducts.map((product) => (
+                <div 
+                  key={product.id} 
+                  className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden hover:border-indigo-500/30 transition-all duration-200 group flex flex-col"
+                >
+                  <div className="h-32 bg-slate-950 flex items-center justify-center relative p-4 border-b border-slate-800">
+                    <img 
+                      src={product.image_url ? `${API_BASE_URL}${product.image_url}` : (product.image ? product.image : '/uploads/placeholder.png')} 
+                      onError={(e) => { e.target.src = '/uploads/placeholder.png'; }}
+                      alt={product.title} 
+                      className="h-24 w-24 object-contain group-hover:scale-105 transition-transform duration-300" 
+                    />
+                    {product.badge && (
+                      <span className="absolute top-2 right-2 bg-rose-600 text-[9px] font-bold text-white px-1.5 py-0.5 rounded-md shadow-sm">
+                        {product.badge}
+                      </span>
+                    )}
                   </div>
                   
-                  <div className="flex items-center justify-between mt-1">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-extrabold text-indigo-400">₹{(product.price || 0).toLocaleString()}</span>
-                      {product.original && (
-                        <span className="text-[9px] text-slate-500 line-through">₹{product.original.toLocaleString()}</span>
-                      )}
+                  <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">
+                        {product.title}
+                      </h4>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-[10px] text-amber-500 font-bold">★ {product.rating || '4.8'}</span>
+                        <span className="text-[9px] text-slate-500">({product.reviews || '120'})</span>
+                      </div>
                     </div>
                     
-                    <button 
-                      onClick={() => onBack()} // Navigate to home to open product buy modal
-                      className="p-1.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg transition-all cursor-pointer"
-                      title="Buy Product"
-                    >
-                      <ShoppingCart size={14} />
-                    </button>
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-extrabold text-indigo-400">₹{(product.price || 0).toLocaleString()}</span>
+                        {product.original && (
+                          <span className="text-[9px] text-slate-500 line-through">₹{product.original.toLocaleString()}</span>
+                        )}
+                      </div>
+                      
+                      <button 
+                        onClick={() => onBack()} // Navigate to home to open product buy modal
+                        className="p-1.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg transition-all cursor-pointer"
+                        title="Buy Product"
+                      >
+                        <ShoppingCart size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Show More Button */}
+            {!hasClickedShowMore && filteredProducts.length > limit && (
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={() => {
+                    setLimit(prev => prev + 6);
+                    setHasClickedShowMore(true);
+                  }}
+                  className="flex items-center gap-1.5 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-2xl shadow-md shadow-indigo-600/25 transition-all cursor-pointer border-0 outline-none active:scale-95"
+                >
+                  Show More <ChevronDown size={14} />
+                </button>
               </div>
-            ))}
+            )}
           </div>
         )}
       </main>
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button 
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 p-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-600/35 hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer border-0 outline-none flex items-center justify-center animate-bounce"
+          title="Scroll to Top"
+        >
+          <ArrowUp size={20} strokeWidth={2.5} />
+        </button>
+      )}
     </div>
   );
 }

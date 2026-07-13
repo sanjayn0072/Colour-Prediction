@@ -28,14 +28,14 @@ function copyToClipboard(text) {
 
 /* ── GAME-RELATED PRIZE DEFINITIONS ── */
 const WHEEL_PRIZES = [
-  { id: 1, label: 'Bonus ₹500', icon: Gift, color: 'from-indigo-100 to-indigo-50/30', val: 500, type: 'bonus', desc: '₹500 Bonus Wallet (10x Wager)', wager: '10x Wagering', textColor: 'text-indigo-950', iconColor: 'text-indigo-600' },
-  { id: 2, label: 'Cash ₹10', icon: Banknote, color: 'from-emerald-100 to-emerald-50/30', val: 10, type: 'cash', desc: '₹10 Cash (No Wager)', wager: 'No wagering', textColor: 'text-emerald-950', iconColor: 'text-emerald-600' },
-  { id: 3, label: 'Voucher 50%', icon: Ticket, color: 'from-amber-100 to-yellow-50/30', val: 'SPIN50', type: 'voucher', desc: '50% Extra Deposit Bonus Code', wager: 'No wagering', textColor: 'text-amber-950', iconColor: 'text-amber-600' },
-  { id: 4, label: 'Cash ₹50', icon: Banknote, color: 'from-emerald-100 to-emerald-50/30', val: 50, type: 'cash', desc: '₹50 Cash (No Wager)', wager: 'No wagering', textColor: 'text-emerald-950', iconColor: 'text-emerald-600' },
-  { id: 5, label: 'Bonus ₹100', icon: Gift, color: 'from-indigo-100 to-indigo-50/30', val: 100, type: 'bonus', desc: '₹100 Bonus Wallet (10x Wager)', wager: '10x Wagering', textColor: 'text-indigo-950', iconColor: 'text-indigo-600' },
-  { id: 6, label: 'Voucher 25%', icon: Ticket, color: 'from-amber-100 to-yellow-50/30', val: 'LUCKY25', type: 'voucher', desc: '25% Extra Deposit Bonus Code', wager: 'No wagering', textColor: 'text-amber-950', iconColor: 'text-amber-600' },
-  { id: 7, label: 'Cash ₹20', icon: Banknote, color: 'from-emerald-100 to-emerald-50/30', val: 20, type: 'cash', desc: '₹20 Cash (No Wager)', wager: 'No wagering', textColor: 'text-emerald-950', iconColor: 'text-emerald-600' },
-  { id: 8, label: 'Bonus ₹250', icon: Gift, color: 'from-indigo-100 to-indigo-50/30', val: 250, type: 'bonus', desc: '₹250 Bonus Wallet (10x Wager)', wager: '10x Wagering', textColor: 'text-indigo-950', iconColor: 'text-indigo-600' },
+  { id: 1, label: 'Bonus ₹250', icon: Gift, color: 'from-indigo-100 to-indigo-50/30', val: 250, type: 'bonus', desc: '₹250 Bonus Wallet (25x Wager)', wager: '25x Wagering', textColor: 'text-indigo-950', iconColor: 'text-indigo-600' },
+  { id: 2, label: 'Bonus ₹100', icon: Gift, color: 'from-indigo-100 to-indigo-50/30', val: 100, type: 'bonus', desc: '₹100 Bonus Wallet (20x Wager)', wager: '20x Wagering', textColor: 'text-indigo-950', iconColor: 'text-indigo-600' },
+  { id: 3, label: 'Cash ₹20', icon: Banknote, color: 'from-emerald-100 to-emerald-50/30', val: 20, type: 'cash', desc: '₹20 Cash (No Wager)', wager: 'No wagering', textColor: 'text-emerald-950', iconColor: 'text-emerald-600' },
+  { id: 4, label: 'Cash ₹10', icon: Banknote, color: 'from-emerald-100 to-emerald-50/30', val: 10, type: 'cash', desc: '₹10 Cash (No Wager)', wager: 'No wagering', textColor: 'text-emerald-950', iconColor: 'text-emerald-600' },
+  { id: 5, label: 'Cash ₹5', icon: Banknote, color: 'from-emerald-100 to-emerald-50/30', val: 5, type: 'cash', desc: '₹5 Cash (No Wager)', wager: 'No wagering', textColor: 'text-emerald-950', iconColor: 'text-emerald-600' },
+  { id: 6, label: 'Voucher 10%', icon: Ticket, color: 'from-amber-100 to-yellow-50/30', val: 'LUCKY10', type: 'voucher', desc: '10% Extra Deposit (min ₹200)', wager: 'No wagering', textColor: 'text-amber-950', iconColor: 'text-amber-600' },
+  { id: 7, label: 'Voucher 5%', icon: Ticket, color: 'from-amber-100 to-yellow-50/30', val: 'LUCKY5', type: 'voucher', desc: '5% Extra Deposit (min ₹100)', wager: 'No wagering', textColor: 'text-amber-950', iconColor: 'text-amber-600' },
+  { id: 8, label: 'Voucher 15%', icon: Ticket, color: 'from-amber-100 to-yellow-50/30', val: 'LUCKY15', type: 'voucher', desc: '15% Extra Deposit (min ₹300)', wager: 'No wagering', textColor: 'text-amber-950', iconColor: 'text-amber-600' }
 ]
 
 const SEGMENT_ANGLE = 45
@@ -61,9 +61,8 @@ export default function SpinWheel({ onNavigate }) {
     fetchUserHistory()
   }, [])
 
-  const totalDeposit = user?.totalDeposits || 0
-  const totalSpinsEarned = Math.floor(totalDeposit / 200)
-  const spinsLeft = Math.max(0, totalSpinsEarned - (user?.spinsCount || 0))
+  const totalDeposit = user?.todayDeposits !== undefined ? user.todayDeposits : 0
+  const spinsLeft = user?.spinsLeft !== undefined ? user.spinsLeft : 0
 
   const [wonPrize, setWonPrize] = useState(null)
   const [showWinModal, setShowWinModal] = useState(false)

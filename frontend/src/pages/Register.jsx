@@ -61,6 +61,10 @@ export default function Register({ onNavigate }) {
       setError('Please fill in all required fields.')
       return
     }
+    if (!/^[a-zA-Z\s]+$/.test(form.name)) {
+      setError('Full name can only contain alphabetic characters and spaces.')
+      return
+    }
     if (cleanPhone.length !== 10) {
       setError('Phone number must be exactly 10 digits.')
       return
@@ -226,7 +230,19 @@ export default function Register({ onNavigate }) {
                 <input
                   type="text"
                   value={form.name}
-                  onChange={(e) => update('name', e.target.value)}
+                  onChange={(e) => {
+                    const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '')
+                    update('name', filtered)
+                  }}
+                  onKeyDown={(e) => {
+                    const key = e.key
+                    const isLetter = /^[a-zA-Z]$/.test(key)
+                    const isAllowedControl = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', ' ', 'Home', 'End'].includes(key)
+                    const isShortcut = e.ctrlKey || e.metaKey
+                    if (!isLetter && !isAllowedControl && !isShortcut) {
+                      e.preventDefault()
+                    }
+                  }}
                   placeholder="John Doe"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-border rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                 />

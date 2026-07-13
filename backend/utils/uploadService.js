@@ -17,8 +17,10 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     // Sanitize naming using timestamp and cryptographically secure random bytes
     const randomHex = crypto.randomBytes(4).toString('hex');
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${randomHex}${fileExt}`);
+    const originalName = file.originalname.toLowerCase();
+    const parts = originalName.split('.');
+    const ext = parts.length > 1 ? '.' + parts[parts.length - 1] : '.png';
+    cb(null, `product_${Date.now()}_${randomHex}${ext}`);
   }
 });
 
@@ -64,9 +66,10 @@ const screenshotStorage = multer.diskStorage({
     cb(null, screenshotDir);
   },
   filename: (req, file, cb) => {
-    const randomHex = crypto.randomBytes(4).toString('hex');
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    cb(null, `appeal-${Date.now()}-${randomHex}${fileExt}`);
+    const originalName = file.originalname.toLowerCase();
+    const parts = originalName.split('.');
+    const ext = parts.length > 1 ? '.' + parts[parts.length - 1] : '.png';
+    cb(null, `appeal_trx_${Date.now()}${ext}`);
   }
 });
 
@@ -101,14 +104,13 @@ export const verifyUploadMagicBytes = (req, res, next) => {
 
       // 1. Strict Filename format & double extension block
       const baseName = file.originalname.toLowerCase();
-      const ext = path.extname(baseName);
-      const forbiddenExts = ['.php', '.js', '.sh', '.exe', '.bat', '.cmd', '.py', '.html', '.htm', '.jsp', '.asp', '.aspx', '.cgi'];
-      
-      const dotCount = (baseName.match(/\./g) || []).length;
-      if (dotCount > 1) {
+      const parts = baseName.split('.');
+      if (parts.length < 2) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        return res.status(400).json({ error: 'Upload rejected: Double extensions are not allowed.' });
+        return res.status(400).json({ error: 'Upload rejected: File has no extension.' });
       }
+      const ext = '.' + parts[parts.length - 1];
+      const forbiddenExts = ['.php', '.js', '.sh', '.exe', '.bat', '.cmd', '.py', '.html', '.htm', '.jsp', '.asp', '.aspx', '.cgi'];
 
       if (forbiddenExts.includes(ext) || baseName.includes('.php') || baseName.includes('.js')) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);

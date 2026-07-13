@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useUser } from '../context/UserContext'
-import { ArrowLeft, ArrowDownRight, ArrowUpRight, Info, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, ArrowDownRight, ArrowUpRight, Info, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Upload, X, Loader2, AlertCircle } from 'lucide-react'
 
 function copyToClipboard(text) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -25,10 +25,133 @@ function copyToClipboard(text) {
 }
 
 export default function TransactionRecords({ onBack }) {
-  const { depositRecords, withdrawRecords, betRecords } = useUser()
+  const { depositRecords, withdrawRecords, betRecords, fetchUserHistory } = useUser()
   const [activeTab, setActiveTab] = useState('deposit')
   const [copiedId, setCopiedId] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
+
+  // Appeal dispute form and toast states
+  const [appealingId, setAppealingId] = useState(null)
+  const [utrNumber, setUtrNumber] = useState('')
+  const [whatsappNumber, setWhatsappNumber] = useState('')
+  const [screenshotFile, setScreenshotFile] = useState(null)
+  const [submittingAppeal, setSubmittingAppeal] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const getDepositStatusLabel = (rec) => {
+    const statusLower = rec.status.toLowerCase();
+    const appealStatusLower = rec.appealStatus ? rec.appealStatus.toLowerCase() : null;
+
+    if (appealStatusLower === 'approved') {
+      return "Approved by the customer service";
+    }
+    if (appealStatusLower === 'rejected') {
+      return "Appeal Rejected";
+    }
+    if (appealStatusLower === 'pending') {
+      return "Appeal Pending";
+    }
+    if (statusLower === 'failed') {
+      return "Deposit Failed";
+    }
+    return rec.status;
+  };
+
+  const getDepositStatusStyles = (rec) => {
+    const statusLower = rec.status.toLowerCase();
+    const appealStatusLower = rec.appealStatus ? rec.appealStatus.toLowerCase() : null;
+
+    if (appealStatusLower === 'approved') {
+      return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    }
+    if (appealStatusLower === 'rejected' || statusLower === 'failed') {
+      return 'bg-red-50 text-red-550 border-red-100';
+    }
+    if (appealStatusLower === 'pending' || statusLower === 'pending') {
+      return 'bg-amber-50 text-amber-600 border-amber-100';
+    }
+    return 'bg-slate-50 text-slate-500 border-slate-200';
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('File size must be under 5MB.', 'error')
+        return
+      }
+      setScreenshotFile(file)
+    }
+  }
+
+  const handleSubmitAppeal = async (e, deposit) => {
+    e.preventDefault()
+    if (!utrNumber.trim()) {
+      showToast('Please enter the 12-digit UTR number.', 'error')
+      return
+    }
+    if (utrNumber.trim().length !== 12) {
+      showToast('UTR number must be exactly 12 digits.', 'error')
+      return
+    }
+    if (!whatsappNumber.trim()) {
+      showToast('Please enter your active WhatsApp number.', 'error')
+      return
+    }
+    if (whatsappNumber.trim().length !== 10) {
+      showToast('WhatsApp phone number must be exactly 10 digits.', 'error')
+      return
+    }
+    if (!screenshotFile) {
+      showToast('Please upload a screenshot of your payment.', 'error')
+      return
+    }
+
+    setSubmittingAppeal(true)
+    const token = localStorage.getItem('token')
+    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+    
+    const formData = new FormData()
+    formData.append('utr', utrNumber.trim())
+    formData.append('whatsapp', whatsappNumber.trim())
+    formData.append('screenshot', screenshotFile)
+    if (deposit?.dbId) {
+      formData.append('depositId', deposit.dbId)
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/payment/appeal`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit payment appeal.')
+      }
+
+      showToast('🎉 Appeal submitted successfully! We will verify it shortly.', 'success')
+      setAppealingId(null)
+      setUtrNumber('')
+      setWhatsappNumber('')
+      setScreenshotFile(null)
+      
+      // Refresh history to update local statuses
+      fetchUserHistory?.()
+    } catch (err) {
+      showToast(err.message, 'error')
+    } finally {
+      setSubmittingAppeal(false)
+    }
+  }
 
   const handleCopy = (id) => {
     copyToClipboard(id)
@@ -37,7 +160,20 @@ export default function TransactionRecords({ onBack }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 pb-6">
+    <div className="flex flex-col min-h-screen bg-slate-50 pb-6 relative">
+      {/* Toast Alert */}
+      {toast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-sm w-[90%] ${
+          toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-500'
+        } text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-[fadeIn_0.2s_ease-out]`}>
+          {toast.type === 'success' ? <Check size={14} /> : <AlertTriangle size={14} />}
+          <span className="flex-1 text-[11px] leading-relaxed">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="text-white hover:opacity-80 border-0 bg-transparent cursor-pointer">
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-4 py-4 flex items-center gap-3">
         <button
@@ -109,58 +245,218 @@ export default function TransactionRecords({ onBack }) {
               <p className="text-[10px] text-slate-400 mt-1">Make a deposit to see your records here.</p>
             </div>
           ) : (
-            depositRecords.map((rec) => (
-              <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm flex items-center gap-3.5 hover:border-slate-300 transition-colors">
-                {/* Left Icon Badge */}
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-                  <ArrowDownRight size={18} />
-                </div>
+            depositRecords.map((rec) => {
+              const showAppealForm = appealingId === rec.id
+              const isAppealable = rec.status.toLowerCase() === 'pending' && (Date.now() - rec.timestamp <= 7 * 24 * 60 * 60 * 1000)
 
-                {/* Middle Column */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-800">Deposit via {rec.method || 'UPI'}</span>
-                    {rec.voucher && (
-                      <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider shrink-0 border border-indigo-100">Voucher</span>
-                    )}
+              return (
+                <div key={rec.id} className={`bg-white border rounded-2xl p-3.5 shadow-sm transition-all ${
+                  showAppealForm ? 'border-indigo-500/50 shadow-md shadow-indigo-500/5' : 'border-slate-200 hover:border-slate-300'
+                }`}>
+                  <div className="flex items-center gap-3.5">
+                    {/* Left Icon Badge */}
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                      <ArrowDownRight size={18} />
+                    </div>
+
+                    {/* Middle Column */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-800">Deposit via {rec.method || 'UPI'}</span>
+                        {rec.voucher && (
+                          <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider shrink-0 border border-indigo-100">Voucher</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-medium mt-0.5">
+                        <span>{rec.date}</span>
+                        <span>•</span>
+                        <span className="font-mono bg-slate-50 px-1 py-0.5 rounded text-slate-500">{rec.id}</span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCopy(rec.id)
+                          }}
+                          className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-650 transition-colors cursor-pointer flex items-center gap-0.5 border-0 bg-transparent"
+                          title="Copy Transaction ID"
+                        >
+                          {copiedId === rec.id ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
+                          {copiedId === rec.id && <span className="text-[8px] text-emerald-650 font-bold">Copied</span>}
+                        </button>
+                      </div>
+                      {rec.voucher && (
+                        <p className="text-[9px] text-indigo-500 font-semibold mt-1">🎟️ code: {rec.voucher}</p>
+                      )}
+                    </div>
+
+                    {/* Right Column (Amount & Status) */}
+                    <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
+                      <span className={`text-sm font-extrabold ${
+                        rec.status.toLowerCase() === 'completed' || (rec.appealStatus && rec.appealStatus.toLowerCase() === 'approved')
+                          ? 'text-emerald-600'
+                          : rec.status.toLowerCase() === 'pending' || (rec.appealStatus && rec.appealStatus.toLowerCase() === 'pending')
+                          ? 'text-amber-600'
+                          : 'text-red-500'
+                      }`}>
+                        +₹{rec.amount.toLocaleString()}
+                      </span>
+                      {rec.bonus > 0 && (
+                        <span className="text-[8px] text-emerald-700 font-black bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                          +₹{rec.bonus} Bonus
+                        </span>
+                      )}
+                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border tracking-wide ${getDepositStatusStyles(rec)}`}>
+                        {getDepositStatusLabel(rec)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-medium mt-0.5">
-                    <span>{rec.date}</span>
-                    <span>•</span>
-                    <span className="font-mono bg-slate-50 px-1 py-0.5 rounded text-slate-500">{rec.id}</span>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCopy(rec.id)
-                      }}
-                      className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-655 transition-colors cursor-pointer flex items-center gap-0.5"
-                      title="Copy Transaction ID"
+
+                  {/* Rejected Appeal Callout Banner */}
+                  {rec.appealStatus === 'rejected' && rec.appealAdminNote && (
+                    <div className="mt-3 p-3.5 bg-red-50/70 border border-red-100 rounded-2xl flex items-start gap-2.5 text-red-850 animate-[fadeIn_0.2s_ease-out] shadow-sm">
+                      <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                      <div className="text-[10px] leading-relaxed text-left">
+                        <span className="font-bold text-red-955 block mb-0.5">Appeal Rejected by Support</span>
+                        <span className="font-semibold">{rec.appealAdminNote}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 7-Day Appeal Trigger Link */}
+                  {isAppealable && !showAppealForm && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setAppealingId(rec.id)
+                          setUtrNumber('')
+                          setWhatsappNumber('')
+                          setScreenshotFile(null)
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-[10px] font-bold text-amber-700 cursor-pointer transition-all outline-none"
+                      >
+                        <AlertTriangle size={12} className="text-amber-600 animate-pulse" />
+                        Appeal Payment
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Dispute Form */}
+                  {showAppealForm && (
+                    <form 
+                      onSubmit={(e) => handleSubmitAppeal(e, rec)} 
+                      className="mt-3.5 pt-3.5 border-t border-slate-100 space-y-3.5 animate-[fadeIn_0.15s_ease-out]"
                     >
-                      {copiedId === rec.id ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
-                      {copiedId === rec.id && <span className="text-[8px] text-emerald-650 font-bold">Copied</span>}
-                    </button>
-                  </div>
-                  {rec.voucher && (
-                    <p className="text-[9px] text-indigo-500 font-semibold mt-1">🎟️ code: {rec.voucher}</p>
-                  )}
-                </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold text-indigo-655 flex items-center gap-1.5 uppercase tracking-wider">
+                          <AlertTriangle size={12} className="text-amber-550 animate-pulse" /> File Payment Appeal
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAppealingId(null)}
+                          className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-655 cursor-pointer border-0 bg-transparent"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
 
-                {/* Right Column (Amount & Status) */}
-                <div className="text-right flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-sm font-extrabold text-emerald-600">
-                    +₹{rec.amount.toLocaleString()}
-                  </span>
-                  {rec.bonus > 0 && (
-                    <span className="text-[8px] text-emerald-700 font-black bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
-                      +₹{rec.bonus} Bonus
-                    </span>
+                      <div className="p-3.5 text-xs rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+                        {/* UTR Input */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider block">
+                            12-Digit UTR Number
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={12}
+                            value={utrNumber}
+                            onChange={(e) => setUtrNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                            placeholder="Enter 12-digit transaction UTR"
+                            className="w-full h-9 px-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 text-slate-800 rounded-xl text-xs placeholder:text-slate-350 focus:outline-none transition-all font-mono"
+                          />
+                        </div>
+
+                        {/* WhatsApp Input */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider block">
+                            WhatsApp Phone Number
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-450 text-[10px] font-bold font-mono">
+                              +91
+                            </span>
+                            <input
+                              type="text"
+                              maxLength={10}
+                              value={whatsappNumber}
+                              onChange={(e) => setWhatsappNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder="Enter active WhatsApp number"
+                              className="w-full h-9 pl-10 pr-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 text-slate-800 rounded-xl text-xs placeholder:text-slate-355 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Screenshot File Upload */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider block">
+                            Recharge Payment Screenshot
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <label className="flex-1 flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50/50 text-slate-500 hover:text-slate-600 cursor-pointer transition-all text-[10px]">
+                              <Upload size={13} className="text-slate-400" />
+                              {screenshotFile ? (
+                                <span className="font-semibold text-indigo-600 truncate max-w-[180px]">{screenshotFile.name}</span>
+                              ) : (
+                                <span>Choose Screenshot Image</span>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileChange}
+                                className="hidden"
+                              />
+                            </label>
+                            {screenshotFile && (
+                              <button
+                                type="button"
+                                onClick={() => setScreenshotFile(null)}
+                                className="w-9 h-9 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 flex items-center justify-center text-red-550 transition-all cursor-pointer"
+                              >
+                                <X size={13} />
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[8px] text-slate-400">Only JPG, PNG and WEBP file types up to 5MB are accepted.</p>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAppealingId(null)}
+                          className="px-3 py-2 rounded-xl text-slate-555 hover:text-slate-700 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 cursor-pointer border-0"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submittingAppeal}
+                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[10px] font-extrabold cursor-pointer border-0 disabled:opacity-50 flex items-center gap-1.5 shadow-md shadow-amber-500/10"
+                        >
+                          {submittingAppeal ? (
+                            <>
+                              <Loader2 size={11} className="animate-spin" />
+                              Filing Appeal...
+                            </>
+                          ) : (
+                            'Submit Appeal'
+                          )}
+                        </button>
+                      </div>
+                    </form>
                   )}
-                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 uppercase tracking-wide">
-                    Completed
-                  </span>
                 </div>
-              </div>
-            ))
+              )
+            })
           )) : activeTab === 'withdraw' ? (
           withdrawRecords.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">

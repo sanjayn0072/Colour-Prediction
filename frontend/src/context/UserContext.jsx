@@ -231,50 +231,7 @@ const INITIAL_PRODUCTS = [
   }
 ]
 
-const INITIAL_VOUCHERS = [
-  {
-    id: 'VOUCH-14JUNE',
-    title: '1% Bonus voucher-june-14',
-    percent: 1,
-    minDeposit: 100,
-    maxReward: 100,
-    rules: [
-      'Minimum Deposit: ₹100',
-      'Get Extra 1% on payment',
-      'Maximum Rewards ₹100'
-    ],
-    expiry: 'Expire At 15/6/2026 10:13:58',
-    countdownText: '11:32:31'
-  },
-  {
-    id: 'VOUCH-SUPER',
-    title: '3% VIP Bonus voucher-super',
-    percent: 3,
-    minDeposit: 500,
-    maxReward: 500,
-    rules: [
-      'Minimum Deposit: ₹500',
-      'Get Extra 3% on payment',
-      'Maximum Rewards ₹500'
-    ],
-    expiry: 'Expire At 16/6/2026 18:00:00',
-    countdownText: '22:45:10'
-  },
-  {
-    id: 'VOUCH-PRO',
-    title: '5% Mega Bonus voucher-pro',
-    percent: 5,
-    minDeposit: 2000,
-    maxReward: 2000,
-    rules: [
-      'Minimum Deposit: ₹2,000',
-      'Get Extra 5% on payment',
-      'Maximum Rewards ₹2,000'
-    ],
-    expiry: 'Expire At 18/6/2026 23:59:59',
-    countdownText: '48:12:05'
-  }
-]
+const INITIAL_VOUCHERS = []
 
 const INITIAL_DEPOSITS = []
 
@@ -503,7 +460,7 @@ export function UserProvider({ children }) {
     const token = localStorage.getItem('token')
     if (!token) return
     try {
-      const [profileRes, txRes, betsRes, withdrawRes] = await Promise.all([
+      const [profileRes, txRes, betsRes, withdrawRes, depositRes, couponRes] = await Promise.all([
         fetch(`${API_BASE}/api/auth/profile`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
@@ -515,11 +472,20 @@ export function UserProvider({ children }) {
         }),
         fetch(`${API_BASE}/api/withdraw/history`, {
           headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/api/payment/history`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/api/wallet/my-coupons`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(err => {
+          console.warn('[Coupons Fetch Network Error]:', err);
+          return { ok: false, json: async () => [] };
         })
       ])
 
       // Intercept 429 rate limit responses gracefully
-      if (profileRes.status === 429 || txRes.status === 429 || betsRes.status === 429 || withdrawRes.status === 429) {
+      if (profileRes.status === 429 || txRes.status === 429 || betsRes.status === 429 || withdrawRes.status === 429 || depositRes.status === 429 || couponRes.status === 429) {
         console.warn('[Rate Limit Warning]: Too many requests. Silently suppressing fetch to prevent rendering loops.');
         return;
       }
@@ -587,22 +553,23 @@ export function UserProvider({ children }) {
         }
       }
 
-      if (txRes.ok) {
-        const txData = await txRes.json()
+      if (depositRes.ok) {
+        const depositData = await depositRes.json()
         
         // Map deposits
-        const deposits = txData
-          .filter(t => t.type === 'deposit')
-          .map(t => ({
-            id: t.referenceId || `DEP-${t._id}`,
-            amount: t.amount,
-            bonus: 0,
-            status: 'Completed',
-            date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-            method: 'UPI',
-            voucher: null,
-            timestamp: new Date(t.createdAt).getTime()
-          }))
+        const deposits = depositData.map(d => ({
+          id: d.transactionId || `DEP-${d.id}`,
+          dbId: d.id,
+          amount: parseFloat(d.amount),
+          bonus: 0,
+          status: d.status,
+          appealStatus: d.appealStatus || null,
+          appealAdminNote: d.appealAdminNote || null,
+          date: new Date(d.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+          method: 'UPI',
+          voucher: d.coupon_code || null,
+          timestamp: new Date(d.createdAt).getTime()
+        }))
 
         setDepositRecords(deposits)
       }
@@ -692,11 +659,67 @@ export function UserProvider({ children }) {
           return [...mappedBetRecords, ...simulatedClaims].sort((a, b) => b.timestamp - a.timestamp)
         })
       }
+
+      if (couponRes.ok) {
+        const couponData = await couponRes.json();
+        const mappedVouchers = couponData.map(uc => {
+          const expiryDate = new Date(uc.expiresAt);
+          const diffMs = expiryDate.getTime() - Date.now();
+          const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+          const hrs = Math.floor(diffSecs / 3600);
+          const mins = Math.floor((diffSecs % 3600) / 60);
+          const secs = diffSecs % 60;
+          const countdown = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          
+          return {
+            id: uc.code,
+            title: uc.type === 'FIRST_DEPOSIT' ? 'Welcome Offer' : 
+                   uc.type === 'GAMEPLAY_FREEBIE' ? 'Gameplay Freebie' : 
+                   uc.type === 'FEE_WAIVER' ? 'Withdraw Fee Waiver' : 
+                   uc.type === 'REACTIVATION' ? 'Reactivation Reward' : 
+                   uc.type === 'LOYALTY' ? 'Loyalty Reward' : 'Retention Reward',
+            type: uc.type,
+            percent: 0,
+            rewardAmount: parseFloat(uc.rewardAmount),
+            minDeposit: parseFloat(uc.minDepositRequired),
+            maxReward: parseFloat(uc.rewardAmount),
+            rules: uc.type === 'GAMEPLAY_FREEBIE' ? [
+              `Directly Claimable!`,
+              `Reward: ₹${uc.rewardAmount} Free Bet Cash`,
+              `No deposit required!`
+            ] : uc.type === 'FEE_WAIVER' ? [
+              `Waives withdrawal fee!`,
+              `Triggers on next withdrawal`
+            ] : [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹${uc.rewardAmount} cash bonus`
+            ],
+            expiry: `Expire At ${expiryDate.toLocaleDateString()} ${expiryDate.toLocaleTimeString()}`,
+            countdownText: countdown
+          };
+        });
+        setVouchers(mappedVouchers);
+      }
     } catch (err) {
       // Only log unexpected errors — not auth failures
       if (!err.message?.includes('401') && !err.message?.includes('Unauthorized')) {
         console.error('Failed to load user history:', err)
       }
+    }
+  }
+
+  const fetchWinLossStats = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return null
+    try {
+      const response = await fetch(`${API_BASE}/api/games/win-loss-stats`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!response.ok) throw new Error('Failed to fetch win loss stats')
+      return await response.json()
+    } catch (err) {
+      console.error('Error fetching win/loss stats:', err)
+      return null
     }
   }
 
@@ -948,26 +971,72 @@ export function UserProvider({ children }) {
   }
 
   const addVoucher = (code) => {
-    const isSpin50 = code === 'SPIN50'
+    let percent = 5;
+    let minDeposit = 100;
+    let maxReward = 100;
+    let title = `Voucher ${code}`;
+
+    if (code === 'LUCKY10') {
+      percent = 10;
+      minDeposit = 200;
+      maxReward = 100;
+      title = '10% Lucky Spin Extra Bonus (LUCKY10)';
+    } else if (code === 'LUCKY15') {
+      percent = 15;
+      minDeposit = 300;
+      maxReward = 150;
+      title = '15% Lucky Spin Extra Bonus (LUCKY15)';
+    } else { // LUCKY5 or default fallback
+      percent = 5;
+      minDeposit = 100;
+      maxReward = 100;
+      title = '5% Lucky Spin Extra Bonus (LUCKY5)';
+    }
+
     const newVoucher = {
       id: `${code}-${Date.now()}`,
-      title: isSpin50 ? '50% Spin Reward Extra Bonus (SPIN50)' : '25% Spin Reward Extra Bonus (LUCKY25)',
-      percent: isSpin50 ? 50 : 25,
-      minDeposit: 100,
-      maxReward: isSpin50 ? 1000 : 500,
+      title,
+      percent,
+      minDeposit,
+      maxReward,
       rules: [
-        'Minimum Deposit: ₹100',
-        `Get Extra ${isSpin50 ? '50%' : '25%'} on payment`,
-        `Maximum Rewards ₹${isSpin50 ? '1,000' : '500'}`
+        `Minimum Deposit: ₹${minDeposit}`,
+        `Get Extra ${percent}% on payment`,
+        `Maximum Rewards ₹${maxReward}`
       ],
-      expiry: 'Expire At 20/6/2026 23:59:59',
-      countdownText: '96:00:00'
+      expiry: 'Expires in 24 hours',
+      countdownText: '24:00:00'
     }
     setVouchers(prev => [newVoucher, ...prev])
   }
 
   const setRole = (role) => {
     setUser((prev) => (prev ? { ...prev, role } : null))
+  }
+
+  const claimFreeVoucher = async (code) => {
+    const token = localStorage.getItem('token')
+    if (!token) return { success: false, error: 'Unauthorized' }
+    try {
+      const res = await fetch(`${API_BASE}/api/payment/coupons/claim`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ couponCode: code })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        fetchUserHistory()
+        return { success: true, message: data.message }
+      } else {
+        return { success: false, error: data.error }
+      }
+    } catch (err) {
+      console.error('Failed to claim voucher:', err)
+      return { success: false, error: 'Failed to connect to server.' }
+    }
   }
 
   return (
@@ -977,7 +1046,7 @@ export function UserProvider({ children }) {
       availableBalance, setAvailableBalance, lockedBalance, setLockedBalance,
       bonusBalance, setBonusBalance,
       deductBalance, addWinnings, addBonus, addDeposit, withdrawReal, addCash,
-      vouchers, setVouchers, addVoucher,
+      vouchers, setVouchers, addVoucher, claimFreeVoucher,
       orders, setOrders,
       unclaimedReferral, setUnclaimedReferral,
       directReferralReward, setDirectReferralReward,
@@ -990,6 +1059,7 @@ export function UserProvider({ children }) {
       betRecords, setBetRecords,
       betsList, setBetsList,
       fetchUserHistory,
+      fetchWinLossStats,
       claimedVipRewards, setClaimedVipRewards,
       wagerMultipliers, saveWagerMultipliers,
       banners, setBanners, addBanner, updateBanner, deleteBanner,

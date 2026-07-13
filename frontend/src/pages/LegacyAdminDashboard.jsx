@@ -430,6 +430,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     TELEGRAM_BOT_TOKEN: '',
     TELEGRAM_CHAT_ID: '',
     PAY0_USER_TOKEN: '',
+    PAY0_WEBHOOK_URL: '',
+    PAY0_REDIRECT_URL: '',
     RENFLAIR_SMS_API_KEY: ''
   });
   const [envLoading, setEnvLoading] = useState(false);
@@ -2757,27 +2759,62 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                         </div>
                       </div>
 
-                      {/* Webhook Callback Link for easy copy/paste */}
+                      {/* Webhook URL - Editable */}
                       <div className="space-y-1 mt-3 pt-3 border-t border-slate-800/40">
-                        <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider block">Gateway Webhook Endpoint</label>
-                        <div className="relative flex items-center bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-[9px] text-slate-350 select-all group">
-                          <span className="truncate flex-1">{window.location.origin}/api/payment/webhook</span>
+                        <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider block">PAY0_WEBHOOK_URL</label>
+                        <div className="relative flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={envConfigs.PAY0_WEBHOOK_URL}
+                            onChange={(e) => handleEnvChange('PAY0_WEBHOOK_URL', e.target.value)}
+                            className="w-full h-9 bg-slate-950 border border-slate-800 focus:border-emerald-500 text-slate-200 rounded-lg text-xs placeholder:text-slate-650 focus:outline-none transition-all pr-10 font-mono"
+                            placeholder={`${window.location.origin}/api/payment/webhook`}
+                          />
                           <button
                             type="button"
                             onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/api/payment/webhook`);
-                              showToast('Webhook URL copied to clipboard!', 'success');
+                              const url = envConfigs.PAY0_WEBHOOK_URL || `${window.location.origin}/api/payment/webhook`;
+                              navigator.clipboard.writeText(url);
+                              showToast('Webhook URL copied!', 'success');
                             }}
-                            className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-450 hover:text-white cursor-pointer border-0 shrink-0 ml-1.5 transition-colors flex items-center justify-center"
+                            className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-450 hover:text-white cursor-pointer border-0 shrink-0 transition-colors flex items-center justify-center"
                             title="Copy Webhook URL"
                           >
-                            <Copy size={10} />
+                            <Copy size={12} />
                           </button>
                         </div>
+                        <p className="text-[8px] text-slate-600 mt-0.5">Leave empty to auto-detect from current domain. Set your production domain URL when going live (e.g. https://yourdomain.com/api/payment/webhook)</p>
+                      </div>
+
+                      {/* Redirect URL - Editable */}
+                      <div className="space-y-1 mt-3">
+                        <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider block">PAY0_REDIRECT_URL</label>
+                        <div className="relative flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={envConfigs.PAY0_REDIRECT_URL}
+                            onChange={(e) => handleEnvChange('PAY0_REDIRECT_URL', e.target.value)}
+                            className="w-full h-9 bg-slate-950 border border-slate-800 focus:border-emerald-500 text-slate-200 rounded-lg text-xs placeholder:text-slate-650 focus:outline-none transition-all pr-10 font-mono"
+                            placeholder={`${window.location.origin}/#/wallet?tab=deposit`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = envConfigs.PAY0_REDIRECT_URL || `${window.location.origin}/#/wallet?tab=deposit`;
+                              navigator.clipboard.writeText(url);
+                              showToast('Redirect URL copied!', 'success');
+                            }}
+                            className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-450 hover:text-white cursor-pointer border-0 shrink-0 transition-colors flex items-center justify-center"
+                            title="Copy Redirect URL"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                        <p className="text-[8px] text-slate-600 mt-0.5">Where users are sent after payment. Leave empty to auto-detect. Set your production URL when going live (e.g. https://yourdomain.com/#/wallet?tab=deposit)</p>
                       </div>
                     </div>
                   </div>
-                  <div className="text-[8px] text-slate-600 mt-5 pt-3 border-t border-slate-800/40">Authenticates secure client redirects and status queries.</div>
+                  <div className="text-[8px] text-slate-600 mt-5 pt-3 border-t border-slate-800/40">Webhook and redirect URLs auto-detect from your current domain. Set production URLs before going live.</div>
                 </div>
 
                 {/* SMS OTP Gateway */}
@@ -4485,7 +4522,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                     { id: 'yield', label: 'Yield & Rules' },
                     { id: 'limits', label: 'Bet Limits' },
                     { id: 'jackpot', label: 'Jackpot Counter' },
-                    { id: 'rng', label: 'RNG & Crypto' },
                     { id: 'engines', label: 'Active Engines' }
                   ].map(tab => (
                     <button
@@ -4507,52 +4543,14 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
             {/* INNER TAB: YIELD & RULES */}
             {gameCenterTab === 'yield' && (
               <div className="space-y-6">
-                {/* Yield sliders */}
                 <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-2xl p-5 shadow-sm space-y-5">
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                     <TrendingUp size={14} className="text-emerald-400" />
-                    RTP Target & House Edge
+                    Custom Multiplier Rules
                   </h3>
                   
                   <form onSubmit={handleApplyGameCenterConfigs} className="space-y-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2.5">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span className="text-slate-350">Platform RTP Target</span>
-                          <span className="text-emerald-400 font-mono">{rtpTarget}%</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="80" 
-                          max="99" 
-                          step="0.5"
-                          value={rtpTarget} 
-                          onChange={(e) => setRtpTarget(parseFloat(e.target.value))}
-                          className="w-full accent-indigo-500 h-1.5 bg-slate-950 rounded-lg cursor-pointer"
-                        />
-                        <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
-                          <span>House Advantage (20%)</span>
-                          <span>Fair Play (1%)</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block">Settlement Strategy</label>
-                        <select
-                          value={settlementMode}
-                          onChange={(e) => setSettlementMode(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                        >
-                          <option value="auto">Auto RNG (Standard Provably Fair Mode)</option>
-                          <option value="house">House Priority (Max Profit Margin Optimizer)</option>
-                          <option value="manual">Manual Override Mode (Strict Operator Control)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
-                      <h4 className="text-[10px] font-black text-slate-450 uppercase tracking-widest">Custom Multiplier Rules</h4>
-                      
+                    <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="bg-slate-955/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
                           <div className="flex justify-between text-[10px] font-bold">
@@ -4616,39 +4614,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                             onChange={(e) => setDiceHouseFee(parseFloat(e.target.value))}
                             className="w-full accent-indigo-500 h-1 bg-slate-900 rounded cursor-pointer"
                           />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-800/50 pt-4 space-y-3">
-                      <h4 className="text-[10px] font-black text-slate-450 uppercase tracking-widest">Strict Mode Profit Override Rules</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-slate-955/60 p-3 rounded-xl border border-slate-800 space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-400 block">Colour Prediction Win Strategy</label>
-                          <select
-                            value={colourWinRule}
-                            onChange={(e) => setColourWinRule(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
-                          >
-                            <option value="rng">RNG Default (Fair outcome)</option>
-                            <option value="least_bet">Force Least Betting Choice (House Profit Maximized)</option>
-                            <option value="violet_only">Force Violet outcomes (High House Margin)</option>
-                            <option value="red_only">Force Red outcomes</option>
-                            <option value="green_only">Force Green outcomes</option>
-                          </select>
-                        </div>
-
-                        <div className="bg-slate-955/60 p-3 rounded-xl border border-slate-800 space-y-1.5">
-                          <label className="text-[9px] font-bold text-slate-400 block">Dice Game Pro Win Strategy</label>
-                          <select
-                            value={diceWinRule}
-                            onChange={(e) => setDiceWinRule(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
-                          >
-                            <option value="rng">RNG Default (Fair outcome)</option>
-                            <option value="least_payout">Force Least Payout Number (Reduce House Loss)</option>
-                            <option value="force_multiplier">Limit Multipliers below 5.0x</option>
-                          </select>
                         </div>
                       </div>
                     </div>
@@ -4809,7 +4774,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                       </p>
                     </div>
                   </div>
-
                   <div className="flex justify-end pt-2">
                     <button
                       type="submit"
@@ -4820,95 +4784,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                     </button>
                   </div>
                 </form>
-              </div>
-            )}
-
-            {/* INNER TAB: RNG & CRYPTO */}
-            {gameCenterTab === 'rng' && (
-              <div className="space-y-6">
-                {/* Rotator module */}
-                <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-2xl p-5 shadow-sm space-y-4">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                    <div>
-                      <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                        <Shield size={14} className="text-teal-400" />
-                        Provably Fair Seed Generator
-                      </h3>
-                      <p className="text-[9px] text-slate-500 mt-0.5">
-                        Generate cryptographic seeds. Rotating server seeds seals past game histories for audit verification.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRotateServerSeed}
-                      disabled={isRotatingSeed}
-                      className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 border-0"
-                    >
-                      <RefreshCw size={13} className={isRotatingSeed ? 'animate-spin' : ''} />
-                      {isRotatingSeed ? 'Generating Seeds...' : 'Rotate Server Seed'}
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 text-xs font-mono">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-slate-955/60 p-3.5 rounded-xl border border-slate-800/80">
-                        <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">Active Server Seed (Private)</span>
-                        <span className="text-[10px] text-slate-300 break-all">{activeServerSeed}</span>
-                      </div>
-
-                      <div className="bg-slate-955/60 p-3.5 rounded-xl border border-slate-800/80">
-                        <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">Public Server Seed Hash (Client-Facing)</span>
-                        <span className="text-[10px] text-slate-300 break-all">{publicSeedHash}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div className="bg-slate-955/60 p-3.5 rounded-xl border border-slate-800/80">
-                        <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">Client Seed</span>
-                        <span className="text-[10px] text-slate-350">{activeClientSeed}</span>
-                      </div>
-
-                      <div className="bg-slate-955/60 p-3.5 rounded-xl border border-slate-800/80">
-                        <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">Nonce Index</span>
-                        <span className="text-[10px] text-slate-350">{seedNonce}</span>
-                      </div>
-
-                      <div className="bg-slate-955/60 p-3.5 rounded-xl border border-slate-800/80 col-span-2 md:col-span-1">
-                        <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">Hash Algorithm</span>
-                        <span className="text-[10px] text-teal-400">HMAC-SHA256</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Seed Rotation History */}
-                <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-2xl p-5 shadow-sm space-y-4">
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Seed Archive & Rotation Log
-                  </h3>
-                  <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl overflow-hidden">
-                    <table className="w-full text-left border-collapse text-xs font-mono">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/60 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                          <th className="px-4 py-3">Rotation Timestamp</th>
-                          <th className="px-4 py-3">Archived Server Seed</th>
-                          <th className="px-4 py-3">Client Seed</th>
-                          <th className="px-4 py-3 text-right">Final Nonce</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 text-[10px] text-slate-400">
-                        {seedHistory.map((history, idx) => (
-                          <tr key={idx} className="hover:bg-slate-900/20 transition-colors">
-                            <td className="px-4 py-2.5 text-slate-300 font-sans">{history.timestamp}</td>
-                            <td className="px-4 py-2.5 break-all text-slate-500 font-mono text-[9px]">{history.serverSeed}</td>
-                            <td className="px-4 py-2.5 text-slate-500">{history.clientSeed}</td>
-                            <td className="px-4 py-2.5 text-right font-sans text-slate-300">{history.nonce}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </div>
             )}
 

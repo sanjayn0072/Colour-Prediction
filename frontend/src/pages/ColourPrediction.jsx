@@ -40,6 +40,7 @@ const NUMBER_COLOR_MAP = {
 export default function ColourPrediction({ onNavigate, routeData }) {
   const { user, balance, setRealBalance, betsList, fetchUserHistory } = useUser()
   const [multipliers, setMultipliers] = useState({ green: 1.9, violet: 4.5, red: 1.9 });
+  const [gameActiveStates, setGameActiveStates] = useState({});
 
   useEffect(() => {
     const fetchMultipliers = async () => {
@@ -53,6 +54,9 @@ export default function ColourPrediction({ onNavigate, routeData }) {
             violet: data.violet || 4.5,
             red: data.red || 1.9
           });
+          if (data.activeStates) {
+            setGameActiveStates(data.activeStates);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch dynamic multipliers:', err);
@@ -119,6 +123,8 @@ export default function ColourPrediction({ onNavigate, routeData }) {
 
   // --- Admin Live Metrics Overlay State ---
   const [liveMetrics, setLiveMetrics] = useState({});
+  const [activeUsers, setActiveUsers] = useState(0);
+  const [dailyPayout, setDailyPayout] = useState(0);
   const [adminConfirmModal, setAdminConfirmModal] = useState(null); // { type, val }
 
   // Global toast notification engine state
@@ -153,10 +159,18 @@ export default function ColourPrediction({ onNavigate, routeData }) {
     if (isAdmin && socket) {
       socket.on('live_bet_metrics', (data) => {
          const currentRoundId = colourSessions[activeSession]?.gameId;
-         if (data && data.colour && data.colour[currentRoundId]) {
-           setLiveMetrics(data.colour[currentRoundId]);
-         } else {
-           setLiveMetrics({});
+         if (data) {
+           if (data.colour && data.colour[currentRoundId]) {
+             setLiveMetrics(data.colour[currentRoundId]);
+           } else {
+             setLiveMetrics({});
+           }
+           if (data.activeUsers !== undefined) {
+             setActiveUsers(data.activeUsers);
+           }
+           if (data.dailyPayout !== undefined) {
+             setDailyPayout(data.dailyPayout);
+           }
          }
       });
     }
@@ -323,13 +337,70 @@ export default function ColourPrediction({ onNavigate, routeData }) {
         }
 
         if (hasActiveBets) {
-          const netGain = totalWon - totalInvested;
-          const userWon = netGain >= 0;
-          setToastResult({
+          const netGain = parseFloat((totalWon - totalInvested).toFixed(2));
+          const userWon = totalWon > 0;
+          
+          const roundBetsMapped = currentBets
+            .filter(bet => {
+              const betRoundId = bet.roundId || bet.round_id || bet.gameRoundId || bet.game_round_id;
+              return String(betRoundId) === String(data.gameId);
+            })
+            .map(bet => {
+              const amount = getBetAmount(bet);
+              const bType = getBetType(bet);
+              const bVal = getBetValue(bet);
+              
+              let won = false;
+              let multiplier = parseFloat(bet.multiplier || bet.payout_multiplier || multipliers.green);
+              if (bType === 'number') {
+                won = parseInt(bVal, 10) === data.outcome;
+                multiplier = 8.0;
+              } else if (bType === 'colour') {
+                const chosenColor = String(bVal).toLowerCase();
+                const winColor = String(data.details.colour).toLowerCase();
+                const winNum = data.outcome;
+
+                if (winNum === 5) {
+                  if (chosenColor === 'violet') {
+                    won = true;
+                    multiplier = multipliers.violet;
+                  } else if (chosenColor === 'green') {
+                    won = true;
+                    multiplier = parseFloat((multipliers.green * 0.75).toFixed(2));
+                  }
+                } else if (winNum === 10 || winNum === 0) {
+                  if (chosenColor === 'violet') {
+                    won = true;
+                    multiplier = multipliers.violet;
+                  } else if (chosenColor === 'red') {
+                    won = true;
+                    multiplier = parseFloat((multipliers.red * 0.75).toFixed(2));
+                  }
+                } else {
+                  won = chosenColor === winColor;
+                  multiplier = chosenColor === 'violet' ? multipliers.violet : (chosenColor === 'green' ? multipliers.green : multipliers.red);
+                }
+              }
+              
+              return {
+                type: bType,
+                value: bVal,
+                amount,
+                won,
+                payout: won ? parseFloat((amount * multiplier).toFixed(2)) : 0
+              };
+            });
+
+          setRoundResultPopup({
             won: userWon,
-            amount: Math.abs(netGain)
+            period: data.gameId,
+            winColor: data.details.colour,
+            winNumber: data.outcome,
+            bets: roundBetsMapped,
+            wager: totalInvested,
+            payout: totalWon,
+            netProfit: netGain
           });
-          setTimeout(() => setToastResult(null), 4000);
         }
       }
     }
@@ -474,12 +545,15 @@ export default function ColourPrediction({ onNavigate, routeData }) {
     return selectedTargets.some((t) => t.type === type && t.value === val)
   }
 
+  const activeGameKey = `colour_${activeSession}`;
+  const isCurrentSessionActive = gameActiveStates[activeGameKey] !== false;
+
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-slate-800 font-sans pb-20 relative select-none">
       {/* Floating Rules Button aligned symmetrically with back button */}
       <button
         onClick={() => setShowRules(true)}
-        className="absolute -top-12 right-4 z-40 w-10 h-10 rounded-full bg-slate-950/60 hover:bg-slate-900/80 flex items-center justify-center border border-slate-800 shadow-lg backdrop-blur-sm cursor-pointer text-slate-300 hover:text-white transition-all active:scale-95"
+        className="absolute -top-12 right-4 z-40 w-10 h-10 rounded-full bg-white hover:bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm cursor-pointer text-slate-650 hover:text-slate-800 transition-all active:scale-95"
         title="Rules"
       >
         <HelpCircle size={20} />
@@ -527,35 +601,52 @@ export default function ColourPrediction({ onNavigate, routeData }) {
       {/* ADMIN HUD OVERLAY */}
       {isAdmin && (
         <div className="px-4 pt-4 relative z-10">
-          <div className="bg-gray-900/95 border border-red-500/50 rounded-2xl p-4 relative overflow-hidden backdrop-blur-xl shadow-lg">
-             <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-widest shadow-md">
-               ADMIN HUD ACTIVE
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 relative overflow-hidden shadow-md shadow-slate-100/80">
+             <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold px-3 py-1 rounded-bl-lg tracking-widest uppercase shadow-sm">
+                ADMIN HUD ACTIVE
              </div>
-             <h3 className="text-white font-bold mb-3 text-sm flex items-center gap-2">
-               <Shield size={16} className="text-red-500" /> LIVE CASH POOL AGGREGATES
+             <h3 className="text-slate-850 font-bold mb-3 text-sm flex items-center gap-2">
+                <Shield size={16} className="text-red-600 animate-pulse" /> LIVE CASH POOL AGGREGATES
              </h3>
              <div className="flex gap-3 mb-4">
-                <button onClick={() => handleAdminOverride('colour', 'red')} className={`flex-1 bg-red-500/20 hover:bg-red-500/40 border ${shouldHighlight('colour', 'red') ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-red-500/30'} rounded-xl p-2 transition-all cursor-pointer`}>
-                   <div className="text-red-400 font-bold text-xs">🔴 RED</div>
-                   <div className="text-white font-mono mt-1">₹{liveMetrics.red || 0}</div>
+                <button onClick={() => handleAdminOverride('colour', 'red')} className={`flex-1 bg-red-50 hover:bg-red-100/70 border ${shouldHighlight('colour', 'red') ? 'border-red-500 ring-2 ring-red-400' : 'border-red-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
+                   <div className="text-red-600 font-bold text-xs">🔴 RED</div>
+                   <div className="text-slate-800 font-mono font-bold mt-1">₹{liveMetrics.red || 0}</div>
                 </button>
-                <button onClick={() => handleAdminOverride('colour', 'green')} className={`flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 border ${shouldHighlight('colour', 'green') ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-emerald-500/30'} rounded-xl p-2 transition-all cursor-pointer`}>
-                   <div className="text-emerald-400 font-bold text-xs">🟢 GREEN</div>
-                   <div className="text-white font-mono mt-1">₹{liveMetrics.green || 0}</div>
+                <button onClick={() => handleAdminOverride('colour', 'green')} className={`flex-1 bg-emerald-50 hover:bg-emerald-100/70 border ${shouldHighlight('colour', 'green') ? 'border-emerald-500 ring-2 ring-emerald-400' : 'border-emerald-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
+                   <div className="text-emerald-600 font-bold text-xs">🟢 GREEN</div>
+                   <div className="text-slate-800 font-mono font-bold mt-1">₹{liveMetrics.green || 0}</div>
                 </button>
-                <button onClick={() => handleAdminOverride('colour', 'violet')} className={`flex-1 bg-purple-500/20 hover:bg-purple-500/40 border ${shouldHighlight('colour', 'violet') ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-purple-500/30'} rounded-xl p-2 transition-all cursor-pointer`}>
-                   <div className="text-purple-400 font-bold text-xs">🟣 VIOLET</div>
-                   <div className="text-white font-mono mt-1">₹{liveMetrics.violet || 0}</div>
+                <button onClick={() => handleAdminOverride('colour', 'violet')} className={`flex-1 bg-purple-50 hover:bg-purple-100/70 border ${shouldHighlight('colour', 'violet') ? 'border-purple-500 ring-2 ring-purple-400' : 'border-purple-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
+                   <div className="text-purple-600 font-bold text-xs">🟣 VIOLET</div>
+                   <div className="text-slate-800 font-mono font-bold mt-1">₹{liveMetrics.violet || 0}</div>
                 </button>
              </div>
              
              <div className="grid grid-cols-5 gap-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                  <button onClick={() => handleAdminOverride('number', num)} key={num} className={`bg-gray-800 hover:bg-gray-700 border ${shouldHighlight('number', num) ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-gray-700'} rounded-lg p-2 text-center transition-all cursor-pointer`}>
-                    <div className="text-gray-400 font-bold text-xs"># {num}</div>
-                    <div className="text-white font-mono text-[10px] mt-1">₹{liveMetrics[num] || 0}</div>
+                  <button onClick={() => handleAdminOverride('number', num)} key={num} className={`bg-slate-50 hover:bg-slate-100 border ${shouldHighlight('number', num) ? 'border-indigo-500 ring-2 ring-indigo-400' : 'border-slate-200'} rounded-lg p-2 text-center transition-all cursor-pointer`}>
+                    <div className="text-slate-600 font-bold text-[10px]"># {num}</div>
+                    <div className="text-slate-800 font-mono font-bold text-[10px] mt-0.5">₹{liveMetrics[num] || 0}</div>
                   </button>
                 ))}
+             </div>
+
+             {/* Live Analytics Dashboard Details */}
+             <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-slate-100">
+               <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                 <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Active Users</div>
+                 <div className="text-xs font-extrabold text-slate-700 mt-0.5">{activeUsers.toLocaleString()} Players</div>
+               </div>
+               <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                 <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">24h Payouts</div>
+                 <div className="text-xs font-extrabold text-slate-700 mt-0.5">₹{dailyPayout.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+               </div>
+             </div>
+
+             <div className="mt-3 flex items-center justify-center gap-1.5 bg-emerald-50/50 border border-emerald-100 rounded-lg py-1.5 px-3">
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+               <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">100% Provably Fair Cryptographic Algorithm</span>
              </div>
           </div>
         </div>
@@ -616,9 +707,53 @@ export default function ColourPrediction({ onNavigate, routeData }) {
       </div>
       
       <div className="flex-1 flex flex-col px-4 pt-4 space-y-4">
-        
-        {/* ── MAIN GAME PANEL ── */}
-        <div className="bg-white border border-slate-200/60 rounded-3xl p-5 shadow-sm relative overflow-hidden flex flex-col space-y-4">
+        {!isCurrentSessionActive ? (
+          <div className="bg-slate-900 border border-slate-850 rounded-3xl p-8 text-center space-y-6 shadow-xl relative overflow-hidden my-auto">
+            {/* Cute Animated Maintenance Robot */}
+            <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 bg-indigo-500/10 rounded-full animate-ping opacity-45" style={{ animationDuration: '3s' }} />
+              <svg viewBox="0 0 100 100" className="w-20 h-20 relative z-10">
+                {/* Antenna */}
+                <line x1="50" y1="22" x2="50" y2="10" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="50" cy="8" r="4.5" fill="#a855f7" className="animate-pulse" />
+                
+                {/* Head */}
+                <rect x="22" y="22" width="56" height="46" rx="14" fill="#0f172a" stroke="#6366f1" strokeWidth="2.5" />
+                
+                {/* Eyes */}
+                <rect x="31" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
+                <circle cx="38" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
+                
+                <rect x="55" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
+                <circle cx="62" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
+                
+                {/* Cute curve */}
+                <path d="M 43 55 Q 50 59 57 55" fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+                
+                {/* Buttons */}
+                <circle cx="28" cy="56" r="2" fill="#ef4444" />
+                <circle cx="72" cy="56" r="2" fill="#22c55e" />
+              </svg>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white tracking-tight">Session under maintenance</h2>
+              <p className="text-slate-400 text-xs leading-relaxed text-slate-300">
+                The {activeSession} Colour Prediction session is under maintenance. Please try again later.
+              </p>
+            </div>
+            
+            <button
+              onClick={() => onNavigate?.('home')}
+              className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-black rounded-xl shadow-md cursor-pointer transition-all active:scale-98 border-0 outline-none uppercase tracking-wider"
+            >
+              Back to Home
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* ── MAIN GAME PANEL ── */}
+            <div className="bg-white border border-slate-200/60 rounded-3xl p-5 shadow-sm relative overflow-hidden flex flex-col space-y-4">
           
           {/* Error Toast Overlay */}
           {errorToast && (
@@ -1193,8 +1328,9 @@ export default function ColourPrediction({ onNavigate, routeData }) {
             </div>
           )}
         </div>
-
-      </div>
+      </>
+    )}
+  </div>
 
       {/* Round Result Popup Overlay */}
       {roundResultPopup && (

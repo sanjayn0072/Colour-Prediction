@@ -12,7 +12,6 @@ import Notifications from './pages/Notifications'
 import Profile from './pages/Profile'
 import WalletPage from './pages/Wallet'
 import DepositGateway from './pages/DepositGateway'
-import DepositHistory from './pages/DepositHistory'
 import TransactionRecordsPage from './pages/TransactionRecords'
 import Support from './pages/Support'
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
@@ -262,8 +261,7 @@ function AppContent() {
         return <TransactionRecordsPage onBack={() => handleNavigate('wallet')} />
       case 'depositGateway':
         return <DepositGateway depositData={routeData} onBack={() => handleNavigate('wallet')} onNavigate={handleNavigate} />
-      case 'depositHistory':
-        return <DepositHistory onBack={() => handleNavigate('wallet')} />
+
       case 'support':
         return <Support onNavigate={handleNavigate} />
       case 'profile':
@@ -292,7 +290,7 @@ function AppContent() {
   }
 
   // Hide nav bar on certain pages
-  const hideNav = ['depositGateway', 'transactionRecords', 'depositHistory', 'admin'].includes(activePage)
+  const hideNav = ['depositGateway', 'transactionRecords', 'admin'].includes(activePage)
   const isAdminLayout = activePage === 'admin'
 
   return (

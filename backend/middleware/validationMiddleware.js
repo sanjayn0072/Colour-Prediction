@@ -22,7 +22,10 @@ export const validate = (schema) => (req, res, next) => {
 
 export const sendOtpSchema = z.object({
   body: z.object({
-    name: z.string().trim().min(2, 'Name must be at least 2 characters'),
+    name: z.string()
+      .min(2, "Name must be at least 2 characters long")
+      .max(50, "Name cannot exceed 50 characters")
+      .regex(/^[a-zA-Z\s]+$/, "Name can only contain alphabetic characters and spaces"),
     phone: z.string().trim().regex(/^\+?\d{10,15}$/, 'Phone number must be a valid format'),
     email: z.union([z.string().trim().email('Invalid email address'), z.literal('')]).optional().nullable(),
     password: z.string().min(6, 'Password must be at least 6 characters')
@@ -31,7 +34,10 @@ export const sendOtpSchema = z.object({
 
 export const verifyRegisterSchema = z.object({
   body: z.object({
-    name: z.string().trim().min(2, 'Name must be at least 2 characters'),
+    name: z.string()
+      .min(2, "Name must be at least 2 characters long")
+      .max(50, "Name cannot exceed 50 characters")
+      .regex(/^[a-zA-Z\s]+$/, "Name can only contain alphabetic characters and spaces"),
     phone: z.string().trim().regex(/^\+?\d{10,15}$/, 'Phone number must be a valid format'),
     email: z.union([z.string().trim().email('Invalid email address'), z.literal('')]).optional().nullable(),
     password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -41,7 +47,10 @@ export const verifyRegisterSchema = z.object({
 
 export const verifyEmailSchema = z.object({
   body: z.object({
-    name: z.string().trim().min(2, 'Name must be at least 2 characters'),
+    name: z.string()
+      .min(2, "Name must be at least 2 characters long")
+      .max(50, "Name cannot exceed 50 characters")
+      .regex(/^[a-zA-Z\s]+$/, "Name can only contain alphabetic characters and spaces"),
     phone: z.string().trim().regex(/^\+?\d{10,15}$/, 'Phone number must be a valid format'),
     email: z.union([z.string().trim().email('Invalid email address'), z.literal('')]).optional().nullable(),
     password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -184,6 +193,8 @@ export const updateSuperAdminConfigSchema = z.object({
     TELEGRAM_BOT_TOKEN: z.string().trim().max(500).optional(),
     TELEGRAM_CHAT_ID: z.string().trim().max(100).optional(),
     PAY0_USER_TOKEN: z.string().trim().max(500).optional(),
+    PAY0_WEBHOOK_URL: z.string().trim().max(500).optional(),
+    PAY0_REDIRECT_URL: z.string().trim().max(500).optional(),
     RENFLAIR_SMS_API_KEY: z.string().trim().max(500).optional()
   })
 });
@@ -263,7 +274,7 @@ export const updateGameStatusSchema = z.object({
     id: z.string().regex(/^\d+$/, 'Game ID must be numeric')
   }),
   body: z.object({
-    is_active: z.union([z.boolean(), z.number().int().min(0).max(1)]).transform((val) => !!val)
+    isActive: z.boolean()
   })
 });
 
@@ -338,5 +349,15 @@ export const arcadeBetSchema = z.object({
       errorMap: () => ({ message: 'Status must be pending, win, lose, or cancelled' })
     }).default('pending'),
     gameMetadata: z.record(z.any()).optional().nullable()
+  })
+});
+
+export const profileUpdateSchema = z.object({
+  body: z.object({
+    name: z.undefined({
+      invalid_type_error: "Full Name is immutable and cannot be updated."
+    }),
+    avatar: z.string().trim().optional(),
+    email: z.string().trim().email('Invalid email address format').optional().nullable().or(z.literal(''))
   })
 });

@@ -156,7 +156,24 @@ export const createWithdrawal = async (req, res) => {
       return res.status(400).json({ success: false, message: 'You already have a pending withdrawal request.' });
     }
 
-    const processingFee = calculateWithdrawalFee(withdrawalAmount);
+    let processingFee = calculateWithdrawalFee(withdrawalAmount);
+    let usedCouponId = null;
+
+    // Check for an active FEE_WAIVER coupon
+    const [feeWaivers] = await connection.query(
+      'SELECT uc.id, c.code ' +
+      'FROM user_coupons uc ' +
+      'JOIN coupons c ON uc.coupon_id = c.id ' +
+      'WHERE uc.user_id = ? AND c.type = "FEE_WAIVER" AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+      'LIMIT 1 FOR UPDATE',
+      [req.user.id]
+    );
+
+    if (feeWaivers && feeWaivers.length > 0) {
+      processingFee = 0;
+      usedCouponId = feeWaivers[0].id;
+    }
+
     const totalDebitAmount = Number(withdrawalAmount) + Number(processingFee);
 
     // C. Check sufficient available balance
@@ -208,8 +225,13 @@ export const createWithdrawal = async (req, res) => {
       [req.user.id, wallet.id, -processingFee, insertResult.insertId, balanceAfterPayout, newAvailable, `Withdrawal processing fee debit: ${withdrawalId}`]
     );
 
-    // Write log
-    logger.info(`Withdrawal request created: ${withdrawalId} for User ID ${req.user.id} (amount: ₹${withdrawalAmount}, fee: ₹${processingFee})`);
+    // Mark user coupon as USED if applicable
+    if (usedCouponId) {
+      await connection.query(
+        'UPDATE user_coupons SET status = "USED" WHERE id = ?',
+        [usedCouponId]
+      );
+    }
 
     await connection.commit();
 

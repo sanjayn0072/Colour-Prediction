@@ -49,7 +49,8 @@ import {
   createBannerSchema,
   createComplaintSchema,
   chatWithSupportSchema,
-  markAsReadSchema
+  markAsReadSchema,
+  profileUpdateSchema
 } from './middleware/validationMiddleware.js';
 
 // Controllers
@@ -63,6 +64,10 @@ import * as adminController from './controllers/adminController.js';
 import * as withdrawalController from './controllers/withdrawalController.js';
 import * as adminAuthController from './controllers/adminAuthController.js';
 import depositRoutes from './routes/depositRoutes.js';
+import * as depositController from './controllers/depositController.js';
+import { startBehavioralRewardsWorker } from './utils/rewardsWorker.js';
+import { logSuspiciousNameChange } from './utils/riskEngine.js';
+import { sendSuspiciousNameChangeAlert } from './utils/telegram.js';
 
 dotenv.config();
 
@@ -131,15 +136,19 @@ app.post('/api/auth/login', authRateLimiter, validate(loginSchema), authControll
 app.get('/api/auth/referrals', protect, authenticatedActionLimiter, authController.getReferralSignups);
 app.post('/api/auth/firebase-login', authRateLimiter, validate(firebaseLoginSchema), authController.firebaseLogin);
 app.get('/api/auth/profile', protect, authenticatedActionLimiter, authController.getProfile);
-app.put('/api/auth/profile', protect, authenticatedActionLimiter, async (req, res) => {
+app.put('/api/auth/profile', protect, authenticatedActionLimiter, validate(profileUpdateSchema), async (req, res) => {
   const { name, avatar, email } = req.body;
   try {
-    if (name !== undefined) {
-      if (!name || name.trim().length === 0) {
-        return res.status(400).json({ error: 'Name is required' });
+    // Double validation / Audit layer: intercept name bypass attempts
+    if (name !== undefined && name !== null) {
+      const attemptedName = String(name).trim();
+      if (attemptedName !== req.user.name) {
+        await logSuspiciousNameChange(req.user.id, req.user.name, attemptedName);
+        await sendSuspiciousNameChangeAlert(req.user.id, req.user.name, req.user.phone, req.user.name, attemptedName);
+        return res.status(400).json({ error: 'Validation failed: Name is immutable.' });
       }
-      await query('UPDATE users SET name = ? WHERE id = ?', [name.trim(), req.user.id]);
     }
+
     if (avatar !== undefined) {
       await query('UPDATE users SET profile_pic = ? WHERE id = ?', [avatar, req.user.id]);
     }
@@ -159,7 +168,7 @@ app.put('/api/auth/profile', protect, authenticatedActionLimiter, async (req, re
         await query('UPDATE users SET email = ? WHERE id = ?', [placeholderEmail, req.user.id]);
       }
     }
-    return res.json({ success: true, name: name?.trim(), avatar, email: email?.trim() });
+    return res.json({ success: true, avatar, email: email?.trim() });
   } catch (err) {
     logger.error(err, 'Failed to update user profile');
     return res.status(500).json({ error: 'Failed to update profile' });
@@ -179,7 +188,7 @@ app.post('/api/wallet/create-deposit-order', protect, walletLimiter, validate(cr
 app.post('/api/wallet/deposit', protect, walletLimiter, validate(depositSchema), walletController.deposit);
 app.get('/api/wallet/transactions', protect, authenticatedActionLimiter, walletController.getTransactions);
 app.post('/api/wallet/claim-vip', protect, walletLimiter, walletController.claimVipReward);
-
+app.get('/api/wallet/my-coupons', protect, authenticatedActionLimiter, depositController.getUserCoupons);
 // ─── MANUAL WITHDRAWAL SYSTEM ENDPOINTS ───
 app.post('/api/withdraw', protect, walletLimiter, validate(withdrawalSchema), withdrawalController.createWithdrawal);
 app.get('/api/withdraw/history', protect, authenticatedActionLimiter, withdrawalController.getWithdrawalHistory);
@@ -191,6 +200,7 @@ app.post('/api/admin/game/overwrite', protect, authenticatedActionLimiter, check
 app.post('/api/games/place-bet', protect, authenticatedActionLimiter, validate(placeBetSchema), gameController.placeBet);
 app.get('/api/games/leaderboard', publicLimiter, gameController.getLeaderboard);
 app.get('/api/games/my-bets', protect, authenticatedActionLimiter, gameController.getMyBets);
+app.get('/api/games/win-loss-stats', protect, authenticatedActionLimiter, gameController.getWinLossStats);
 app.post('/api/games/verify', publicLimiter, gameController.verifyGame);
 app.post('/api/games/spin', protect, authenticatedActionLimiter, gameController.triggerSpin);
 app.get('/api/games/multipliers', publicLimiter, gameController.getPublicMultipliers);
@@ -405,4 +415,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   logger.info(`Zero-Trust server running on port ${PORT}`);
+  startBehavioralRewardsWorker();
 });

@@ -25,11 +25,11 @@ export const gameRegistry = [
   {
     id: 'spin-wheel',
     title: 'Lucky Spin',
-    badge: 'COMING_SOON',
+    badge: 'ACTIVE',
     description: 'Spin the premium wheel of fortune to claim cash rewards and bonus vouchers.',
     icon: '🎡',
-    thumbnail: null,
-    component: null
+    thumbnail: spinWheelThumb,
+    component: React.lazy(() => import('../pages/SpinWheel'))
   },
   {
     id: 'safari-mystery',

@@ -195,6 +195,26 @@ export const verifyOtpRegister = async (req, res) => {
       );
     }
 
+    // Allocate welcome coupon code (WELCOME150)
+    const [welcomeCoupon] = await connection.query(
+      'SELECT id FROM coupons WHERE code = "WELCOME150" LIMIT 1'
+    );
+    if (welcomeCoupon && welcomeCoupon.length > 0) {
+      await connection.query(
+        'INSERT INTO user_coupons (user_id, coupon_id, status, expires_at) VALUES (?, ?, "AVAILABLE", DATE_ADD(NOW(), INTERVAL 7 DAY))',
+        [newUserId, welcomeCoupon[0].id]
+      );
+      
+      // Send coupon allocation notification
+      await createNotification(
+        newUserId,
+        'Welcome Reward Coupon!',
+        'We have allocated a welcome reward coupon WELCOME150 to your account. Apply it on your next deposit of ₹500+ to claim ₹150 cash!',
+        'COUPON',
+        connection
+      );
+    }
+
     await connection.commit();
 
     const token = generateToken(newUserId);
@@ -329,10 +349,24 @@ export const getProfile = async (req, res) => {
 
     // Fetch user statistics
     const statsResult = await query(
-      'SELECT total_deposits, spins_count, orders_count FROM user_stats WHERE user_id = ? LIMIT 1',
+      'SELECT total_deposits, spins_count, orders_count, games_played, total_winnings_won FROM user_stats WHERE user_id = ? LIMIT 1',
       [req.user.id]
     );
-    const stats = statsResult[0] || { total_deposits: 0, spins_count: 0, orders_count: 0 };
+    const stats = statsResult[0] || { total_deposits: 0, spins_count: 0, orders_count: 0, games_played: 0, total_winnings_won: 0 };
+
+    // Fetch today's completed deposits and spins
+    const todayDepositsRows = await query(
+      'SELECT COALESCE(SUM(amount), 0) as todayDeposits FROM deposits WHERE user_id = ? AND status = "completed" AND created_at >= CURDATE()',
+      [req.user.id]
+    );
+    const todayDeposits = parseFloat(todayDepositsRows[0]?.todayDeposits || 0);
+
+    const todaySpinsRows = await query(
+      'SELECT COUNT(*) as todaySpinsUsed FROM spin_rewards WHERE user_id = ? AND created_at >= CURDATE()',
+      [req.user.id]
+    );
+    const todaySpinsUsed = parseInt(todaySpinsRows[0]?.todaySpinsUsed || 0, 10);
+    const todaySpinsLeft = Math.max(0, Math.floor(todayDeposits / 200) - todaySpinsUsed);
 
     return res.json({
       user: {
@@ -360,7 +394,12 @@ export const getProfile = async (req, res) => {
         } : null,
         totalDeposits: parseFloat(stats.total_deposits || 0),
         spinsCount: parseInt(stats.spins_count || 0, 10),
-        ordersCount: parseInt(stats.orders_count || 0, 10)
+        todayDeposits,
+        todaySpinsUsed,
+        spinsLeft: todaySpinsLeft,
+        ordersCount: parseInt(stats.orders_count || 0, 10),
+        gamesPlayed: parseInt(stats.games_played || 0, 10),
+        totalWinnings: parseFloat(stats.total_winnings_won || 0)
       }
     });
   } catch (err) {

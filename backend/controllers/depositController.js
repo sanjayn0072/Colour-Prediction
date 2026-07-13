@@ -3,13 +3,62 @@ import { query, pool } from '../config/db.js';
 import logger from '../utils/logger.js';
 import { createNotification } from '../utils/notifier.js';
 import { decryptConfigValue } from '../utils/configEncryption.js';
+import { sendAdminAlert } from '../utils/telegram.js';
+
+export const getCouponSplit = (code, rewardAmount) => {
+  const cleanCode = String(code).trim().toUpperCase();
+  let cashReward = 0;
+  let bonusReward = 0;
+
+  if (cleanCode === 'WELCOME150') {
+    cashReward = 150.00;
+    bonusReward = 0.00;
+  } else if (cleanCode === 'HIGHROLLER500') {
+    cashReward = 300.00; // 60% of 500
+    bonusReward = 200.00; // 40% of 500
+  } else if (cleanCode === 'CASHBACK200') {
+    cashReward = 140.00; // 70% of 200
+    bonusReward = 60.00; // 30% of 200
+  } else if (cleanCode === 'SURVIVAL100') {
+    cashReward = 25.00;
+    bonusReward = 25.00;
+  } else if (cleanCode === 'FREEBET50') {
+    cashReward = 0.00;
+    // Random claim from ₹5 to ₹30 Free Bonus
+    bonusReward = Math.floor(Math.random() * 26) + 5;
+  } else if (cleanCode === 'COMEBACK200') {
+    cashReward = 120.00; // 60% of 200
+    bonusReward = 80.00; // 40% of 200
+  } else if (cleanCode === 'ACTIVEPLAY50') {
+    cashReward = 45.00; // 90% of 50
+    bonusReward = 5.00; // 10% of 50
+  } else if (cleanCode === 'LOYALTY250') {
+    cashReward = 162.50; // 65% of 250
+    bonusReward = 87.50; // 35% of 250
+  } else if (cleanCode === 'WEEKEND50') {
+    cashReward = 37.50; // 75% of 50
+    bonusReward = 12.50; // 25% of 50
+  } else if (cleanCode === 'RELOAD999') {
+    cashReward = 549.45; // 55% of 999
+    bonusReward = 449.55; // 45% of 999
+  } else {
+    // Default fallback: 100% bonus
+    cashReward = 0.00;
+    bonusReward = parseFloat(rewardAmount || 0);
+  }
+
+  return {
+    cashReward: parseFloat(cashReward.toFixed(2)),
+    bonusReward: parseFloat(bonusReward.toFixed(2))
+  };
+};
 
 /**
  * Phase 1 & Phase 3: Outbound Deposit Execution Engine with Unique Decimals
  * POST /api/payment/create
  */
 export const createDeposit = async (req, res) => {
-  const { amount: targetBaseAmount } = req.body;
+  const { amount: targetBaseAmount, couponCode } = req.body;
 
   if (!targetBaseAmount || isNaN(targetBaseAmount)) {
     return res.status(400).json({ error: 'Deposit amount is required and must be a valid number.' });
@@ -20,27 +69,103 @@ export const createDeposit = async (req, res) => {
     return res.status(400).json({ error: 'Deposit amount must be between ₹100 and ₹50,000.' });
   }
 
+  let uniqueAmount;
+  let orderId;
+  let userToken;
+  let webhookUrl;
+  let redirectUrl;
+
+  const connection = await pool.getConnection();
   try {
-    // 1. Fetch Pay0 user token from database
-    const [configs] = await pool.query(
+    await connection.beginTransaction();
+
+    // 1. Strict row lock to check for recent pending deposits in the last 3 minutes
+    const [recentPending] = await connection.query(
+      'SELECT id, amount, transaction_id, payment_url FROM deposits ' +
+      'WHERE user_id = ? AND status = "pending" AND created_at >= DATE_SUB(NOW(), INTERVAL 3 MINUTE) ' +
+      'LIMIT 1 FOR UPDATE',
+      [req.user.id]
+    );
+
+    if (recentPending && recentPending.length > 0) {
+      let existing = recentPending[0];
+      
+      // Sleep loop to allow concurrent gateway requests to populate the URL (handles React double-mounts)
+      let checkAttempts = 0;
+      while (!existing.payment_url && checkAttempts < 5) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        const [checkAgain] = await connection.query(
+          'SELECT id, amount, transaction_id, payment_url FROM deposits WHERE id = ?',
+          [existing.id]
+        );
+        if (checkAgain && checkAgain.length > 0) {
+          existing = checkAgain[0];
+        }
+        checkAttempts++;
+      }
+
+      if (existing.payment_url) {
+        await connection.rollback();
+        logger.info(`[Pay0 Recovery]: Recovering active pending payment URL for order ${existing.transaction_id}`);
+        return res.json({
+          success: true,
+          payment_url: existing.payment_url,
+          amount: parseFloat(existing.amount),
+          orderId: existing.transaction_id,
+          recovered: true
+        });
+      }
+
+      // If sleep loop exhausted and still no URL, the previous request is orphaned/abandoned.
+      // Mark it as failed so we can proceed to create a fresh order for the user.
+      logger.warn(`[Pay0 Orphan Cleanup]: Pending deposit ${existing.transaction_id} has no payment_url after ${checkAttempts} retries. Marking as failed and creating new order.`);
+      await connection.query(
+        'UPDATE deposits SET status = "failed" WHERE id = ? AND status = "pending"',
+        [existing.id]
+      );
+      // Fall through to create a brand new deposit order below
+    }
+
+    // 2. Validate coupon code if applied
+    if (couponCode) {
+      const [validCoupons] = await connection.query(
+        'SELECT uc.id, c.min_deposit_required ' +
+        'FROM user_coupons uc ' +
+        'JOIN coupons c ON uc.coupon_id = c.id ' +
+        'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() LIMIT 1 FOR UPDATE',
+        [req.user.id, couponCode.trim().toUpperCase()]
+      );
+      if (!validCoupons || validCoupons.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({ error: 'This coupon code is invalid, expired, or already used.' });
+      }
+      const coupon = validCoupons[0];
+      if (baseAmount < parseFloat(coupon.min_deposit_required)) {
+        await connection.rollback();
+        return res.status(400).json({ error: `This coupon requires a minimum deposit of ₹${coupon.min_deposit_required}.` });
+      }
+    }
+
+    // 3. Fetch Pay0 user token from database
+    const [configs] = await connection.query(
       'SELECT config_value FROM system_configs WHERE config_key = "PAY0_USER_TOKEN" LIMIT 1'
     );
-    const userToken = decryptConfigValue(configs[0]?.config_value) || process.env.PAY0_USER_TOKEN;
+    userToken = decryptConfigValue(configs[0]?.config_value) || process.env.PAY0_USER_TOKEN;
     
     if (!userToken) {
-      logger.warn('[Pay0 Integration]: User token (PAY0_USER_TOKEN) is empty or unseeded in system_configs table and process.env.');
+      await connection.rollback();
+      logger.warn('[Pay0 Integration]: User token is empty.');
       return res.status(400).json({ error: 'The deposit gateway is temporarily unavailable. Please contact support.' });
     }
 
-    // 2. Unique Decimal Rule: Randomized deviation between -1.00 and 0.00
+    // 4. Unique Decimal Rule
     let deviation = -Math.random();
-    let uniqueAmount = parseFloat((baseAmount + deviation).toFixed(2));
+    uniqueAmount = parseFloat((baseAmount + deviation).toFixed(2));
     let isUnique = false;
     let attempts = 0;
 
-    // Shift fraction in case of overlap within a 1-rupee range
     while (!isUnique && attempts < 100) {
-      const [existing] = await pool.query(
+      const [existing] = await connection.query(
         'SELECT id FROM deposits WHERE status = "pending" AND amount = ? LIMIT 1',
         [uniqueAmount]
       );
@@ -53,34 +178,41 @@ export const createDeposit = async (req, res) => {
       }
     }
 
-    // Generate Order ID sequence format: RR-DEP-${Date.now()}
-    const orderId = `RR-DEP-${Date.now()}`;
+    orderId = `RR-DEP-${Date.now()}`;
 
-    // 3. Save pending transaction in deposits
-    // We get the default active payment method (UPI) or insert null
-    const [paymentMethods] = await pool.query(
+    // 5. Save pending transaction in deposits
+    const [paymentMethods] = await connection.query(
       'SELECT id FROM payment_methods WHERE type = "upi" LIMIT 1'
     );
     const paymentMethodId = paymentMethods[0]?.id || null;
 
-    await pool.query(
-      'INSERT INTO deposits (user_id, payment_method_id, amount, transaction_id, status) VALUES (?, ?, ?, ?, "pending")',
-      [req.user.id, paymentMethodId, uniqueAmount, orderId]
+    await connection.query(
+      'INSERT INTO deposits (user_id, payment_method_id, amount, transaction_id, status, coupon_code) VALUES (?, ?, ?, ?, "pending", ?)',
+      [req.user.id, paymentMethodId, uniqueAmount, orderId, couponCode ? couponCode.trim().toUpperCase() : null]
     );
 
-    // 4. Outbound server-to-server request via Axios using form-urlencoded headers
-    // Fetch configurable webhook and redirect URLs from system_configs
-    const [webhookConfigs] = await pool.query(
+    // 6. Fetch webhook config URLs
+    const [webhookConfigs] = await connection.query(
       'SELECT config_key, config_value FROM system_configs WHERE config_key IN ("PAY0_WEBHOOK_URL", "PAY0_REDIRECT_URL")'
     );
     const configMap = {};
     webhookConfigs.forEach(row => { configMap[row.config_key] = decryptConfigValue(row.config_value); });
 
-    const webhookUrl = configMap['PAY0_WEBHOOK_URL'] || `${req.protocol}://${req.get('host')}/api/payment/webhook`;
-    const redirectUrl = configMap['PAY0_REDIRECT_URL'] || `${req.protocol}://${req.get('host')}/#/wallet?tab=deposit`;
+    webhookUrl = configMap['PAY0_WEBHOOK_URL'] || `${req.protocol}://${req.get('host')}/api/payment/webhook`;
+    redirectUrl = configMap['PAY0_REDIRECT_URL'] || `${req.protocol}://${req.get('host')}/#/wallet?tab=deposit`;
 
-    logger.info(`[Pay0 Outbound]: Using webhook URL: ${webhookUrl}`);
+    // Commit transaction immediately to release locks before calling outbound payment gateway
+    await connection.commit();
+  } catch (err) {
+    if (connection) await connection.rollback();
+    logger.error(err, 'Failed to initialize database deposit order context');
+    return res.status(500).json({ error: 'Failed to initialize deposit order.' });
+  } finally {
+    connection.release();
+  }
 
+  // 7. Make outbound server-to-server request via Axios
+  try {
     const formData = new URLSearchParams();
     formData.append('customer_mobile', req.user.phone || '9999999999');
     formData.append('customer_name', req.user.name || 'RRClub Player');
@@ -94,7 +226,10 @@ export const createDeposit = async (req, res) => {
 
     const response = await axios.post('https://pay0.shop/api/create-order', formData, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9'
       },
       timeout: 10000
     });
@@ -102,6 +237,8 @@ export const createDeposit = async (req, res) => {
     if (response.data && response.data.status === true) {
       const paymentUrl = response.data.result?.payment_url;
       if (paymentUrl) {
+        logger.info(`[Pay0 Success]: Order ${orderId} created. Payment URL generated successfully.`);
+        await pool.query('UPDATE deposits SET payment_url = ? WHERE transaction_id = ?', [paymentUrl, orderId]);
         return res.json({
           success: true,
           payment_url: paymentUrl,
@@ -111,13 +248,15 @@ export const createDeposit = async (req, res) => {
       }
     }
 
-    // If order creation returned status false, log and throw
+    // If order creation returned status false, mark deposit as failed
     logger.error(`[Pay0 Gateway Error]: ${JSON.stringify(response.data)}`);
+    await pool.query('UPDATE deposits SET status = "failed" WHERE transaction_id = ?', [orderId]);
     return res.status(400).json({ error: response.data?.message || 'Failed to create payment order from gateway.' });
 
   } catch (err) {
-    logger.error(err, 'Failed to initialize deposit order via Pay0');
-    return res.status(500).json({ error: 'Failed to initialize deposit order due to server connection issues.' });
+    logger.error(err, 'Failed to connect to Pay0 Gateway');
+    await pool.query('UPDATE deposits SET status = "failed" WHERE transaction_id = ?', [orderId]);
+    return res.status(500).json({ error: 'Failed to initialize deposit order due to gateway connection issues.' });
   }
 };
 
@@ -179,7 +318,7 @@ export const pay0Webhook = async (req, res) => {
 
       // Lock deposit row to prevent race conditions or duplicate webhook calls
       const [depositRows] = await connection.query(
-        'SELECT id, user_id, amount, status FROM deposits WHERE transaction_id = ? FOR UPDATE',
+        'SELECT id, user_id, amount, status, coupon_code FROM deposits WHERE transaction_id = ? FOR UPDATE',
         [order_id]
       );
 
@@ -201,7 +340,7 @@ export const pay0Webhook = async (req, res) => {
 
       // Lock player wallet row
       const [wallets] = await connection.query(
-        'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+        'SELECT id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? FOR UPDATE',
         [userId]
       );
 
@@ -213,12 +352,47 @@ export const pay0Webhook = async (req, res) => {
 
       const wallet = wallets[0];
       const currentBalance = parseFloat(wallet.balance || 0);
-      const newBalance = parseFloat((currentBalance + depositAmount).toFixed(4));
+      const currentBonusBalance = parseFloat(wallet.bonus_balance || 0);
+      const currentRequiredWager = parseFloat(wallet.required_wager || 0);
+      const currentRequiredBonusWager = parseFloat(wallet.required_bonus_wager || 0);
+
+      // Verify and process coupon code if applied
+      let rewardAmount = 0;
+      let userCouponId = null;
+      let cashReward = 0;
+      let bonusReward = 0;
+
+      if (deposit.coupon_code) {
+        const [userCoupons] = await connection.query(
+          'SELECT uc.id, c.reward_amount, c.min_deposit_required ' +
+          'FROM user_coupons uc ' +
+          'JOIN coupons c ON uc.coupon_id = c.id ' +
+          'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+          'LIMIT 1 FOR UPDATE',
+          [userId, deposit.coupon_code]
+        );
+
+        if (userCoupons && userCoupons.length > 0) {
+          const uCoupon = userCoupons[0];
+          if (depositAmount >= parseFloat(uCoupon.min_deposit_required)) {
+            rewardAmount = parseFloat(uCoupon.reward_amount);
+            userCouponId = uCoupon.id;
+            const split = getCouponSplit(deposit.coupon_code, rewardAmount);
+            cashReward = split.cashReward;
+            bonusReward = split.bonusReward;
+          }
+        }
+      }
+
+      const newBalance = parseFloat((currentBalance + depositAmount + cashReward).toFixed(2));
+      const newBonusBalance = parseFloat((currentBonusBalance + bonusReward).toFixed(2));
+      const newRequiredWager = parseFloat((currentRequiredWager + depositAmount + cashReward).toFixed(2));
+      const newRequiredBonusWager = parseFloat((currentRequiredBonusWager + bonusReward * 10).toFixed(2));
 
       // Update balances
       await connection.query(
-        'UPDATE wallets SET balance = ? WHERE user_id = ?',
-        [newBalance, userId]
+        'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ?, required_bonus_wager = ? WHERE user_id = ?',
+        [newBalance, newBonusBalance, newRequiredWager, newRequiredBonusWager, userId]
       );
 
       // Update deposit record to completed
@@ -227,24 +401,48 @@ export const pay0Webhook = async (req, res) => {
         [deposit.id]
       );
 
-      // Write ledger transaction log
+      // Mark user coupon as USED if successfully verified
+      if (userCouponId) {
+        await connection.query(
+          'UPDATE user_coupons SET status = "USED" WHERE id = ?',
+          [userCouponId]
+        );
+      }
+
+      // Write ledger transaction log for deposit
       await connection.query(
         'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
         'VALUES (?, ?, ?, "deposit", "deposits", ?, ?, ?, ?)',
-        [userId, wallet.id, depositAmount, deposit.id, currentBalance, newBalance, `Pay0 payment order auto-settlement (ID: ${order_id})`]
+        [userId, wallet.id, depositAmount, deposit.id, currentBalance, currentBalance + depositAmount, `Pay0 payment order auto-settlement (ID: ${order_id})`]
       );
 
-      // Update total deposits stats
+      // Write ledger transaction log for coupon cash reward if applicable
+      if (cashReward > 0 && userCouponId) {
+        await connection.query(
+          'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+          'VALUES (?, ?, ?, "bonus_claim", "user_coupons", ?, ?, ?, ?)',
+          [userId, wallet.id, cashReward, userCouponId, currentBalance + depositAmount, newBalance, `Applied coupon cash reward (Code: ${deposit.coupon_code})`]
+        );
+      }
+
+      // Update total deposits & bonus claimed stats
       await connection.query(
-        'UPDATE user_stats SET total_deposits = total_deposits + ? WHERE user_id = ?',
-        [depositAmount, userId]
+        'UPDATE user_stats SET total_deposits = total_deposits + ?, total_bonus_claimed = total_bonus_claimed + ? WHERE user_id = ?',
+        [depositAmount, rewardAmount, userId]
       );
+
+      // Process referral commission reward for the referrer if applicable
+      await processReferralReward(connection, userId);
 
       // Send app notification
+      const notificationMsg = rewardAmount > 0
+        ? `Recharge of ₹${depositAmount} + Coupon reward of ₹${rewardAmount} was successfully verified and credited.`
+        : `Recharge of ₹${depositAmount} was successfully verified and credited to your wallet.`;
+
       await createNotification(
         userId,
         'Wallet Credited!',
-        `Recharge of ₹${depositAmount} was successfully verified and credited to your wallet.`,
+        notificationMsg,
         'WALLET',
         connection
       );
@@ -273,8 +471,23 @@ export const pay0Webhook = async (req, res) => {
  */
 export const getDepositHistory = async (req, res) => {
   try {
+    // 1. Automatic 3-Day (72h) pending deposit expiry query hook
+    await query(
+      'UPDATE deposits d ' +
+      'LEFT JOIN deposit_appeals a ON d.id = a.deposit_id ' +
+      'SET d.status = "failed" ' +
+      'WHERE d.status = "pending" ' +
+      'AND d.created_at < DATE_SUB(NOW(), INTERVAL 72 HOUR) ' +
+      'AND a.id IS NULL'
+    );
+
+    // 2. Query deposits joined with the deposit appeals
     const rows = await query(
-      'SELECT id, amount, transaction_id as transactionId, status, created_at as createdAt FROM deposits WHERE user_id = ? ORDER BY created_at DESC LIMIT 100',
+      'SELECT d.id, d.amount, d.transaction_id as transactionId, d.status, d.created_at as createdAt, ' +
+      'a.status as appealStatus, a.admin_note as appealAdminNote ' +
+      'FROM deposits d ' +
+      'LEFT JOIN deposit_appeals a ON d.id = a.deposit_id ' +
+      'WHERE d.user_id = ? ORDER BY d.created_at DESC LIMIT 100',
       [req.user.id]
     );
     return res.json(rows || []);
@@ -289,7 +502,7 @@ export const getDepositHistory = async (req, res) => {
  * POST /api/payment/appeal
  */
 export const submitAppeal = async (req, res) => {
-  const { utr, whatsapp } = req.body;
+  const { utr, whatsapp, depositId } = req.body;
 
   if (!utr || !whatsapp) {
     return res.status(400).json({ error: 'UTR number and WhatsApp phone number are required.' });
@@ -313,8 +526,8 @@ export const submitAppeal = async (req, res) => {
     const screenshotUrl = `/uploads/screenshots/${req.file.filename}`;
 
     await pool.query(
-      'INSERT INTO deposit_appeals (user_id, utr_number, screenshot_url, whatsapp_number, status) VALUES (?, ?, ?, ?, "pending")',
-      [req.user.id, utr.trim(), screenshotUrl, whatsapp.trim()]
+      'INSERT INTO deposit_appeals (user_id, deposit_id, utr_number, screenshot_url, whatsapp_number, status) VALUES (?, ?, ?, ?, ?, "pending")',
+      [req.user.id, depositId ? parseInt(depositId, 10) : null, utr.trim(), screenshotUrl, whatsapp.trim()]
     );
 
     logger.info(`[Deposit Appeal]: Submitted by User ${req.user.id} for UTR ${utr}`);
@@ -348,36 +561,395 @@ export const getAdminAppeals = async (req, res) => {
  */
 export const resolveAppeal = async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body; // 'approved' or 'rejected'
+  const { status, adminNote } = req.body; // 'approved' or 'rejected'
 
   if (!['approved', 'rejected'].includes(status)) {
     return res.status(400).json({ error: 'Invalid appeal resolution status. Must be approved or rejected.' });
   }
 
+  const connection = await pool.getConnection();
   try {
-    const [appeals] = await pool.query(
-      'SELECT id, status FROM deposit_appeals WHERE id = ? LIMIT 1',
+    await connection.beginTransaction();
+
+    // 1. Lock the appeal row
+    const [appeals] = await connection.query(
+      'SELECT * FROM deposit_appeals WHERE id = ? LIMIT 1 FOR UPDATE',
       [id]
     );
 
     if (!appeals || appeals.length === 0) {
+      await connection.rollback();
+      logger.warn({ id }, 'Appeal record not found during resolution');
       return res.status(404).json({ error: 'Appeal record not found.' });
     }
 
-    if (appeals[0].status !== 'pending') {
+    const appeal = appeals[0];
+    if (appeal.status !== 'pending') {
+      await connection.rollback();
       return res.status(400).json({ error: 'This appeal has already been resolved.' });
     }
 
-    await pool.query(
-      'UPDATE deposit_appeals SET status = ? WHERE id = ?',
-      [status, id]
+    const depositId = appeal.deposit_id;
+    const userId = appeal.user_id;
+
+    if (status === 'approved') {
+      if (!depositId) {
+        await connection.rollback();
+        return res.status(400).json({ error: 'No associated deposit found for this appeal. Cannot auto-approve wallet credit.' });
+      }
+
+      // Lock the deposit row
+      const [deposits] = await connection.query(
+        'SELECT * FROM deposits WHERE id = ? LIMIT 1 FOR UPDATE',
+        [depositId]
+      );
+
+      if (!deposits || deposits.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'Associated deposit record not found.' });
+      }
+
+      const deposit = deposits[0];
+      if (deposit.status === 'completed') {
+        await connection.rollback();
+        return res.status(400).json({ error: 'The deposit is already completed.' });
+      }
+
+      // Lock the wallet row
+      const [wallets] = await connection.query(
+        'SELECT id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? LIMIT 1 FOR UPDATE',
+        [userId]
+      );
+
+      if (!wallets || wallets.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'User wallet not found.' });
+      }
+
+      const wallet = wallets[0];
+      const depositAmount = parseFloat(deposit.amount);
+      const currentBalance = parseFloat(wallet.balance || 0);
+      const currentBonusBalance = parseFloat(wallet.bonus_balance || 0);
+      const currentRequiredWager = parseFloat(wallet.required_wager || 0);
+      const currentRequiredBonusWager = parseFloat(wallet.required_bonus_wager || 0);
+
+      // Verify and process coupon code if applied
+      let rewardAmount = 0;
+      let userCouponId = null;
+      let cashReward = 0;
+      let bonusReward = 0;
+
+      if (deposit.coupon_code) {
+        const [userCoupons] = await connection.query(
+          'SELECT uc.id, c.reward_amount, c.min_deposit_required ' +
+          'FROM user_coupons uc ' +
+          'JOIN coupons c ON uc.coupon_id = c.id ' +
+          'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+          'LIMIT 1 FOR UPDATE',
+          [userId, deposit.coupon_code]
+        );
+
+        if (userCoupons && userCoupons.length > 0) {
+          const uCoupon = userCoupons[0];
+          if (depositAmount >= parseFloat(uCoupon.min_deposit_required)) {
+            rewardAmount = parseFloat(uCoupon.reward_amount);
+            userCouponId = uCoupon.id;
+            const split = getCouponSplit(deposit.coupon_code, rewardAmount);
+            cashReward = split.cashReward;
+            bonusReward = split.bonusReward;
+          }
+        }
+      }
+
+      const newBalance = parseFloat((currentBalance + depositAmount + cashReward).toFixed(2));
+      const newBonusBalance = parseFloat((currentBonusBalance + bonusReward).toFixed(2));
+      const newRequiredWager = parseFloat((currentRequiredWager + depositAmount + cashReward).toFixed(2));
+      const newRequiredBonusWager = parseFloat((currentRequiredBonusWager + bonusReward * 10).toFixed(2));
+
+      // Update balances
+      await connection.query(
+        'UPDATE wallets SET balance = ?, bonus_balance = ?, required_wager = ?, required_bonus_wager = ? WHERE user_id = ?',
+        [newBalance, newBonusBalance, newRequiredWager, newRequiredBonusWager, userId]
+      );
+
+      // Update deposit record to completed
+      await connection.query(
+        'UPDATE deposits SET status = "completed", processed_by = ?, processed_at = NOW() WHERE id = ?',
+        [req.user.id, deposit.id]
+      );
+
+      // Mark user coupon as USED if successfully verified
+      if (userCouponId) {
+        await connection.query(
+          'UPDATE user_coupons SET status = "USED" WHERE id = ?',
+          [userCouponId]
+        );
+      }
+
+      // Write ledger transaction log for deposit
+      await connection.query(
+        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+        'VALUES (?, ?, ?, "deposit", "deposits", ?, ?, ?, ?)',
+        [userId, wallet.id, depositAmount, deposit.id, currentBalance, currentBalance + depositAmount, `Customer support appeal approval (Appeal ID: ${id})`]
+      );
+
+      // Write ledger transaction log for coupon cash reward if applicable
+      if (cashReward > 0 && userCouponId) {
+        await connection.query(
+          'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+          'VALUES (?, ?, ?, "bonus_claim", "user_coupons", ?, ?, ?, ?)',
+          [userId, wallet.id, cashReward, userCouponId, currentBalance + depositAmount, newBalance, `Applied coupon cash reward via appeal (Code: ${deposit.coupon_code})`]
+        );
+      }
+
+      // Update total deposits & bonus claimed stats
+      await connection.query(
+        'UPDATE user_stats SET total_deposits = total_deposits + ?, total_bonus_claimed = total_bonus_claimed + ? WHERE user_id = ?',
+        [depositAmount, rewardAmount, userId]
+      );
+
+      // Process referral commission reward for the referrer if applicable
+      await processReferralReward(connection, userId);
+
+      // Send app notification
+      const notificationMsg = rewardAmount > 0
+        ? `Appeal recharge of ₹${depositAmount} + Coupon reward of ₹${rewardAmount} was successfully approved and credited.`
+        : `Appeal recharge of ₹${depositAmount} was successfully approved and credited to your wallet.`;
+
+      await createNotification(
+        userId,
+        'Wallet Credited via Appeal!',
+        notificationMsg,
+        'WALLET',
+        connection
+      );
+    } else {
+      // status === 'rejected'
+      if (depositId) {
+        // Lock the deposit row and mark it as failed
+        const [deposits] = await connection.query(
+          'SELECT * FROM deposits WHERE id = ? LIMIT 1 FOR UPDATE',
+          [depositId]
+        );
+        if (deposits && deposits.length > 0 && deposits[0].status === 'pending') {
+          await connection.query(
+            'UPDATE deposits SET status = "failed", processed_by = ?, processed_at = NOW() WHERE id = ?',
+            [req.user.id, depositId]
+          );
+        }
+      }
+    }
+
+    // Update appeal record to status with adminNote
+    await connection.query(
+      'UPDATE deposit_appeals SET status = ?, admin_note = ?, updated_at = NOW() WHERE id = ?',
+      [status, adminNote || null, id]
     );
 
+    await connection.commit();
     logger.info(`[Appeal Resolved]: Appeal ID ${id} resolved with status ${status} by Admin ${req.user.id}`);
+    
+    // Dispatch Telegram admin bot log
+    await sendAdminAlert(`📢 Deposit Appeal Resolved\nAppeal ID: ${id}\nAdmin: ${req.user.name}\nStatus: ${status.toUpperCase()}\nNote: ${adminNote || 'None'}`);
+
     return res.json({ success: true, message: `Appeal was successfully marked as ${status}.` });
 
   } catch (err) {
+    if (connection) await connection.rollback();
     logger.error(err, 'Failed to resolve appeal');
+    
+    // Dispatch failure alert to Telegram
+    await sendAdminAlert(`⚠️ CRITICAL ERROR: Appeal Resolution Failure\nAppeal ID: ${id}\nError: ${err.message}`);
+    
     return res.status(500).json({ error: 'Failed to resolve the payment dispute.' });
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Fetch active available coupons for user
+ * GET /api/payment/coupons
+ */
+export const getUserCoupons = async (req, res) => {
+  try {
+    // Auto-expire old available coupons first to keep it clean
+    await query(
+      'UPDATE user_coupons SET status = "EXPIRED" WHERE status = "AVAILABLE" AND expires_at <= NOW()'
+    );
+
+    const rows = await query(
+      'SELECT uc.id, c.code, c.type, c.reward_amount as rewardAmount, c.min_deposit_required as minDepositRequired, uc.expires_at as expiresAt ' +
+      'FROM user_coupons uc ' +
+      'JOIN coupons c ON uc.coupon_id = c.id ' +
+      'WHERE uc.user_id = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ORDER BY uc.allocated_at DESC',
+      [req.user.id]
+    );
+
+    return res.json(rows || []);
+  } catch (err) {
+    logger.error(err, 'Failed to fetch user coupons');
+    return res.status(500).json({ error: 'Failed to retrieve active coupons.' });
+  }
+};
+
+/**
+ * Claim a no-deposit gameplay coupon
+ * POST /api/payment/coupons/claim
+ */
+export const claimNoDepositCoupon = async (req, res) => {
+  const { couponCode } = req.body;
+
+  if (!couponCode) {
+    return res.status(400).json({ error: 'Coupon code is required.' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Lock user's wallet
+    const [wallets] = await connection.query(
+      'SELECT id, bonus_balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [req.user.id]
+    );
+    if (!wallets || wallets.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Wallet not found.' });
+    }
+
+    // 2. Lock user's available coupon matching this code
+    const [userCoupons] = await connection.query(
+      'SELECT uc.id, c.reward_amount, c.type ' +
+      'FROM user_coupons uc ' +
+      'JOIN coupons c ON uc.coupon_id = c.id ' +
+      'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+      'LIMIT 1 FOR UPDATE',
+      [req.user.id, couponCode.trim().toUpperCase()]
+    );
+
+    if (!userCoupons || userCoupons.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'This coupon code is invalid, expired, or already claimed.' });
+    }
+
+    const uCoupon = userCoupons[0];
+    if (uCoupon.type !== 'GAMEPLAY_FREEBIE') {
+      await connection.rollback();
+      return res.status(400).json({ error: 'This coupon type requires a deposit and cannot be claimed directly.' });
+    }
+
+    const rewardAmount = parseFloat(uCoupon.reward_amount);
+    const wallet = wallets[0];
+    const currentBonus = parseFloat(wallet.bonus_balance || 0);
+    const newBonus = parseFloat((currentBonus + rewardAmount).toFixed(4));
+
+    // 3. Mark coupon as USED
+    await connection.query(
+      'UPDATE user_coupons SET status = "USED" WHERE id = ?',
+      [uCoupon.id]
+    );
+
+    // 4. Update wallet bonus balance
+    await connection.query(
+      'UPDATE wallets SET bonus_balance = ? WHERE user_id = ?',
+      [newBonus, req.user.id]
+    );
+
+    // 5. Write to ledger
+    await connection.query(
+      'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+      'VALUES (?, ?, ?, "bonus_claim", "user_coupons", ?, ?, ?, ?)',
+      [req.user.id, wallet.id, rewardAmount, uCoupon.id, currentBonus, newBonus, `Claimed gameplay freebie coupon: ${couponCode}`]
+    );
+
+    // 6. Update user stats
+    await connection.query(
+      'UPDATE user_stats SET total_bonus_claimed = total_bonus_claimed + ? WHERE user_id = ?',
+      [rewardAmount, req.user.id]
+    );
+
+    // 7. Notify user
+    await createNotification(
+      req.user.id,
+      'Free Bet Claimed!',
+      `You successfully claimed ₹${rewardAmount} free bet bonus cash! Play colour prediction or dice now.`,
+      'COUPON',
+      connection
+    );
+
+    await connection.commit();
+    return res.json({ success: true, message: `Successfully claimed ₹${rewardAmount} bonus cash.` });
+
+  } catch (err) {
+    await connection.rollback();
+    logger.error(err, 'Failed to claim gameplay coupon');
+    return res.status(500).json({ error: 'Database transaction failure during claiming.' });
+  } finally {
+    connection.release();
+  }
+};
+
+export const processReferralReward = async (connection, referredUserId) => {
+  try {
+    // 1. Check if this user was referred by someone
+    const [referrals] = await connection.query(
+      'SELECT id, referrer_id, status FROM referrals WHERE referred_id = ? LIMIT 1 FOR UPDATE',
+      [referredUserId]
+    );
+
+    if (referrals && referrals.length > 0) {
+      const referral = referrals[0];
+      
+      // If status is 'registered', reward the referrer
+      if (referral.status === 'registered') {
+        const referrerId = referral.referrer_id;
+
+        // 2. Lock referrer's wallet
+        const [wallets] = await connection.query(
+          'SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+          [referrerId]
+        );
+
+        if (wallets && wallets.length > 0) {
+          const wallet = wallets[0];
+          const currentBalance = parseFloat(wallet.balance || 0);
+          const rewardAmount = 10.00;
+          const newBalance = parseFloat((currentBalance + rewardAmount).toFixed(2));
+
+          // 3. Update referrer's wallet balance
+          await connection.query(
+            'UPDATE wallets SET balance = ? WHERE user_id = ?',
+            [newBalance, referrerId]
+          );
+
+          // 4. Update referral status to rewarded
+          await connection.query(
+            'UPDATE referrals SET status = "rewarded", total_deposit_amount = total_deposit_amount + 10.00 WHERE id = ?',
+            [referral.id]
+          );
+
+          // 5. Write to ledger (wallet_transactions) for the referrer
+          await connection.query(
+            'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+            'VALUES (?, ?, ?, "commission", "referrals", ?, ?, ?, ?)',
+            [referrerId, wallet.id, rewardAmount, referral.id, currentBalance, newBalance, `Referral commission of ₹10.00 for invitee (User ID: ${referredUserId}) first deposit completion`]
+          );
+
+          // 6. Notify referrer
+          await createNotification(
+            referrerId,
+            'Referral Bonus Credited! 🎁',
+            `Congratulations! You received ₹10.00 referral bonus because your invitee completed their first deposit.`,
+            'WALLET',
+            connection
+          );
+
+          logger.info(`[Referral Reward]: Referrer ${referrerId} awarded ₹10.00 commission for referred user ${referredUserId}`);
+        }
+      }
+    }
+  } catch (err) {
+    logger.error(err, `Failed to process referral reward for referred user ID ${referredUserId}`);
   }
 };

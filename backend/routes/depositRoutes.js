@@ -15,6 +15,12 @@ router.post('/webhook', depositController.pay0Webhook);
 // User deposit history records lookup
 router.get('/history', protect, depositController.getDepositHistory);
 
+// Active coupons available for the player
+router.get('/coupons', protect, depositController.getUserCoupons);
+
+// User claims a no-deposit coupon (GAMEPLAY_FREEBIE)
+router.post('/coupons/claim', protect, depositController.claimNoDepositCoupon);
+
 // User deposit dispute appeal submission (with screenshot file upload)
 router.post('/appeal', protect, uploadScreenshot, verifyUploadMagicBytes, depositController.submitAppeal);
 

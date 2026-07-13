@@ -129,6 +129,7 @@ CREATE TABLE deposits (
     status ENUM('pending', 'completed', 'failed', 'rejected') NOT NULL DEFAULT 'pending',
     processed_by BIGINT UNSIGNED NULL,
     processed_at TIMESTAMP NULL,
+    coupon_code VARCHAR(50) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_deposits_txn UNIQUE (transaction_id),
@@ -309,12 +310,16 @@ CREATE TABLE referral_bonus_details (
 CREATE TABLE coupons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(50) NOT NULL,
-    discount_type ENUM('flat', 'percentage') NOT NULL,
-    value DECIMAL(15, 4) NOT NULL,
+    discount_type ENUM('flat', 'percentage') NOT NULL DEFAULT 'flat',
+    value DECIMAL(15, 4) NOT NULL DEFAULT 0.0000,
     min_deposit DECIMAL(15, 4) NOT NULL DEFAULT 0.0000,
     max_uses INT NOT NULL DEFAULT 1,
     used_count INT UNSIGNED NOT NULL DEFAULT 0,
     expires_at TIMESTAMP NULL,
+    type ENUM('FIRST_DEPOSIT', 'RETENTION_REWARD', 'GAMEPLAY_FREEBIE', 'FEE_WAIVER', 'REACTIVATION', 'LOYALTY') NOT NULL DEFAULT 'RETENTION_REWARD',
+    reward_amount DECIMAL(15, 4) NOT NULL DEFAULT 0.0000,
+    min_deposit_required DECIMAL(15, 4) NOT NULL DEFAULT 0.0000,
+    validity_days INT NOT NULL DEFAULT 7,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_coupons_code UNIQUE (code)
 ) ENGINE=InnoDB;
@@ -332,6 +337,22 @@ CREATE TABLE coupon_usage (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (bonus_id) REFERENCES bonuses(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
+
+-- ────────────────────────────────────────────────────────
+-- 19a. USER COUPONS (Tracks User-specific Coupons)
+-- ────────────────────────────────────────────────────────
+CREATE TABLE user_coupons (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    coupon_id BIGINT UNSIGNED NOT NULL,
+    status ENUM('AVAILABLE', 'USED', 'EXPIRED') NOT NULL DEFAULT 'AVAILABLE',
+    allocated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL DEFAULT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_user_coupons_user_status ON user_coupons(user_id, status);
 
 -- ────────────────────────────────────────────────────────
 -- 20. SPIN CONFIGS

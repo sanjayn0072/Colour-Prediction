@@ -1286,13 +1286,16 @@ export const getSuperAdminConfig = async (req, res) => {
       TELEGRAM_BOT_TOKEN: maskKey(process.env.TELEGRAM_BOT_TOKEN),
       TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
       PAY0_USER_TOKEN: maskKey(process.env.PAY0_USER_TOKEN),
+      PAY0_WEBHOOK_URL: '',
+      PAY0_REDIRECT_URL: '',
       RENFLAIR_SMS_API_KEY: maskKey(process.env.RENFLAIR_SMS_API_KEY)
     };
 
     configs.forEach(c => {
       const decryptedValue = decryptConfigValue(c.config_value);
       if (data.hasOwnProperty(c.config_key) && decryptedValue) {
-        if (c.config_key === 'SMTP_FROM_EMAIL' || c.config_key === 'TELEGRAM_CHAT_ID') {
+        // Show full URL values for webhook/redirect (not sensitive secrets)
+        if (c.config_key === 'SMTP_FROM_EMAIL' || c.config_key === 'TELEGRAM_CHAT_ID' || c.config_key === 'PAY0_WEBHOOK_URL' || c.config_key === 'PAY0_REDIRECT_URL') {
           data[c.config_key] = decryptedValue;
         } else {
           data[c.config_key] = maskKey(decryptedValue);
@@ -1323,6 +1326,8 @@ export const updateSuperAdminConfig = async (req, res) => {
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
     PAY0_USER_TOKEN,
+    PAY0_WEBHOOK_URL,
+    PAY0_REDIRECT_URL,
     RENFLAIR_SMS_API_KEY
   } = req.body;
 
@@ -1371,6 +1376,8 @@ export const updateSuperAdminConfig = async (req, res) => {
     await updateKey('TELEGRAM_BOT_TOKEN', TELEGRAM_BOT_TOKEN);
     await updateKey('TELEGRAM_CHAT_ID', TELEGRAM_CHAT_ID);
     await updateKey('PAY0_USER_TOKEN', PAY0_USER_TOKEN);
+    await updateKey('PAY0_WEBHOOK_URL', PAY0_WEBHOOK_URL);
+    await updateKey('PAY0_REDIRECT_URL', PAY0_REDIRECT_URL);
     await updateKey('RENFLAIR_SMS_API_KEY', RENFLAIR_SMS_API_KEY);
 
     await connection.commit();

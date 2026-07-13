@@ -7,7 +7,7 @@ import {
   ArrowLeft, Mail, Phone, Lock, Eye, EyeOff, 
   MessageCircle, ChevronDown, ChevronUp,
   ShoppingBag, Check, Info as InfoIcon, Users, Gift, Trophy, Share2, Copy,
-  ChevronLeft, AlertCircle, X, QrCode
+  ChevronLeft, AlertCircle, X, QrCode, BarChart3
 } from 'lucide-react'
 
 function generateNumeric16Id() {
@@ -106,9 +106,21 @@ const createReferralRewardTx = (amount) => {
 }
 
 export default function Profile({ onLogout, initialSubPage, onNavigate }) {
-  const { user, setUser, orders, depositRecords, betRecords } = useUser()
+  const { user, setUser, orders, depositRecords, betRecords, fetchWinLossStats } = useUser()
   const [subPage, setSubPage] = useState(initialSubPage || null)
   const [prevInitialSubPage, setPrevInitialSubPage] = useState(initialSubPage)
+  const [showWinLossModal, setShowWinLossModal] = useState(false)
+  const [winLossStats, setWinLossStats] = useState(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+
+  const handleOpenWinLossStats = async (e) => {
+    if (e) e.stopPropagation()
+    setShowWinLossModal(true)
+    setLoadingStats(true)
+    const stats = await fetchWinLossStats()
+    setWinLossStats(stats)
+    setLoadingStats(false)
+  }
 
   if (initialSubPage !== prevInitialSubPage) {
     setPrevInitialSubPage(initialSubPage)
@@ -123,6 +135,8 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
 
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
   const [twoFaVerified, setTwoFaVerified] = useState(false)
+  const [animationsEnabled, setAnimationsEnabled] = useState(true)
+  const [showVipMilestones, setShowVipMilestones] = useState(true)
   const [totpCode, setTotpCode] = useState('')
   const [twoFaCopied, setTwoFaCopied] = useState(false)
   const [totpError, setTotpError] = useState(false)
@@ -142,8 +156,8 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
   const totalDeposit = user?.totalDeposits || 0
   
   const vipLevel = getVipLevel(totalDeposit)
-  const totalWinnings = betRecords.filter(r => r.amount > 0 && r.game !== 'VIP Reward' && r.game !== 'Referral Reward').reduce((acc, curr) => acc + curr.amount, 0)
-  const gamesPlayed = betRecords.filter(r => r.amount < 0).length
+  const totalWinnings = Math.max(parseFloat(user?.totalWinnings || 0), betRecords.filter(r => r.amount > 0 && r.game !== 'VIP Reward' && r.game !== 'Referral Reward').reduce((acc, curr) => acc + curr.amount, 0))
+  const gamesPlayed = Math.max(parseInt(user?.gamesPlayed || 0, 10), betRecords.filter(r => r.amount < 0).length)
 
   const menuItems = [
     { id: 'vip', label: 'VIP Club & Privileges', icon: Award, color: 'text-amber-500 bg-amber-50' },
@@ -255,15 +269,19 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-6 border-t border-slate-100 pt-4">
+        <div 
+          onClick={handleOpenWinLossStats}
+          className="grid grid-cols-2 gap-4 mt-6 border-t border-slate-100 pt-4 cursor-pointer hover:bg-slate-50/50 rounded-2xl p-1 transition-all"
+          title="Click to view detailed win/loss stats"
+        >
           <div className="text-center">
-            <p className="text-xs text-slate-500 font-medium mb-1">Total Winnings</p>
+            <p className="text-xs text-slate-500 font-medium mb-1 flex items-center justify-center gap-1">Total Winnings <BarChart3 size={11} className="text-slate-400" /></p>
             <p className="text-lg font-bold text-emerald-600">
               ₹{(totalWinnings).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
           <div className="text-center border-l border-slate-100">
-            <p className="text-xs text-slate-500 font-medium mb-1">Games Played</p>
+            <p className="text-xs text-slate-500 font-medium mb-1 flex items-center justify-center gap-1">Games Played <History size={11} className="text-slate-400" /></p>
             <p className="text-lg font-bold text-indigo-600">
               {gamesPlayed}
             </p>
@@ -313,6 +331,104 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
         </button>
       </div>
 
+      {/* Win/Loss Stats Modal */}
+      {showWinLossModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]"
+          onClick={() => setShowWinLossModal(false)}
+        >
+          <div 
+            className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-5 text-slate-700 relative overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                <BarChart3 size={18} className="text-indigo-500" />
+                Win/Loss Statement
+              </h2>
+              <button 
+                onClick={() => setShowWinLossModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center cursor-pointer border-0"
+              >
+                <X size={14} className="text-slate-500" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto scrollbar-hide space-y-4 pr-1 py-1">
+              {loadingStats ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                  <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs font-semibold text-slate-400">Loading betting aggregates...</p>
+                </div>
+              ) : winLossStats ? (
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Time-Period Statement</p>
+                  
+                  {/* Period Stats Grid */}
+                  <div className="space-y-3">
+                    {[
+                      { key: 'today', title: 'Today (Real-time)', data: winLossStats.today },
+                      { key: 'week', title: 'Last 7 Days', data: winLossStats.week },
+                      { key: 'month', title: 'Last 30 Days', data: winLossStats.month },
+                      { key: 'lifetime', title: 'Lifetime Account', data: winLossStats.lifetime }
+                    ].map((period) => {
+                      const net = period.data.net;
+                      const isProfit = net >= 0;
+
+                      return (
+                        <div key={period.key} className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-700">{period.title}</span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              isProfit 
+                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                : 'bg-rose-50 text-rose-600 border border-rose-100'
+                            }`}>
+                              {isProfit ? `+₹${net.toFixed(2)}` : `-₹${Math.abs(net).toFixed(2)}`}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 pt-1.5 border-t border-slate-200/40 text-[10px] text-slate-500 font-medium">
+                            <div>
+                              <p className="text-[9px] text-slate-400">Total Wagered</p>
+                              <p className="font-bold text-slate-700">₹{period.data.wagered.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] text-slate-400">Total Payout</p>
+                              <p className="font-bold text-slate-700">₹{period.data.won.toFixed(2)}</p>
+                            </div>
+                          </div>
+
+                          {period.key === 'lifetime' && (
+                            <div className="text-[9px] text-slate-400 pt-1.5 flex justify-between font-bold">
+                              <span>Total Rounds Played</span>
+                              <span className="text-slate-600 font-black">{period.data.totalGames} Rounds</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <p className="text-xs font-semibold text-slate-400">Failed to load statistics.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Note */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3 shrink-0">
+              <p className="text-[9px] text-indigo-700 font-semibold leading-relaxed">
+                ℹ️ Win/Loss statistics are computed from completed transaction aggregates directly inside the secure transaction engine.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Settings Modal Overlay */}
       {showSettingsModal && (
         <div 
@@ -342,31 +458,7 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
               
               {/* Preferences Section */}
               <div className="space-y-3">
-                <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Preferences</h3>                {/* Language Selection */}
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-bold text-slate-700">App Language</span>
-                    <span className="text-[10px] text-slate-400 font-semibold">{language}</span>
-                  </div>
-                  <div className="relative">
-                    <select
-                      value={language}
-                      onChange={(e) => {
-                        const newLang = e.target.value
-                        setLanguage(newLang)
-                        setToast(`Language changed to ${newLang}`)
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                    >
-                      <option>English</option>
-                      <option>Hindi</option>
-                      <option>Tamil</option>
-                      <option>Telugu</option>
-                      <option>Bengali</option>
-                    </select>
-                    <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                  </div>
-                </div>
+                <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Preferences</h3>
 
                 {/* Game Mode Selection */}
                 <div className="flex flex-col gap-1.5">
@@ -387,126 +479,6 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                   </div>
                 </div>
-              </div>
-
-              {/* Security & Limits */}
-              <div className="space-y-3 pt-2">
-                <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Security & Limits</h3>                {/* 2FA Mode Toggle (Admins Only) */}
-                {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                  <>
-                    <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-bold text-slate-755">Two-Factor Auth (2FA)</span>
-                        <span className="text-[8px] text-slate-400">Protects wallet with OTP</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (twoFactorEnabled) {
-                            setTwoFactorEnabled(false)
-                            setTwoFaVerified(false)
-                            setToast('Two-Factor Authentication disabled')
-                          } else {
-                            setTwoFactorEnabled(true)
-                            setTwoFaVerified(false)
-                          }
-                        }}
-                        className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
-                          twoFactorEnabled ? 'bg-primary justify-end' : 'bg-slate-200 justify-start'
-                        }`}
-                      >
-                        <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
-                          {twoFactorEnabled ? <Check size={8} className="text-primary font-bold" /> : <X size={8} className="text-slate-400" />}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Detailed 2FA Setup/Status Section inside settings modal */}
-                    {twoFactorEnabled && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3 transition-all animate-[fadeIn_0.2s_ease-out] text-slate-700">
-                        {twoFaVerified ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-emerald-600 font-bold">
-                              <Shield size={14} className="animate-pulse" />
-                              <span className="text-[10px] font-black uppercase tracking-wider">2FA Active & Secured</span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 leading-relaxed">
-                              Your account is protected by Google Authenticator. Verification codes will be required for large withdrawals and password changes.
-                            </p>
-                            <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2">
-                              <span className="text-[9px] font-mono text-slate-400">Secret: •••• •••• •••• Z24W</span>
-                              <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Linked</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-primary font-bold">
-                              <Shield size={14} />
-                              <span className="text-[10px] font-black uppercase tracking-wider">Setup 2FA Protection</span>
-                            </div>
-                            <p className="text-[9px] text-slate-500 leading-relaxed">
-                              1. Scan this QR code or copy the key into your Google Authenticator app.
-                            </p>
-
-                            <div className="flex flex-col items-center bg-white border border-slate-200 rounded-2xl p-3 relative overflow-hidden">
-                              <div className="w-20 h-20 border border-dashed border-slate-200 rounded-xl flex items-center justify-center mb-2 bg-slate-50">
-                                <QrCode size={36} className="text-primary" />
-                              </div>
-                              <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 mt-1">
-                                <span className="text-[10px] font-mono font-bold text-slate-700">CP7X98Y6Z24W44UT</span>
-                                <button
-                                  onClick={() => {
-                                    copyToClipboard('CP7X98Y6Z24W44UT')
-                                    setTwoFaCopied(true)
-                                    setTimeout(() => setTwoFaCopied(false), 2000)
-                                  }}
-                                  className="text-[9px] font-bold text-primary flex items-center gap-0.5 cursor-pointer hover:underline bg-transparent border-0 outline-none p-0"
-                                >
-                                  {twoFaCopied ? 'Copied' : <Copy size={10} />}
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Enter 6-Digit Code</label>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                maxLength={6}
-                                value={totpCode}
-                                onChange={(e) => {
-                                  setTotpCode(e.target.value.replace(/[^0-9]/g, ''))
-                                  setTotpError(false)
-                                }}
-                                placeholder="000 000"
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-bold font-mono tracking-widest text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-                              />
-                              {totpError && (
-                                <p className="text-[9px] text-red-500 font-bold flex items-center gap-0.5">
-                                  <AlertCircle size={10} /> Invalid 6-digit verification code
-                                </p>
-                              )}
-                            </div>
-
-                            <button
-                              onClick={() => {
-                                if (totpCode.length === 6) {
-                                  setTwoFaVerified(true)
-                                  setTotpCode('')
-                                  setToast('🎉 2FA linked successfully!')
-                                } else {
-                                  setTotpError(true)
-                                }
-                              }}
-                              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-650 text-white font-bold text-[10px] rounded-xl shadow-md cursor-pointer hover:brightness-105 transition-all border-0 outline-none"
-                            >
-                              Verify & Bind
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
 
                 {/* Responsible Gaming limit */}
                 <div className="flex flex-col gap-1.5">
@@ -529,17 +501,45 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
                   </div>
                 </div>
 
-                {/* Safe Center Link */}
+                {/* Dynamic Theme Selector / Animation Toggle */}
                 <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Shield size={14} className="text-primary" />
-                    <span className="text-[11px] font-bold text-slate-755">Self Exclusion Center</span>
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-slate-700">Battery Saver Mode</span>
+                    <span className="text-[8px] text-slate-400">Disable intensive UI animations</span>
                   </div>
                   <button
-                    onClick={() => setShowSafeCenter(true)}
-                    className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-black rounded-lg hover:bg-primary/20 transition-all cursor-pointer border-0 outline-none"
+                    onClick={() => {
+                      setAnimationsEnabled(!animationsEnabled)
+                      setToast(!animationsEnabled ? 'Battery Saver enabled (animations reduced).' : 'Battery Saver disabled (animations enabled).')
+                    }}
+                    className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
+                      !animationsEnabled ? 'bg-primary justify-end' : 'bg-slate-200 justify-start'
+                    }`}
                   >
-                    Manage
+                    <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
+                      {!animationsEnabled ? <Check size={8} className="text-primary font-bold" /> : <X size={8} className="text-slate-400" />}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Betting History Quick Summary Toggle */}
+                <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-slate-700">VIP Milestones Progress</span>
+                    <span className="text-[8px] text-slate-400">Display progress bars on dashboard</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowVipMilestones(!showVipMilestones)
+                      setToast(!showVipMilestones ? 'VIP progress milestones enabled.' : 'VIP progress milestones disabled.')
+                    }}
+                    className={`w-10 h-5.5 rounded-full p-0.5 cursor-pointer transition-all flex items-center ${
+                      showVipMilestones ? 'bg-primary justify-end' : 'bg-slate-200 justify-start'
+                    }`}
+                  >
+                    <span className="w-4.5 h-4.5 rounded-full bg-white shadow-sm flex items-center justify-center">
+                      {showVipMilestones ? <Check size={8} className="text-primary font-bold" /> : <X size={8} className="text-slate-400" />}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -725,7 +725,6 @@ function AccountDetails({ onSelectAvatarClick }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name: nameVal.trim(),
           email: emailVal.trim()
         })
       })
@@ -798,9 +797,10 @@ function AccountDetails({ onSelectAvatarClick }) {
             <input
               type="text"
               value={nameVal}
-              onChange={(e) => setNameVal(e.target.value)}
+              disabled
+              readOnly
               placeholder="Enter your full name"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+              className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed select-none focus:outline-none"
             />
           </div>
 
@@ -1269,7 +1269,7 @@ function ReferEarn() {
   const [copied, setCopied] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const referralLink = `${window.location.origin}/register?invitecode=${user?.referral_code || ''}`
+  const referralLink = `${window.location.origin}/register?invitecode=${user?.uid || ''}`
 
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink)
