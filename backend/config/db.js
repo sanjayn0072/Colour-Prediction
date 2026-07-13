@@ -10,45 +10,60 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load connection options from environment variables
-const poolConfig = {
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  port: process.env.MYSQL_PORT ? parseInt(process.env.MYSQL_PORT, 10) : undefined,
-  charset: 'utf8mb4',
-  waitForConnections: true,
-  connectionLimit: 150,
-  queueLimit: 0,
-  supportBigNumbers: true,
-  bigNumberStrings: true,
-  typeCast: function (field, next) {
-    if (field.type === 'NEWDECIMAL' || field.type === 'DECIMAL') {
-      const val = field.string();
-      return val === null ? null : parseFloat(val);
-    }
-    return next();
-  }
-};
+const poolConfig = process.env.MYSQL_URL
+  ? process.env.MYSQL_URL
+  : {
+      host: process.env.MYSQL_HOST,
+      user: process.env.MYSQL_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.MYSQL_DATABASE,
+      port: process.env.MYSQL_PORT
+        ? parseInt(process.env.MYSQL_PORT, 10)
+        : undefined,
+      charset: "utf8mb4",
+      waitForConnections: true,
+      connectionLimit: 150,
+      queueLimit: 0,
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+      typeCast(field, next) {
+        if (field.type === "NEWDECIMAL" || field.type === "DECIMAL") {
+          const val = field.string();
+          return val === null ? null : parseFloat(val);
+        }
+        return next();
+      },
+    };
+
 
 export const ensureDatabaseExists = async () => {
-  const dbName = process.env.MYSQL_DATABASE || 'colourplay';
+  // Skip creating the database when using a connection URL.
+  // Railway databases are already created.
+  if (process.env.MYSQL_URL) {
+    return;
+  }
+
+  const dbName = process.env.MYSQL_DATABASE || "colourplay";
+
   const configWithoutDb = {
     host: process.env.MYSQL_HOST,
     user: process.env.MYSQL_USER,
     password: process.env.DB_PASSWORD,
-    port: process.env.MYSQL_PORT ? parseInt(process.env.MYSQL_PORT, 10) : undefined,
+    port: process.env.MYSQL_PORT
+      ? parseInt(process.env.MYSQL_PORT, 10)
+      : undefined,
   };
+
   try {
     const tempConn = await mysql.createConnection(configWithoutDb);
-    await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    await tempConn.query(
+      `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    );
     await tempConn.end();
-    logger.info(`Database "${dbName}" ensured successfully.`);
   } catch (err) {
-    logger.error(err, 'Failed to ensure database exists');
+    logger.error(err, "Failed to ensure database exists");
   }
 };
-
 export const pool = mysql.createPool(poolConfig);
 
 // Mongoose-like mapping helper for backward compatibility in backend controllers
