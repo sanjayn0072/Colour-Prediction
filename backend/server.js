@@ -1,3 +1,4 @@
+import './config/env.js';
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -7,7 +8,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { Server } from 'socket.io';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
@@ -69,7 +69,6 @@ import { startBehavioralRewardsWorker } from './utils/rewardsWorker.js';
 import { logSuspiciousNameChange } from './utils/riskEngine.js';
 import { sendSuspiciousNameChangeAlert } from './utils/telegram.js';
 
-dotenv.config();
 
 // Ensure JWT secret is securely configured
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'cplay_jwt_secret') {

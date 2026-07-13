@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import './env.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load env variables
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
+ });
 
 import connectDB, { pool } from './db.js';
 import logger from '../utils/logger.js';

@@ -1,9 +1,8 @@
+import '../config/env.js';
 import bcrypt from 'bcryptjs';
 import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config();
 
 const seedAdmin = async () => {
   const pool = mysql.createPool({

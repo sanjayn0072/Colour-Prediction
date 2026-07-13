@@ -1,14 +1,14 @@
+import './env.js';
 import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
-import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+ });
 
 // Load connection options from environment variables
 const poolConfig = {

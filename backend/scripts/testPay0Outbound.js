@@ -1,11 +1,10 @@
+import '../config/env.js';
 import axios from 'axios';
 import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import { decryptConfigValue } from '../utils/configEncryption.js';
 
-dotenv.config();
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
