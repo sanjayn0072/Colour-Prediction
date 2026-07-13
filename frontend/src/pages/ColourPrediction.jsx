@@ -213,6 +213,10 @@ export default function ColourPrediction({ onNavigate, routeData }) {
       
       if (res.ok) {
         showToast('⚡ Super Admin Override outcome forced successfully!', 'success');
+        setLiveMetrics(prev => ({
+          ...prev,
+          forcedOutcome: data.outcome || null
+        }));
       } else {
         showToast('❌ Override failed: ' + (data.error || res.statusText || 'HTTP Error ' + res.status), 'error');
       }
@@ -608,6 +612,18 @@ export default function ColourPrediction({ onNavigate, routeData }) {
              <h3 className="text-slate-850 font-bold mb-3 text-sm flex items-center gap-2">
                 <Shield size={16} className="text-red-600 animate-pulse" /> LIVE CASH POOL AGGREGATES
              </h3>
+
+             {liveMetrics && liveMetrics.forcedOutcome && (
+               <div className="mb-3 px-3 py-2 bg-rose-50/70 border border-rose-100 rounded-xl flex items-center justify-between text-xs font-bold text-rose-700">
+                 <span>Active Force Outcome: {liveMetrics.forcedOutcome}</span>
+                 <button 
+                   onClick={() => handleAdminOverride('colour', 'CLEAR')} 
+                   className="text-[10px] uppercase font-black tracking-wider text-rose-600 hover:text-rose-800 bg-transparent border-0 cursor-pointer underline ml-2"
+                 >
+                   Clear Force
+                 </button>
+               </div>
+             )}
              <div className="flex gap-3 mb-4">
                 <button onClick={() => handleAdminOverride('colour', 'red')} className={`flex-1 bg-red-50 hover:bg-red-100/70 border ${shouldHighlight('colour', 'red') ? 'border-red-500 ring-2 ring-red-400' : 'border-red-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
                    <div className="text-red-600 font-bold text-xs">🔴 RED</div>

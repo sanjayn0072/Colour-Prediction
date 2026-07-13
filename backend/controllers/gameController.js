@@ -1410,10 +1410,10 @@ export const overwriteGame = async (req, res) => {
         let winNumber, winColor;
         if (['red', 'green', 'violet'].includes(finalOutcome.toLowerCase())) {
           winColor = finalOutcome.toLowerCase();
-          winNumber = winColor === 'violet' ? 5 : winColor === 'green' ? 1 : 2; 
+          winNumber = winColor === 'violet' ? 5 : winColor === 'green' ? 2 : 1; 
         } else {
           winNumber = parseInt(finalOutcome, 10);
-          winColor = (winNumber === 5) ? 'violet' : (winNumber === 0) ? 'violet' : ([1, 3, 7, 9].includes(winNumber) ? 'green' : 'red');
+          winColor = (winNumber === 5 || winNumber === 10 || winNumber === 0) ? 'violet' : ([2, 4, 6, 8].includes(winNumber) ? 'green' : 'red');
         }
         finalOutcome = `${winNumber} ${winColor.toUpperCase()}`;
       }

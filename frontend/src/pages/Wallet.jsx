@@ -1425,9 +1425,10 @@ function BankAccountForm({ userName, savedBank, onSave, onCancel }) {
 
   const accountMismatch =
     confirmAccountNumber.length > 0 && accountNumber !== confirmAccountNumber
-  const ifscValid = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc.toUpperCase())
+  const ifscValid = /^[A-Z0-9]{4,16}$/.test(ifsc.toUpperCase())
   const canSave =
     accountNumber.length >= 9 &&
+    accountNumber.length <= 16 &&
     accountNumber === confirmAccountNumber &&
     ifscValid
 
@@ -1456,8 +1457,8 @@ function BankAccountForm({ userName, savedBank, onSave, onCancel }) {
           type="text"
           inputMode="numeric"
           value={accountNumber}
-          onChange={(e) => setAccountNumber(e.target.value.replace(/[^0-9]/g, ''))}
-          placeholder="Enter account number"
+          onChange={(e) => setAccountNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 16))}
+          placeholder="Enter account number (Max 16 digits)"
           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
         />
       </div>
@@ -1471,7 +1472,7 @@ function BankAccountForm({ userName, savedBank, onSave, onCancel }) {
           type="text"
           inputMode="numeric"
           value={confirmAccountNumber}
-          onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/[^0-9]/g, ''))}
+          onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 16))}
           placeholder="Re-enter to confirm"
           className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm text-slate-800 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 transition-all ${
             accountMismatch
@@ -1494,18 +1495,18 @@ function BankAccountForm({ userName, savedBank, onSave, onCancel }) {
         <input
           type="text"
           value={ifsc}
-          onChange={(e) => setIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
+          onChange={(e) => setIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16))}
           placeholder="e.g. SBIN0001234"
-          maxLength={11}
+          maxLength={16}
           className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm text-slate-800 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 transition-all ${
-            ifsc.length === 11 && !ifscValid
+            ifsc.length > 0 && !ifscValid
               ? 'border-red-300 focus:ring-red-250 focus:border-red-400'
               : 'border-slate-200 focus:ring-primary/30 focus:border-primary'
           }`}
         />
-        {ifsc.length === 11 && !ifscValid && (
+        {ifsc.length > 0 && !ifscValid && (
           <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
-            <AlertCircle size={12} /> Invalid IFSC format (e.g. SBIN0001234)
+            <AlertCircle size={12} /> Invalid IFSC format (must be 4 to 16 alphanumeric characters)
           </p>
         )}
       </div>

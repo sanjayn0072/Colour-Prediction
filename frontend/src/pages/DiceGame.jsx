@@ -307,57 +307,7 @@ export default function DiceGame({ onNavigate }) {
   const isLocked = dicePhase === 'locked' || diceTimeLeft <= 5
   const isBettingDisabled = isRolling || betPlaced || isLocked
 
-  if (!isGameActive) {
-    return (
-      <div className="fixed inset-0 z-50 bg-[#070b13] flex flex-col items-center justify-center p-6 text-center font-sans">
-        {/* Immersive background glow */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[120%] h-[40vh] bg-gradient-to-b from-indigo-500/5 to-transparent rounded-full blur-[100px] pointer-events-none" />
-        
-        <div className="bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-3xl p-8 max-w-sm w-full space-y-6 shadow-2xl relative z-10">
-          {/* Cute Animated Maintenance Robot */}
-          <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
-            <div className="absolute inset-0 bg-indigo-500/10 rounded-full animate-ping opacity-45" style={{ animationDuration: '3s' }} />
-            <svg viewBox="0 0 100 100" className="w-24 h-24 relative z-10">
-              {/* Antenna */}
-              <line x1="50" y1="22" x2="50" y2="10" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" />
-              <circle cx="50" cy="8" r="4.5" fill="#a855f7" className="animate-pulse" />
-              
-              {/* Head */}
-              <rect x="22" y="22" width="56" height="46" rx="14" fill="#0f172a" stroke="#6366f1" strokeWidth="2.5" />
-              
-              {/* Eyes */}
-              <rect x="31" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
-              <circle cx="38" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
-              
-              <rect x="55" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
-              <circle cx="62" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
-              
-              {/* Cute digital mouth curve */}
-              <path d="M 43 55 Q 50 59 57 55" fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
-              
-              {/* Controller buttons cheeks */}
-              <circle cx="28" cy="56" r="2" fill="#ef4444" />
-              <circle cx="72" cy="56" r="2" fill="#22c55e" />
-            </svg>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-xl font-bold text-white tracking-tight">Game under maintenance</h2>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              This game is under maintenance. Please try again later.
-            </p>
-          </div>
-          
-          <button
-            onClick={() => onNavigate?.('home')}
-            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-black rounded-xl shadow-md cursor-pointer transition-all active:scale-98 border-0 outline-none uppercase tracking-wider"
-          >
-            Back to Home
-          </button>
-        </div>
-      </div>
-    )
-  }
+  // Removed early return for isGameActive to support visual glass overlay in background
 
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-slate-800 font-sans pb-20 relative select-none">
@@ -996,6 +946,46 @@ export default function DiceGame({ onNavigate }) {
         onNavigate={onNavigate}
         activeGameId="diceGame"
       />
+
+      {/* Glassmorphism Maintenance Overlay */}
+      {!isGameActive && (
+        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[6px] flex flex-col items-center justify-center p-6 text-center font-sans animate-[fadeIn_0.3s_ease-out]">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[120%] h-[40vh] bg-gradient-to-b from-indigo-500/10 to-transparent rounded-full blur-[100px] pointer-events-none" />
+          
+          <div className="bg-slate-900/80 backdrop-blur-lg border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative z-10">
+            {/* Cute Animated Maintenance Robot */}
+            <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 bg-indigo-500/10 rounded-full animate-ping opacity-45" style={{ animationDuration: '3s' }} />
+              <svg viewBox="0 0 100 100" className="w-24 h-24 relative z-10">
+                <line x1="50" y1="22" x2="50" y2="10" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="50" cy="8" r="4.5" fill="#a855f7" className="animate-pulse" />
+                <rect x="22" y="22" width="56" height="46" rx="14" fill="#0f172a" stroke="#6366f1" strokeWidth="2.5" />
+                <rect x="31" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
+                <circle cx="38" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
+                <rect x="55" y="34" width="14" height="14" rx="4" fill="#020617" stroke="#38bdf8" strokeWidth="1.5" />
+                <circle cx="62" cy="41" r="3" fill="#38bdf8" className="animate-bounce" />
+                <path d="M 43 55 Q 50 59 57 55" fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+                <circle cx="28" cy="56" r="2" fill="#ef4444" />
+                <circle cx="72" cy="56" r="2" fill="#22c55e" />
+              </svg>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white tracking-tight">Game under maintenance</h2>
+              <p className="text-slate-300 text-xs leading-relaxed font-semibold">
+                This game is under maintenance. Please try again later.
+              </p>
+            </div>
+            
+            <button
+              onClick={() => onNavigate?.('home')}
+              className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-black rounded-2xl shadow-lg shadow-indigo-500/30 cursor-pointer transition-all active:scale-98 border-0 outline-none uppercase tracking-wider"
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

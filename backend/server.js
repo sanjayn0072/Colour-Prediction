@@ -195,7 +195,7 @@ app.get('/api/admin/withdrawals', protect, authenticatedActionLimiter, checkRole
 app.put('/api/admin/withdrawals/:id/processing', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.processWithdrawal);
 app.put('/api/admin/withdrawals/:id/approve', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.approveWithdrawal);
 app.patch('/api/admin/withdrawals/:id/reject', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), withdrawalController.rejectWithdrawal);
-app.post('/api/admin/game/overwrite', protect, authenticatedActionLimiter, checkRole(['super_admin']), gameController.overwriteGame);
+app.post('/api/admin/game/overwrite', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), gameController.overwriteGame);
 app.post('/api/games/place-bet', protect, authenticatedActionLimiter, validate(placeBetSchema), gameController.placeBet);
 app.get('/api/games/leaderboard', publicLimiter, gameController.getLeaderboard);
 app.get('/api/games/my-bets', protect, authenticatedActionLimiter, gameController.getMyBets);
