@@ -289,13 +289,6 @@ function CompactVoucherSelector({ selectedVoucher, onSelectVoucher, onOpenDrawer
       <div className="flex-1 min-w-0 pr-1 z-10">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-black text-slate-800 truncate">{displayVoucher.title}</span>
-          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-            displayVoucher.type === 'GAMEPLAY_FREEBIE' 
-              ? 'text-indigo-600 bg-indigo-50 border border-indigo-100'
-              : 'text-rose-600 bg-rose-50 border border-rose-100'
-          }`}>
-            {displayVoucher.percent > 0 ? `+${displayVoucher.percent}% Extra` : `+₹${displayVoucher.rewardAmount} Flat`}
-          </span>
         </div>
         
         {/* Rules */}
@@ -418,13 +411,6 @@ function VoucherSelectionDrawer({ show, onClose, selectedVoucher, onSelectVouche
                 <div className="flex-1 min-w-0 pr-1 z-10">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-black text-slate-800 truncate">{v.title}</span>
-                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-                      isFreebie 
-                        ? 'text-indigo-600 bg-indigo-50 border border-indigo-100'
-                        : 'text-rose-600 bg-rose-50 border border-rose-100'
-                    }`}>
-                      {v.percent > 0 ? `+${v.percent}% Extra` : `+₹${v.rewardAmount} Flat`}
-                    </span>
                   </div>
                   
                   {/* Rules */}
@@ -460,11 +446,59 @@ function DepositTab({ onNavigate, showToast }) {
   const [showVoucherDrawer, setShowVoucherDrawer] = useState(false)
 
   const selectedAmount = amount ? parseInt(amount) : customAmount ? parseInt(customAmount) : 0
-  const voucherBonus = selectedVoucher 
-    ? (selectedVoucher.percent > 0 
-        ? Math.floor(selectedAmount * (selectedVoucher.percent / 100)) 
-        : parseFloat(selectedVoucher.rewardAmount || 0))
-    : 0
+  
+  // Calculate Cash and Bonus Reward splits for the summary boxes
+  let cashReward = 0;
+  let bonusReward = 0;
+
+  if (selectedVoucher) {
+    const code = String(selectedVoucher.id || '').trim().toUpperCase();
+    const rewardAmt = parseFloat(selectedVoucher.rewardAmount || 0);
+
+    if (code === 'WELCOME150') {
+      cashReward = 150.00;
+      bonusReward = 0.00;
+    } else if (code === 'HIGHROLLER500') {
+      cashReward = 300.00;
+      bonusReward = 200.00;
+    } else if (code === 'CASHBACK200') {
+      cashReward = 140.00;
+      bonusReward = 60.00;
+    } else if (code === 'SURVIVAL100') {
+      cashReward = 25.00;
+      bonusReward = 25.00;
+    } else if (code === 'FREEBET50') {
+      cashReward = 0.00;
+      bonusReward = 30.00;
+    } else if (code === 'COMEBACK200') {
+      cashReward = 120.00;
+      bonusReward = 80.00;
+    } else if (code === 'ACTIVEPLAY50') {
+      cashReward = 45.00;
+      bonusReward = 5.00;
+    } else if (code === 'LOYALTY250') {
+      cashReward = 162.50;
+      bonusReward = 87.50;
+    } else if (code === 'WEEKEND50') {
+      cashReward = 37.50;
+      bonusReward = 12.50;
+    } else if (code === 'RELOAD999') {
+      cashReward = 549.45;
+      bonusReward = 449.55;
+    } else if (code === 'LUCKY5') {
+      cashReward = 0.05 * selectedAmount;
+      bonusReward = 0.00;
+    } else if (code === 'LUCKY10') {
+      cashReward = 0.10 * selectedAmount;
+      bonusReward = 0.00;
+    } else if (code === 'LUCKY15') {
+      cashReward = 0.15 * selectedAmount;
+      bonusReward = 0.00;
+    } else {
+      cashReward = 0.00;
+      bonusReward = rewardAmt;
+    }
+  }
 
   const hasValidationError = selectedAmount > 0 && (selectedAmount < 100 || selectedAmount > 5000 || selectedAmount % 100 !== 0)
   const canProceed = selectedAmount >= 100 && selectedAmount <= 5000 && selectedAmount % 100 === 0
@@ -582,13 +616,13 @@ function DepositTab({ onNavigate, showToast }) {
           <div className="bg-white border border-slate-200 rounded-2xl p-3.5 flex flex-col items-center justify-center relative overflow-hidden shadow-sm hover:border-emerald-500/30 transition-colors">
             <div className="absolute top-0 left-0 w-full h-0.5 bg-emerald-500" />
             <span className="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">Cash Credited</span>
-            <span className="text-xl font-black text-emerald-600 font-mono">₹{(selectedAmount + voucherBonus).toFixed(2)}</span>
+            <span className="text-xl font-black text-emerald-600 font-mono">₹{(selectedAmount + cashReward).toFixed(2)}</span>
           </div>
           {/* Bonus Box */}
           <div className="bg-gradient-to-b from-white to-slate-50/50 border border-slate-200 rounded-2xl p-3.5 flex flex-col items-center justify-center relative overflow-hidden shadow-sm hover:border-purple-500/30 transition-colors">
             <div className="absolute top-0 left-0 w-full h-0.5 bg-purple-500" />
             <span className="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">Promo Bonus</span>
-            <span className="text-xl font-black text-purple-600 font-mono">₹0.00</span>
+            <span className="text-xl font-black text-purple-600 font-mono">₹{bonusReward.toFixed(2)}</span>
           </div>
         </div>
       </div>

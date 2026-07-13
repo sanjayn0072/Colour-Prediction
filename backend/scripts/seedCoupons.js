@@ -83,7 +83,10 @@ const seedCoupons = async () => {
       { code: 'FREEWITHDRAW', type: 'FEE_WAIVER', reward: 0, min_dep: 0, days: 30 },
       { code: 'FREEBET50', type: 'GAMEPLAY_FREEBIE', reward: 30, min_dep: 0, days: 3 },
       { code: 'COMEBACK200', type: 'REACTIVATION', reward: 200, min_dep: 1000, days: 14 },
-      { code: 'ACTIVEPLAY50', type: 'LOYALTY', reward: 50, min_dep: 300, days: 3 }
+      { code: 'ACTIVEPLAY50', type: 'LOYALTY', reward: 50, min_dep: 300, days: 3 },
+      { code: 'LUCKY5', type: 'LOYALTY', reward: 0, min_dep: 100, days: 3 },
+      { code: 'LUCKY10', type: 'LOYALTY', reward: 0, min_dep: 200, days: 3 },
+      { code: 'LUCKY15', type: 'LOYALTY', reward: 0, min_dep: 300, days: 3 }
     ];
 
     console.log('Seeding coupons definitions...');

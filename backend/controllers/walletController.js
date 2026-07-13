@@ -240,7 +240,7 @@ export const deposit = async (req, res) => {
         rewardAmount = parseFloat(coupons[0].reward_amount);
       }
 
-      const split = getCouponSplit(vUpper, rewardAmount);
+      const split = getCouponSplit(vUpper, rewardAmount, depositAmount);
       cashReward = split.cashReward;
       bonusReward = split.bonusReward;
     }

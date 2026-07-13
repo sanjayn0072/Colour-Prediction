@@ -1255,7 +1255,7 @@ export const verifyPay0DepositStatus = async (req, res) => {
             if (depositAmount >= parseFloat(uCoupon.min_deposit_required)) {
               rewardAmount = parseFloat(uCoupon.reward_amount);
               userCouponId = uCoupon.id;
-              const split = getCouponSplit(activeDep.coupon_code, rewardAmount);
+              const split = getCouponSplit(activeDep.coupon_code, rewardAmount, depositAmount);
               cashReward = split.cashReward;
               bonusReward = split.bonusReward;
             }

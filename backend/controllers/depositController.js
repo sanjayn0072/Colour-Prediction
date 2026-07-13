@@ -5,7 +5,7 @@ import { createNotification } from '../utils/notifier.js';
 import { decryptConfigValue } from '../utils/configEncryption.js';
 import { sendAdminAlert } from '../utils/telegram.js';
 
-export const getCouponSplit = (code, rewardAmount) => {
+export const getCouponSplit = (code, rewardAmount, depositAmount = 0) => {
   const cleanCode = String(code).trim().toUpperCase();
   let cashReward = 0;
   let bonusReward = 0;
@@ -41,6 +41,15 @@ export const getCouponSplit = (code, rewardAmount) => {
   } else if (cleanCode === 'RELOAD999') {
     cashReward = 549.45; // 55% of 999
     bonusReward = 449.55; // 45% of 999
+  } else if (cleanCode === 'LUCKY5') {
+    cashReward = 0.05 * parseFloat(depositAmount || 0);
+    bonusReward = 0.00;
+  } else if (cleanCode === 'LUCKY10') {
+    cashReward = 0.10 * parseFloat(depositAmount || 0);
+    bonusReward = 0.00;
+  } else if (cleanCode === 'LUCKY15') {
+    cashReward = 0.15 * parseFloat(depositAmount || 0);
+    bonusReward = 0.00;
   } else {
     // Default fallback: 100% bonus
     cashReward = 0.00;
@@ -377,7 +386,7 @@ export const pay0Webhook = async (req, res) => {
           if (depositAmount >= parseFloat(uCoupon.min_deposit_required)) {
             rewardAmount = parseFloat(uCoupon.reward_amount);
             userCouponId = uCoupon.id;
-            const split = getCouponSplit(deposit.coupon_code, rewardAmount);
+            const split = getCouponSplit(deposit.coupon_code, rewardAmount, depositAmount);
             cashReward = split.cashReward;
             bonusReward = split.bonusReward;
           }
@@ -654,7 +663,7 @@ export const resolveAppeal = async (req, res) => {
           if (depositAmount >= parseFloat(uCoupon.min_deposit_required)) {
             rewardAmount = parseFloat(uCoupon.reward_amount);
             userCouponId = uCoupon.id;
-            const split = getCouponSplit(deposit.coupon_code, rewardAmount);
+            const split = getCouponSplit(deposit.coupon_code, rewardAmount, depositAmount);
             cashReward = split.cashReward;
             bonusReward = split.bonusReward;
           }

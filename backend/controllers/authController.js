@@ -356,7 +356,7 @@ export const getProfile = async (req, res) => {
 
     // Fetch today's completed deposits and spins
     const todayDepositsRows = await query(
-      'SELECT COALESCE(SUM(amount), 0) as todayDeposits FROM deposits WHERE user_id = ? AND status = "completed" AND created_at >= CURDATE()',
+      'SELECT COALESCE(SUM(CEIL(amount)), 0) as todayDeposits FROM deposits WHERE user_id = ? AND status = "completed" AND created_at >= CURDATE()',
       [req.user.id]
     );
     const todayDeposits = parseFloat(todayDepositsRows[0]?.todayDeposits || 0);

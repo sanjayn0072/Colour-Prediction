@@ -1169,7 +1169,7 @@ export const triggerSpin = async (req, res) => {
 
     // 1. Check user deposits and spin counts (Valid ONLY for today, midnight to midnight CURDATE())
     const [depositsResult] = await connection.query(
-      'SELECT COALESCE(SUM(amount), 0) as todayDeposits FROM deposits WHERE user_id = ? AND status = "completed" AND created_at >= CURDATE()',
+      'SELECT COALESCE(SUM(CEIL(amount)), 0) as todayDeposits FROM deposits WHERE user_id = ? AND status = "completed" AND created_at >= CURDATE()',
       [req.user.id]
     );
     const todayDeposits = parseFloat(depositsResult[0].todayDeposits);
@@ -1290,6 +1290,31 @@ export const triggerSpin = async (req, res) => {
       'UPDATE user_stats SET spins_count = spins_count + 1 WHERE user_id = ?',
       [req.user.id]
     );
+
+    // 8.5 Allocate voucher to user in DB if won
+    if (selectedPrize.type === 'empty') {
+      const voucherCode = selectedPrize.prize_name === 'Voucher 10%'
+        ? 'LUCKY10'
+        : (selectedPrize.prize_name === 'Voucher 5%' ? 'LUCKY5' : 'LUCKY15');
+      
+      const [coupons] = await connection.query('SELECT id FROM coupons WHERE code = ? LIMIT 1', [voucherCode]);
+      let couponId;
+      if (coupons && coupons.length > 0) {
+        couponId = coupons[0].id;
+      } else {
+        const minDep = voucherCode === 'LUCKY5' ? 100 : (voucherCode === 'LUCKY10' ? 200 : 300);
+        const [insertRes] = await connection.query(
+          'INSERT INTO coupons (code, type, reward_amount, min_deposit_required, validity_days) VALUES (?, "LOYALTY", 0.0000, ?, 3)',
+          [voucherCode, minDep]
+        );
+        couponId = insertRes.insertId;
+      }
+
+      await connection.query(
+        'INSERT INTO user_coupons (user_id, coupon_id, status, expires_at) VALUES (?, ?, "AVAILABLE", DATE_ADD(NOW(), INTERVAL 3 DAY))',
+        [req.user.id, couponId]
+      );
+    }
 
     await connection.commit();
 

@@ -67,13 +67,11 @@ export default function SpinWheel({ onNavigate }) {
   const [wonPrize, setWonPrize] = useState(null)
   const [showWinModal, setShowWinModal] = useState(false)
 
-  // Live winners ticker feed (using game rewards)
+  // Live winners ticker feed (using game rewards) - Vouchers filtered out
   const [recentWinners, setRecentWinners] = useState([
     { uid: '382941', prize: '₹250 Bonus' },
-    { uid: '194827', prize: '50% Voucher' },
     { uid: '902844', prize: '₹50 Cash' },
     { uid: '782912', prize: '₹100 Bonus' },
-    { uid: '482015', prize: '25% Voucher' },
     { uid: '682949', prize: '₹10 Cash' },
     { uid: '293818', prize: '₹500 Bonus' },
     { uid: '582030', prize: '₹20 Cash' },
@@ -82,10 +80,11 @@ export default function SpinWheel({ onNavigate }) {
   useEffect(() => {
     const interval = setInterval(() => {
       const randomUid = String(Math.floor(100000 + Math.random() * 900000))
-      const randomPrize = WHEEL_PRIZES[Math.floor(Math.random() * WHEEL_PRIZES.length)].label
+      const nonVoucherPrizes = WHEEL_PRIZES.filter(p => p.type !== 'voucher')
+      const randomPrize = nonVoucherPrizes[Math.floor(Math.random() * nonVoucherPrizes.length)].label
       setRecentWinners(prev => [
         { uid: randomUid, prize: randomPrize },
-        ...prev.slice(0, 7)
+        ...prev.slice(0, 5)
       ])
     }, 5000)
     return () => clearInterval(interval)
@@ -178,7 +177,7 @@ export default function SpinWheel({ onNavigate }) {
 
       {/* ── LIVE WINNERS TICKER ── */}
       <div className="relative z-10 bg-slate-100/80 backdrop-blur-md border-y border-slate-200/80 py-2.5 overflow-hidden select-none shadow-sm">
-        <div className="flex items-center gap-0 animate-[marquee_25s_linear_infinite] whitespace-nowrap">
+        <div className="flex items-center gap-0 animate-[marquee_25s_linear_infinite] whitespace-nowrap w-max">
           {[...recentWinners, ...recentWinners].map((winner, index) => (
             <div key={index} className="inline-flex items-center gap-2 mx-6 text-xs text-slate-500">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/70" />
@@ -336,7 +335,7 @@ export default function SpinWheel({ onNavigate }) {
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs font-bold text-slate-700 px-1 font-sans">
               <span>Deposit Milestones Progress</span>
-              <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md text-[10px]">{Math.floor(totalDeposit / 200)} / 10 Spins Earned</span>
+              <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md text-[10px]">{Math.floor(totalDeposit / 200)} Spin{Math.floor(totalDeposit / 200) !== 1 ? 's' : ''} Earned</span>
             </div>
             
             <div className="relative px-3 py-2 bg-slate-50 border border-slate-150 rounded-2xl">
