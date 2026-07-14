@@ -482,29 +482,15 @@ export default function Support({ onNavigate }) {
 
                         {complaint.imageUrl && (
                           <div className="pt-0.5">
-                            {complaint.imageUrl.toLowerCase().endsWith('.pdf') ? (
-                              <a
-                                href={`${API_BASE}${complaint.imageUrl}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-semibold text-primary hover:underline no-underline"
-                              >
-                                <Paperclip size={12} />
-                                <span>PDF Attachment</span>
-                              </a>
-                            ) : (
-                              <div className="relative w-16 h-16 border border-slate-205 rounded-xl overflow-hidden bg-slate-50 group">
-                                <img src={`${API_BASE}${complaint.imageUrl}`} alt="Attachment" className="w-full h-full object-cover" />
-                                <a 
-                                  href={`${API_BASE}${complaint.imageUrl}`} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
-                                  className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline"
-                                >
-                                  View File
-                                </a>
-                              </div>
-                            )}
+                            <a
+                              href={`${API_BASE}${complaint.imageUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-indigo-600 hover:text-indigo-700 transition-colors shadow-sm hover:shadow no-underline outline-none cursor-pointer"
+                            >
+                              <Paperclip size={12} className="text-indigo-500" />
+                              <span>{complaint.imageUrl.toLowerCase().endsWith('.pdf') ? 'PDF Attachment' : 'Image Attachment'}</span>
+                            </a>
                           </div>
                         )}
 
