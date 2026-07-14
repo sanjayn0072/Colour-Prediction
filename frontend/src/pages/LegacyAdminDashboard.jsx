@@ -21,10 +21,29 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
 
   const {
     diceTimeLeft, diceRoundId, dicePhase,
-    colourTimeLeft, colourRoundId, colourPhase
+    colourTimeLeft, colourRoundId, colourPhase,
+    socket
   } = useGame()
 
   const [activeTab, setActiveTab] = useState('overview')
+  const [onlineAdmins, setOnlineAdmins] = useState([])
+
+  useEffect(() => {
+    if (!socket || !isSuperAdmin) return;
+    
+    const handleStatusUpdate = (data) => {
+      if (data && data.onlineAdmins) {
+        setOnlineAdmins(data.onlineAdmins.filter(a => a.id !== user?.id));
+      }
+    };
+    
+    socket.on('admin_status_update', handleStatusUpdate);
+    socket.emit('check_online_admins');
+    
+    return () => {
+      socket.off('admin_status_update', handleStatusUpdate);
+    };
+  }, [socket, isSuperAdmin, user?.id]);
 
   useEffect(() => {
     const originalFetch = window.fetch;
@@ -1822,6 +1841,30 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
               <p className="text-[9px] text-slate-550 truncate font-semibold">{isSuperAdmin ? 'Super Admin' : 'Standard Admin'}</p>
             </div>
           </div>
+
+          {isSuperAdmin && (
+            <div className="p-3 bg-indigo-950/20 border border-indigo-900/35 rounded-xl space-y-2">
+              <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                Active Staff Status
+              </div>
+              {onlineAdmins.length === 0 ? (
+                <div className="text-[10px] font-semibold text-slate-550 italic">No standard admins online</div>
+              ) : (
+                <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+                  {onlineAdmins.map((adm) => (
+                    <div key={adm.id} className="flex items-center justify-between text-[10px] font-bold text-slate-300">
+                      <span className="truncate pr-1">{adm.name}</span>
+                      <span className="flex items-center gap-1 text-[8px] font-black text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        Online
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Navigation Links */}
           <nav className="space-y-1">

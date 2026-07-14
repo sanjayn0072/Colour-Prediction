@@ -309,6 +309,9 @@ io.use(async (socket, next) => {
 });
 
 // ─── SOCKET.IO CONNECTIONS ───
+// In-memory tracking of online admins: adminId -> { id, name, sockets: Set }
+const activeAdmins = new Map();
+
 // In-memory rate limiter for socket room joins
 const socketJoinTimestamps = new Map();
 const SOCKET_JOIN_COOLDOWN_MS = 5000;
@@ -323,13 +326,42 @@ io.on('connection', (socket) => {
   if (socket.user?.role === 'super_admin') {
     socket.join('super_admin_room');
     socket.join('admin_room');
+    
+    // Emit initial list of online admins to the super_admin
+    socket.emit('admin_status_update', {
+      onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
+    });
   } else if (socket.user?.role === 'admin') {
     socket.join('admin_room');
+    
+    const adminId = socket.user.id;
+    if (!activeAdmins.has(adminId)) {
+      activeAdmins.set(adminId, {
+        id: adminId,
+        name: socket.user.name,
+        sockets: new Set()
+      });
+    }
+    activeAdmins.get(adminId).sockets.add(socket.id);
+    
+    // Broadcast status update to super_admin_room
+    io.to('super_admin_room').emit('admin_status_update', {
+      onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
+    });
+
     io.to('super_admin_room').emit('admin_logged_in', { 
       adminId: socket.user.id,
       adminName: socket.user.name 
     });
   }
+
+  socket.on('check_online_admins', () => {
+    if (socket.user?.role === 'super_admin') {
+      socket.emit('admin_status_update', {
+        onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
+      });
+    }
+  });
 
   socket.on('join_dice_lobby', async () => {
     const now = Date.now();
@@ -398,6 +430,23 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     socketJoinTimestamps.delete(socket.id + '_dice');
     socketJoinTimestamps.delete(socket.id + '_colour');
+    
+    if (socket.user?.role === 'admin') {
+      const adminId = socket.user.id;
+      const adminInfo = activeAdmins.get(adminId);
+      if (adminInfo) {
+        adminInfo.sockets.delete(socket.id);
+        if (adminInfo.sockets.size === 0) {
+          activeAdmins.delete(adminId);
+        }
+      }
+      
+      // Broadcast status update to super_admin_room
+      io.to('super_admin_room').emit('admin_status_update', {
+        onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
+      });
+    }
+    
     logger.info(`Socket disconnected: ${socket.id}`);
   });
 });
