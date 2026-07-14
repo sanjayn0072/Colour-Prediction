@@ -19,6 +19,9 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     products, setProducts, addProduct, updateProduct, deleteProduct 
   } = useUser()
 
+  const isSuperAdmin = user?.role === 'super_admin'
+  const isAdmin = user?.role === 'admin'
+
   const {
     diceTimeLeft, diceRoundId, dicePhase,
     colourTimeLeft, colourRoundId, colourPhase,
@@ -750,9 +753,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   // Command Palette states
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [commandPaletteSearch, setCommandPaletteSearch] = useState('')
-
-  const isSuperAdmin = user?.role === 'super_admin'
-  const isAdmin = user?.role === 'admin'
 
   const tabs = isSuperAdmin ? [
     { id: 'overview', label: 'Overview', icon: Activity },
