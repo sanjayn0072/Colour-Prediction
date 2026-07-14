@@ -123,12 +123,12 @@ export const getLogs = async (req, res) => {
     // 3. Fetch recent administrative audit logs
     let auditLogs = [];
     try {
-      const records = await query(
-        'SELECT al.id, al.action, al.details, al.created_at as createdAt, a.name as adminName ' +
-        'FROM audit_logs al ' +
-        'JOIN users a ON al.admin_id = a.id ' +
-        'ORDER BY al.created_at DESC LIMIT 30'
-      );
+      let auditSql = 'SELECT al.id, al.action, al.details, al.created_at as createdAt, a.name as adminName FROM audit_logs al JOIN users a ON al.admin_id = a.id';
+      if (req.user.role === 'admin') {
+        auditSql += " WHERE a.role != 'super_admin'";
+      }
+      auditSql += ' ORDER BY al.created_at DESC LIMIT 30';
+      const records = await query(auditSql);
       auditLogs = records || [];
     } catch (err) {
       logger.error(err, 'Logs query error: audit_logs');
@@ -238,6 +238,9 @@ export const getAdminUsers = async (req, res) => {
 
   try {
     let sql = 'SELECT id, uid, name, phone, email, role, status, created_at as createdAt FROM users WHERE 1=1';
+    if (req.user.role === 'admin') {
+      sql += " AND role != 'super_admin'";
+    }
     const params = [];
 
     if (search.trim() !== '') {
@@ -1472,6 +1475,17 @@ export const updateUserRole = async (req, res) => {
   const { userId, newRole, totpCode } = req.body;
   if (!userId || !newRole || !totpCode) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Explicit privilege control block
+  if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Access denied. Only Super Admins can update roles.' });
+  }
+
+  if (newRole === 'admin' || newRole === 'super_admin') {
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Permission denied. Standard admins cannot elevate user privileges.' });
+    }
   }
 
   const connection = await pool.getConnection();

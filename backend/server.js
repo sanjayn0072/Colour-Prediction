@@ -341,15 +341,17 @@ io.on('connection', (socket) => {
     }
     
     const adminId = socket.user.id;
-    if (!activeAdmins.has(adminId)) {
-      activeAdmins.set(adminId, {
-        id: adminId,
-        name: socket.user.name,
-        role: socket.user.role,
-        sockets: new Set()
-      });
+    if (socket.user?.role !== 'super_admin') {
+      if (!activeAdmins.has(adminId)) {
+        activeAdmins.set(adminId, {
+          id: adminId,
+          name: socket.user.name,
+          role: socket.user.role,
+          sockets: new Set()
+        });
+      }
+      activeAdmins.get(adminId).sockets.add(socket.id);
     }
-    activeAdmins.get(adminId).sockets.add(socket.id);
     
     // Broadcast status update to super_admin_room
     io.to('super_admin_room').emit('admin_status_update', getOnlineAdminsPayload());

@@ -763,7 +763,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     { id: 'support', label: 'Support Tickets', icon: AlertTriangle },
     { id: 'promotions', label: 'Coupons & Promos', icon: Tag },
     { id: 'game-controls', label: 'Game Center', icon: Gamepad2 },
-    { id: 'logs', label: 'Logs', icon: Database },
     { id: 'config', label: 'Store Config', icon: Settings },
     { id: 'appeals', label: 'Payment Appeals', icon: CreditCard },
     { id: 'credentials', label: 'Env & Credentials', icon: Shield },
@@ -775,7 +774,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'support', label: 'Support Tickets', icon: AlertTriangle },
     { id: 'game-controls', label: 'Game Center', icon: Gamepad2 },
-    { id: 'logs', label: 'Logs', icon: Database },
     { id: 'config', label: 'Store Config', icon: Settings },
     { id: 'appeals', label: 'Payment Appeals', icon: CreditCard },
     { id: 'credentials', label: 'Env & Credentials', icon: Shield }
@@ -2555,68 +2553,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
           </div>
         )}
 
-        {/* ── TABS: SYSTEM LOGS ── */}
-        {activeTab === 'logs' && (
-          <div className="space-y-4">
-            {/* Filter Search */}
-            <div className="flex flex-col gap-2">
-              <input
-                type="text"
-                value={logSearch}
-                onChange={(e) => setLogSearch(e.target.value)}
-                placeholder="Search logs (e.g. success, round, uid)..."
-                className="w-full bg-slate-955/70 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-slate-700 transition-colors"
-              />
-              
-              {/* Level Pill filters */}
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-1">
-                {['ALL', 'INFO', 'SUCCESS', 'WARNING'].map((lvl) => (
-                  <button
-                    key={lvl}
-                    onClick={() => setLogFilter(lvl)}
-                    className={`px-3 py-1 rounded-full text-[9px] font-bold border transition-colors cursor-pointer shrink-0 border-slate-800 ${
-                      logFilter === lvl
-                        ? 'bg-slate-100 text-slate-950 border-slate-100'
-                        : 'bg-slate-955 text-slate-500 border-slate-800 hover:text-slate-300'
-                    }`}
-                  >
-                    {lvl}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Logs Window */}
-            <div className="bg-slate-955/40 border border-slate-800 rounded-2xl overflow-hidden flex flex-col max-h-[360px]">
-              <div className="bg-slate-955/80 px-4 py-2 border-b border-slate-800 flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live Log Stream</span>
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-              </div>
-
-              <div className="p-3 overflow-y-auto space-y-2 font-mono text-[10px] leading-relaxed flex-1 scrollbar-hide">
-                {filteredLogs.length === 0 ? (
-                  <p className="text-slate-600 text-center py-8 font-sans">No logs matching filters.</p>
-                ) : (
-                  filteredLogs.map((log) => (
-                    <div key={log.id} className="flex items-start gap-2 border-b border-slate-900 pb-1.5 last:border-0 last:pb-0">
-                      <span className="text-slate-500 shrink-0">[{log.time}]</span>
-                      <span className={`font-bold shrink-0 ${
-                        log.type === 'SUCCESS' ? 'text-emerald-400' :
-                        log.type === 'WARNING' ? 'text-amber-500' : 'text-blue-400'
-                      }`}>
-                        {log.type}
-                      </span>
-                      <span className="text-slate-300 break-all">{log.message}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* TABS: SYSTEM LOGS Removed */}
+        
 
         {/* ── TABS: CREDENTIALS ── */}
         
@@ -6405,7 +6343,6 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                 { label: 'Go to Support Complaints Desk', action: () => setActiveTab('support'), icon: AlertTriangle, clearance: 'super_admin' },
                 { label: 'Go to Coupons & Promotions Panel', action: () => setActiveTab('promotions'), icon: Tag, clearance: 'super_admin' },
                 { label: 'Go to Game Center Dashboard', action: () => setActiveTab('game-controls'), icon: Gamepad2, clearance: 'all' },
-                { label: 'Go to Logs Console', action: () => setActiveTab('logs'), icon: Database, clearance: 'all' },
                 { label: 'Go to Store Configuration Settings', action: () => setActiveTab('config'), icon: Settings, clearance: 'all' },
           { label: 'Go to Env & Credentials Hub', action: () => setActiveTab('credentials'), icon: Shield, clearance: 'all' },
           { label: 'Go to Alerts & Notifications Center', action: () => setActiveTab('notifications'), icon: Bell, clearance: 'super_admin' },
