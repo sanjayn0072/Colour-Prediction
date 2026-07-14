@@ -602,6 +602,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   };
  
   const [logFilter, setLogFilter] = useState('ALL') 
+  const [auditTab, setAuditTab] = useState('ledger')
   const [logSearch, setLogSearch] = useState('')
   const [logs, setLogs] = useState([])
 
@@ -5597,10 +5598,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
             </div>
 
             {/* ── TAB NAV (overlaps header) ── */}
-            {!loadingUserHistory && (() => {
-              const [auditTab, setAuditTab] = React.useState('ledger');
-              return (
-                <>
+            {!loadingUserHistory && (
+              <>
                   <div className="flex -mt-6 mx-5 gap-2 shrink-0 relative z-10">
                     {[
                       { id: 'ledger', label: `Ledger`, count: txns.length },
@@ -5744,8 +5743,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                     )}
                   </div>
                 </>
-              );
-            })()}
+            )}
 
             {/* Loading state */}
             {loadingUserHistory && (
