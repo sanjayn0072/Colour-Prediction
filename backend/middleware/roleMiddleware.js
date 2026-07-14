@@ -16,7 +16,8 @@ export const checkRole = (allowedRoles = []) => {
       req.originalUrl.includes('/2fa/status') || 
       req.originalUrl.includes('/2fa/verify') || 
       req.originalUrl.includes('/metrics') ||
-      req.originalUrl.includes('/game/overwrite')
+      req.originalUrl.includes('/game/overwrite') ||
+      req.originalUrl.includes('/override')
     );
     
     if (allowedRoles.some(r => ['admin', 'super_admin'].includes(r)) && !req.adminVerified) {
