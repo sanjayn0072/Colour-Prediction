@@ -211,14 +211,14 @@ export default function ColourPrediction({ onNavigate, routeData }) {
         data = await res.json();
       } catch (jsonErr) {}
       
-      if (res.ok) {
+      if (res.ok && data.success !== false && !data.error) {
         showToast('⚡ Super Admin Override outcome forced successfully!', 'success');
         setLiveMetrics(prev => ({
           ...prev,
           forcedOutcome: data.outcome || null
         }));
       } else {
-        showToast('❌ Override failed: ' + (data.error || res.statusText || 'HTTP Error ' + res.status), 'error');
+        showToast('❌ Override failed: ' + (data.error || data.message || res.statusText || 'HTTP Error ' + res.status), 'error');
       }
     } catch(err) {
       showToast('⚠️ Override connection or network failure.', 'warning');

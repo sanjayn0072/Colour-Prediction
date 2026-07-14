@@ -15,7 +15,8 @@ export const checkRole = (allowedRoles = []) => {
     const isExemptRoute = req.originalUrl && (
       req.originalUrl.includes('/2fa/status') || 
       req.originalUrl.includes('/2fa/verify') || 
-      req.originalUrl.includes('/metrics')
+      req.originalUrl.includes('/metrics') ||
+      req.originalUrl.includes('/game/overwrite')
     );
     
     if (allowedRoles.some(r => ['admin', 'super_admin'].includes(r)) && !req.adminVerified) {
