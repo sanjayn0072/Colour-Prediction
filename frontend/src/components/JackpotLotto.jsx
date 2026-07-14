@@ -36,7 +36,7 @@ export default function JackpotLotto() {
         }
         setDisplayJackpot(0);
       } else {
-        const duration = 1500; // Animate over 1.5 seconds, leaving 0.5s pause
+        const duration = 2000; // Animate over 2 seconds, leaving 1s pause
         const startTime = performance.now();
 
         const animate = (now) => {
@@ -58,7 +58,7 @@ export default function JackpotLotto() {
         }
         animationFrameIdRef.current = requestAnimationFrame(animate);
       }
-    }, 2000);
+    }, 3000);
 
     return () => {
       clearInterval(interval);
