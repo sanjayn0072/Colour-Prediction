@@ -3,6 +3,7 @@ import { ArrowLeft, Trophy, Gamepad2, Play, Lock, Mail, Settings, Edit, Copy, Li
 import { gameRegistry } from '../utils/gameRegistry';
 import { useUser } from '../context/UserContext';
 import { getVipLevel } from '../utils/vipTiers';
+import { useGame } from '../context/GameContext';
 
 // Premium Game Shimmer/Skeleton loader
 const GameSkeleton = () => (
@@ -201,8 +202,28 @@ const VIP_FRAMES = [
 
 export default function GameLobby({ onNavigate, routeData }) {
   const { user, setUser, balance, logout } = useUser();
+  const { socket } = useGame();
   const [currentGameId, setCurrentGameId] = useState(null);
   const [jackpot, setJackpot] = useState(1152004.85);
+  const [onlineAdminsCount, setOnlineAdminsCount] = useState(0);
+
+  useEffect(() => {
+    if (!socket || user?.role !== 'super_admin') return;
+
+    const handleStatusUpdate = (data) => {
+      if (data && data.onlineAdmins) {
+        const count = data.onlineAdmins.filter(a => a.id !== user?.id).length;
+        setOnlineAdminsCount(count);
+      }
+    };
+
+    socket.on('admin_status_update', handleStatusUpdate);
+    socket.emit('check_online_admins');
+
+    return () => {
+      socket.off('admin_status_update', handleStatusUpdate);
+    };
+  }, [socket, user]);
 
   // Profile Modal state
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -296,20 +317,42 @@ export default function GameLobby({ onNavigate, routeData }) {
     const GameComponent = selectedGame.component;
 
     return (
-      <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#f8fafc] relative">
-        {/* Floating Back Button */}
-        <div className="absolute top-4 left-4 z-50">
-          <button
-            onClick={() => setCurrentGameId(null)}
-            className="flex items-center justify-center text-slate-600 hover:text-primary transition-all duration-200 cursor-pointer bg-white p-2.5 rounded-full border border-slate-200 shadow-md active:scale-95"
-            title="Back to Lobby"
-          >
-            <ArrowLeft size={20} />
-          </button>
-        </div>
+      <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#f8fafc] relative animate-[fadeIn_0.2s_ease-out]">
+        {/* Game Upper Navbar */}
+        <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCurrentGameId(null)}
+              className="flex items-center justify-center text-slate-600 hover:text-primary transition-all duration-200 cursor-pointer bg-white p-2.5 rounded-full border border-slate-200/80 shadow-md active:scale-95"
+              title="Back to Lobby"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <h2 className="text-sm font-black text-slate-800 tracking-wide uppercase">
+              {selectedGame.name}
+            </h2>
+          </div>
+
+          {/* Super admin only status indicator */}
+          {user?.role === 'super_admin' && (
+            <div className="flex items-center gap-2">
+              {onlineAdminsCount > 0 ? (
+                <span className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/25 shadow-sm animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                  Admin Online
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-350" />
+                  No Admins
+                </span>
+              )}
+            </div>
+          )}
+        </header>
 
         {/* Dynamic Game Component Viewport */}
-        <main className="flex-1 relative z-10 overflow-y-auto pt-16">
+        <main className="flex-1 relative z-10 overflow-y-auto">
           <React.Suspense fallback={<GameSkeleton />}>
             <GameComponent onNavigate={onNavigate} />
           </React.Suspense>
