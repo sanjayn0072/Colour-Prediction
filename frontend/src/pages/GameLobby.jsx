@@ -4,7 +4,7 @@ import { gameRegistry } from '../utils/gameRegistry';
 import { useUser } from '../context/UserContext';
 import { getVipLevel } from '../utils/vipTiers';
 import { useGame } from '../context/GameContext';
-
+import JackpotLotto from '../components/JackpotLotto';
 // Premium Game Shimmer/Skeleton loader
 const GameSkeleton = () => (
   <div className="min-h-screen bg-[#f8fafc] p-6 flex flex-col items-center justify-center font-sans space-y-6">
@@ -204,7 +204,6 @@ export default function GameLobby({ onNavigate, routeData }) {
   const { user, setUser, balance, logout } = useUser();
   const { socket } = useGame();
   const [currentGameId, setCurrentGameId] = useState(null);
-  const [jackpot, setJackpot] = useState(1152004.85);
   const [onlineAdminsCount, setOnlineAdminsCount] = useState(0);
 
   useEffect(() => {
@@ -253,13 +252,7 @@ export default function GameLobby({ onNavigate, routeData }) {
     }
   }, [routeData]);
 
-  // Live Jackpot increments to simulate active environment
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setJackpot((prev) => prev + Math.random() * 1.5);
-    }, 1200);
-    return () => clearInterval(timer);
-  }, []);
+
 
   const selectedGame = gameRegistry.find((g) => g.id === currentGameId);
 
@@ -425,21 +418,7 @@ export default function GameLobby({ onNavigate, routeData }) {
         </header>
 
         {/* Live Jackpot Banner: Slot Machine Billboard */}
-        <div className="px-4 pt-4">
-          <div className="relative overflow-hidden rounded-3xl bg-slate-950 shadow-xl flex flex-col items-center justify-center w-full max-w-md mx-auto aspect-[1.6/1]">
-            <img
-              src="/jackpot_lotto.png"
-              className="w-full h-full object-cover"
-              alt="Jackpot Lotto"
-            />
-            {/* Absolute overlay container positioned directly over the red rectangle empty space in the center */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[18px] sm:text-[22px] font-black text-[#FFE680] font-mono tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] select-none mt-1">
-                ₹{jackpot.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-        </div>
+        <JackpotLotto />
 
         {/* Game Slots Lobby Category Selector */}
         <div className="px-4 pt-6 space-y-4">
