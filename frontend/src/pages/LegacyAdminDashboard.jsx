@@ -21,6 +21,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
 
   const isSuperAdmin = user?.role === 'super_admin'
   const isAdmin = user?.role === 'admin'
+  const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 
   const {
     diceTimeLeft, diceRoundId, dicePhase,
@@ -4203,7 +4204,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                       <tr className="border-b border-slate-805 bg-slate-950/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         <th className="px-6 py-4">Ticket Details</th>
                         <th className="px-6 py-4">User</th>
-                        <th className="px-6 py-4">Issue Description</th>
+                        <th className="px-6 py-4">Evidence</th>
                         <th className="px-6 py-4">Status & Priority</th>
                         <th className="px-6 py-4">Staff Assignment</th>
                         <th className="px-6 py-4 text-right">Actions</th>
@@ -4212,25 +4213,50 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                     <tbody className="divide-y divide-slate-800/50 text-xs">
                       {complaintsList.map((complaint) => (
                         <tr key={complaint.id} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-white">{complaint.subject}</div>
-                            <div className="text-[10px] text-indigo-400 font-bold mt-1 uppercase tracking-wider">{complaint.complaintType}</div>
-                            <div className="text-[9px] text-slate-500 mt-1">ID: {complaint.id}</div>
-                            <div className="text-[9px] text-slate-500">Created: {new Date(complaint.createdAt).toLocaleString()}</div>
+                          <td className="px-6 py-4 max-w-sm">
+                            <div className="font-bold text-white text-[13px]">{complaint.subject}</div>
+                            <div className="text-[11px] text-slate-350 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800/80 leading-relaxed mt-2 font-medium">
+                              {complaint.description}
+                            </div>
+                            <div className="flex gap-2 flex-wrap items-center mt-2 text-[9px] text-slate-500">
+                              <span className="font-mono bg-slate-950 px-1.5 py-0.5 rounded text-indigo-400 font-bold">UID: {complaint.userUid || 'N/A'}</span>
+                              <span>·</span>
+                              <span>Ticket ID: {complaint.id}</span>
+                              <span>·</span>
+                              <span>Created: {new Date(complaint.createdAt).toLocaleString()}</span>
+                            </div>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 font-medium text-slate-300">
                             <div className="font-bold text-white">{complaint.userName}</div>
                             <div className="text-[10px] text-slate-500 font-mono mt-0.5">{complaint.userPhone}</div>
-                          </td>
-                          <td className="px-6 py-4 max-w-xs">
-                            <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-2">{complaint.description}</p>
-                            {complaint.imageUrl && (
-                              <div className="relative mt-2 w-14 h-14 border border-slate-850 rounded-lg overflow-hidden bg-slate-955 flex items-center justify-center shrink-0">
-                                <img src={complaint.imageUrl} alt="Attachment" className="w-full h-full object-cover" />
-                                <a href={complaint.imageUrl} target="_blank" rel="noreferrer" className="absolute inset-0 bg-slate-955/60 opacity-0 hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline">
-                                  Open
-                                </a>
+                            {complaint.complaintType && (
+                              <div className="text-[9px] text-indigo-400 font-bold mt-1.5 uppercase tracking-wider">
+                                Order ID: {complaint.complaintType}
                               </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {complaint.imageUrl ? (
+                              complaint.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                                <a
+                                  href={`${API_BASE}${complaint.imageUrl}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 p-2 bg-slate-955 border border-slate-800 rounded-lg text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors no-underline"
+                                >
+                                  <Paperclip size={12} />
+                                  <span>PDF Evidence</span>
+                                </a>
+                              ) : (
+                                <div className="relative w-16 h-16 border border-slate-850 rounded-lg overflow-hidden bg-slate-955 flex items-center justify-center shrink-0 group">
+                                  <img src={`${API_BASE}${complaint.imageUrl}`} alt="Attachment" className="w-full h-full object-cover" />
+                                  <a href={`${API_BASE}${complaint.imageUrl}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-slate-955/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline">
+                                    Open Image
+                                  </a>
+                                </div>
+                              )
+                            ) : (
+                              <span className="text-[10px] text-slate-600 font-bold">No Evidence</span>
                             )}
                           </td>
                           <td className="px-6 py-4 space-y-1.5">
@@ -4315,16 +4341,31 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                       <p className="text-[11px] text-slate-350 leading-relaxed bg-slate-950/20 p-2.5 rounded-lg border border-slate-900">{complaint.description}</p>
 
                       {complaint.imageUrl && (
-                        <div className="relative w-28 h-28 border border-slate-850 rounded-lg overflow-hidden bg-slate-955">
-                          <img src={complaint.imageUrl} alt="Complaint Attachment" className="w-full h-full object-cover" />
-                          <a href={complaint.imageUrl} target="_blank" rel="noreferrer" className="absolute inset-0 bg-slate-955/60 opacity-0 hover:opacity-100 flex items-center justify-center text-[10px] font-bold text-white transition-opacity no-underline">
-                            View Full
-                          </a>
+                        <div className="mt-2">
+                          {complaint.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                            <a
+                              href={`${API_BASE}${complaint.imageUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 p-2 bg-slate-955 border border-slate-800 rounded-lg text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors no-underline"
+                            >
+                              <Paperclip size={12} />
+                              <span>View PDF Evidence</span>
+                            </a>
+                          ) : (
+                            <div className="relative w-20 h-20 border border-slate-850 rounded-lg overflow-hidden bg-slate-955 group">
+                              <img src={`${API_BASE}${complaint.imageUrl}`} alt="Complaint Attachment" className="w-full h-full object-cover" />
+                              <a href={`${API_BASE}${complaint.imageUrl}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-slate-955/65 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-bold text-white transition-opacity no-underline">
+                                View Full
+                              </a>
+                            </div>
+                          )}
                         </div>
                       )}
 
                       <div className="bg-slate-955/40 rounded-xl p-3 text-[10px] text-slate-400 space-y-1.5 border border-slate-850">
-                        <p><span className="text-slate-500">Submitted by:</span> {complaint.userName} ({complaint.userPhone})</p>
+                        <p><span className="text-slate-500">Submitted by:</span> {complaint.userName} ({complaint.userPhone}) · <span className="font-mono text-indigo-400 font-bold">UID: {complaint.userUid || 'N/A'}</span></p>
+                        <p><span className="text-slate-500">Ticket ID:</span> {complaint.id}</p>
                         <p><span className="text-slate-500">Assigned Admin:</span> {complaint.adminName || 'Unassigned'}</p>
                         {complaint.resolutionNotes && (
                           <div className="mt-1 bg-slate-900 p-2 rounded text-slate-400 text-[9px] leading-relaxed">
