@@ -342,9 +342,9 @@ export default function GameLobby({ onNavigate, routeData }) {
                   Admin Online
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 shadow-sm">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-350" />
-                  No Admins
+                <span className="flex items-center gap-1.5 text-[9px] font-black text-rose-600 uppercase tracking-widest bg-rose-50/70 px-2.5 py-1 rounded-full border border-rose-100 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-455" style={{ backgroundColor: '#ef4444' }} />
+                  Admin Offline
                 </span>
               )}
             </div>
