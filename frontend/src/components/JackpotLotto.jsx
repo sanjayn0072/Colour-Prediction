@@ -17,8 +17,8 @@ export default function JackpotLotto() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // 1. Generate pseudo-random integer between 5 and 100 inclusive
-      const increment = Math.floor(Math.random() * (100 - 5 + 1)) + 5;
+      // 1. Generate pseudo-random integer between 1000 and 3000 inclusive
+      const increment = Math.floor(Math.random() * (3000 - 1000 + 1)) + 1000;
       const prevVal = jackpotRef.current;
       let targetVal = prevVal + increment;
 
@@ -36,7 +36,7 @@ export default function JackpotLotto() {
         }
         setDisplayJackpot(0);
       } else {
-        const duration = 2000; // Animate over 2 seconds, leaving 1s pause
+        const duration = 3000; // Animate over 3 seconds, leaving 27s pause
         const startTime = performance.now();
 
         const animate = (now) => {
@@ -58,7 +58,7 @@ export default function JackpotLotto() {
         }
         animationFrameIdRef.current = requestAnimationFrame(animate);
       }
-    }, 3000);
+    }, 30000);
 
     return () => {
       clearInterval(interval);
