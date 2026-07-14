@@ -9,6 +9,7 @@ export const validate = (schema) => (req, res, next) => {
     });
     next();
   } catch (error) {
+    console.error('[Zod Validation Failure]:', error);
     const issues = error.issues || error.errors || [];
     return res.status(400).json({
       error: 'Validation failed',
@@ -331,9 +332,9 @@ export const createComplaintSchema = z.object({
       (val) => val.trim().split(/\s+/).filter(Boolean).length <= 100,
       { message: 'Description must not exceed 100 words' }
     ),
-    refId: z.string().trim().max(20, 'Order number must not exceed 20 characters').refine(
-      (val) => !val || /^[a-zA-Z0-9]+$/.test(val),
-      { message: 'Order number must be alphanumeric' }
+    refId: z.string().trim().max(30, 'Order number must not exceed 30 characters').regex(
+      /^[a-zA-Z0-9\-_#\s]*$/,
+      'Order number must be alphanumeric (hyphens/underscores/hashes allowed)'
     ).optional().nullable()
   })
 });

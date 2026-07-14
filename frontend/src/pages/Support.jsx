@@ -131,7 +131,7 @@ export default function Support({ onNavigate }) {
   const descWords = getWordCount(description);
   const isSubjectInvalid = subjectWords > 20;
   const isDescInvalid = descWords > 100;
-  const isRefIdInvalid = refId.length > 20 || (refId.length > 0 && !/^[a-zA-Z0-9]+$/.test(refId));
+  const isRefIdInvalid = refId.length > 30 || (refId.length > 0 && !/^[a-zA-Z0-9\-_#\s]+$/.test(refId));
   const isFormInvalid = isSubjectInvalid || isDescInvalid || isRefIdInvalid;
 
   // Handle email form submit
@@ -163,6 +163,10 @@ export default function Support({ onNavigate }) {
       });
       const data = await response.json();
       if (!response.ok) {
+        if (data.details && Array.isArray(data.details)) {
+          const detailMsgs = data.details.map(d => d.message).join(', ');
+          throw new Error(detailMsgs);
+        }
         throw new Error(data.error || 'Failed to submit complaint');
       }
       setEmailSuccess(true)
@@ -301,7 +305,7 @@ export default function Support({ onNavigate }) {
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Order / Game Period ID (Optional)</label>
                       <span className={`text-[9px] font-bold ${isRefIdInvalid ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
-                        {refId.length} / 20 chars
+                        {refId.length} / 30 chars
                       </span>
                     </div>
                     <input
@@ -312,7 +316,7 @@ export default function Support({ onNavigate }) {
                       className={`w-full px-3 py-2 bg-slate-50 border ${isRefIdInvalid ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-200 focus:ring-primary/20 focus:border-primary'} rounded-xl text-xs text-slate-850 focus:outline-none focus:ring-2 transition-all font-mono`}
                     />
                     {isRefIdInvalid && (
-                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Order ID must be alphanumeric and max 20 characters.</p>
+                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Order ID must be alphanumeric (dashes/hashes allowed) and max 30 characters.</p>
                     )}
                   </div>
 
