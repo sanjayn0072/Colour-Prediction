@@ -42,8 +42,37 @@ export default function Support({ onNavigate }) {
   const [sendingEmail, setSendingEmail] = useState(false)
   const fileInputRef = useRef(null)
 
+  // Recent complaints states
+  const [complaints, setComplaints] = useState([])
+  const [loadingComplaints, setLoadingComplaints] = useState(false)
+
   // Toast message
   const [toast, setToast] = useState(null)
+
+  const fetchUserComplaints = async () => {
+    setLoadingComplaints(true)
+    const token = localStorage.getItem('token')
+    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+    try {
+      const response = await fetch(`${API_BASE}/api/support/complaints`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setComplaints(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch complaints:', err)
+    } finally {
+      setLoadingComplaints(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchUserComplaints()
+  }, [])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -171,6 +200,7 @@ export default function Support({ onNavigate }) {
       }
       setEmailSuccess(true)
       showToast('Support ticket sent successfully!')
+      fetchUserComplaints()
     } catch (err) {
       console.error(err)
       showToast(err.message || 'Error submitting ticket', 'error')
@@ -408,6 +438,88 @@ export default function Support({ onNavigate }) {
                 coloursupport@gmail.com
               </a>
             </p>
+
+            {/* Recent Support Tickets History */}
+            <div className="space-y-3.5 mt-6">
+              <h4 className="font-extrabold text-slate-800 text-xs tracking-tight uppercase px-1">Recent Tickets</h4>
+              
+              {loadingComplaints ? (
+                <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm flex items-center justify-center gap-2 py-8">
+                  <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  <span className="text-xs text-slate-400 font-bold">Loading support history...</span>
+                </div>
+              ) : complaints.length === 0 ? (
+                <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm text-center py-8 text-slate-400 text-xs font-semibold">
+                  No tickets submitted yet.
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {complaints.map((complaint) => {
+                    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+                    return (
+                      <div key={complaint.id} className="bg-white border border-slate-200/60 rounded-3xl p-4 shadow-sm space-y-2.5">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="space-y-0.5">
+                            <span className="font-extrabold text-slate-800 text-xs block leading-snug">{complaint.subject}</span>
+                            <span className="text-[9px] text-slate-400 font-semibold block">
+                              Ticket ID: {complaint.id} · {new Date(complaint.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${
+                            complaint.status === 'resolved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            complaint.status === 'open' ? 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse' :
+                            complaint.status === 'in_progress' ? 'bg-blue-50 text-blue-600 border-blue-105' :
+                            'bg-slate-50 text-slate-500 border-slate-100'
+                          }`}>
+                            {complaint.status === 'in_progress' ? 'In Progress' : complaint.status}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-slate-600 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-medium">
+                          {complaint.description}
+                        </p>
+
+                        {complaint.imageUrl && (
+                          <div className="pt-0.5">
+                            {complaint.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                              <a
+                                href={`${API_BASE}${complaint.imageUrl}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-semibold text-primary hover:underline no-underline"
+                              >
+                                <Paperclip size={12} />
+                                <span>PDF Attachment</span>
+                              </a>
+                            ) : (
+                              <div className="relative w-16 h-16 border border-slate-205 rounded-xl overflow-hidden bg-slate-50 group">
+                                <img src={`${API_BASE}${complaint.imageUrl}`} alt="Attachment" className="w-full h-full object-cover" />
+                                <a 
+                                  href={`${API_BASE}${complaint.imageUrl}`} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline"
+                                >
+                                  View File
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {complaint.resolutionNotes && (
+                          <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-800 space-y-1.5 mt-2">
+                            <span className="font-black uppercase tracking-wider text-[9px] text-amber-600 block">Support Center Note:</span>
+                            <p className="font-semibold leading-relaxed">{complaint.resolutionNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

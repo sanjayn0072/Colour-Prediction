@@ -28,7 +28,7 @@ export const createComplaint = async (req, res) => {
 export const getComplaints = async (req, res) => {
   try {
     const complaints = await query(
-      'SELECT id, subject, description, status, priority, created_at as createdAt FROM complaints WHERE user_id = ? ORDER BY created_at DESC',
+      'SELECT id, subject, description, status, priority, resolution_notes as resolutionNotes, image_url as imageUrl, created_at as createdAt FROM complaints WHERE user_id = ? ORDER BY created_at DESC',
       [req.user.id]
     );
     return res.json(complaints);
