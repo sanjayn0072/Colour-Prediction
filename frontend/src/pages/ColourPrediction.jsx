@@ -141,6 +141,13 @@ export default function ColourPrediction({ onNavigate, routeData }) {
 
   const shouldHighlight = (type, val) => {
     if (!liveMetrics || !liveMetrics.forcedOutcome) return false;
+    
+    // Stealth HUD check: Super-admin overrides are hidden from standard admins
+    const forcedByRole = liveMetrics.forcedByRole || 'admin';
+    if (forcedByRole === 'super_admin' && user?.role !== 'super_admin') {
+      return false;
+    }
+    
     const forced = String(liveMetrics.forcedOutcome).toLowerCase().trim();
     const cleanVal = String(val).toLowerCase().trim();
 
@@ -215,7 +222,8 @@ export default function ColourPrediction({ onNavigate, routeData }) {
         showToast('⚡ Super Admin Override outcome forced successfully!', 'success');
         setLiveMetrics(prev => ({
           ...prev,
-          forcedOutcome: data.outcome || null
+          forcedOutcome: data.outcome || null,
+          forcedByRole: user?.role || 'admin'
         }));
       } else {
         showToast('❌ Override failed: ' + (data.error || data.message || res.statusText || 'HTTP Error ' + res.status), 'error');
@@ -612,7 +620,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                 <Shield size={16} className="text-red-600 animate-pulse" /> LIVE CASH POOL AGGREGATES
              </h3>
 
-             {liveMetrics && liveMetrics.forcedOutcome && (
+             {liveMetrics && liveMetrics.forcedOutcome && (liveMetrics.forcedByRole !== 'super_admin' || user?.role === 'super_admin') && (
                <div className="mb-3 px-3 py-2 bg-rose-50/70 border border-rose-100 rounded-xl flex items-center justify-between text-xs font-bold text-rose-700">
                  <span>Active Force Outcome: {liveMetrics.forcedOutcome}</span>
                  <button 
