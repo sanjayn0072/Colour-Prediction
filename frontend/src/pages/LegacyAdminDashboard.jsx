@@ -4247,12 +4247,15 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                                   <span>PDF Evidence</span>
                                 </a>
                               ) : (
-                                <div className="relative w-16 h-16 border border-slate-850 rounded-lg overflow-hidden bg-slate-955 flex items-center justify-center shrink-0 group">
-                                  <img src={`${API_BASE}${complaint.imageUrl}`} alt="Attachment" className="w-full h-full object-cover" />
-                                  <a href={`${API_BASE}${complaint.imageUrl}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-slate-955/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline">
-                                    Open Image
-                                  </a>
-                                </div>
+                                <a
+                                  href={`${API_BASE}${complaint.imageUrl}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 p-2 bg-slate-955 border border-slate-800 rounded-lg text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors no-underline"
+                                >
+                                  <Paperclip size={12} />
+                                  <span>Image Evidence</span>
+                                </a>
                               )
                             ) : (
                               <span className="text-[10px] text-slate-600 font-bold">No Evidence</span>
@@ -4352,12 +4355,15 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                               <span>View PDF Evidence</span>
                             </a>
                           ) : (
-                            <div className="relative w-20 h-20 border border-slate-850 rounded-lg overflow-hidden bg-slate-955 group">
-                              <img src={`${API_BASE}${complaint.imageUrl}`} alt="Complaint Attachment" className="w-full h-full object-cover" />
-                              <a href={`${API_BASE}${complaint.imageUrl}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-slate-955/65 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-bold text-white transition-opacity no-underline">
-                                View Full
-                              </a>
-                            </div>
+                            <a
+                              href={`${API_BASE}${complaint.imageUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 p-2 bg-slate-955 border border-slate-800 rounded-lg text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors no-underline"
+                            >
+                              <Paperclip size={12} />
+                              <span>View Image Evidence</span>
+                            </a>
                           )}
                         </div>
                       )}
@@ -5818,21 +5824,15 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                           <span>View PDF Evidence</span>
                         </a>
                       ) : (
-                        <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-800 bg-slate-955 group">
-                          <img 
-                            src={`${API_BASE}${selectedComplaint.imageUrl}`} 
-                            alt="Evidence" 
-                            className="w-full h-full object-cover"
-                          />
-                          <a 
-                            href={`${API_BASE}${selectedComplaint.imageUrl}`} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="absolute inset-0 bg-slate-955/65 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline"
-                          >
-                            View Full
-                          </a>
-                        </div>
+                        <a
+                          href={`${API_BASE}${selectedComplaint.imageUrl}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 p-2 bg-slate-955 border border-slate-800 rounded-lg text-[10px] font-semibold text-indigo-400 hover:text-indigo-305 transition-colors no-underline"
+                        >
+                          <Paperclip size={12} />
+                          <span>View Image Evidence</span>
+                        </a>
                       )}
                     </div>
                   )}
