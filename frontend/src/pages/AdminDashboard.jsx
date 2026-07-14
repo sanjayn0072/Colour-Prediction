@@ -145,6 +145,7 @@ export default function AdminDashboard({ onNavigate, onBack }) {
       
       // Verification successful, we got an elevated admin token
       localStorage.setItem('adminToken', data.token);
+      localStorage.setItem('token', data.token);
       setAdminToken(data.token);
       setAuthStatus('verified');
       

@@ -414,7 +414,6 @@ export default function ColourPrediction({ onNavigate, routeData }) {
       if (data.gameType === 'colour' && (!data.session || data.session === activeSessionRef.current)) {
         setSelectedTargets([]);
         setBetAmount('');
-        setTotalBetAmount(0);
       }
     }
 
@@ -625,15 +624,15 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                </div>
              )}
              <div className="flex gap-3 mb-4">
-                <button onClick={() => handleAdminOverride('colour', 'red')} className={`flex-1 bg-red-50 hover:bg-red-100/70 border ${shouldHighlight('colour', 'red') ? 'border-red-500 ring-2 ring-red-400' : 'border-red-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
+                <button onClick={() => handleAdminOverride('colour', 'red')} className={`flex-1 bg-red-50 hover:bg-red-100/70 border ${shouldHighlight('colour', 'red') ? 'ring-4 ring-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse' : 'border-red-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
                    <div className="text-red-600 font-bold text-xs">🔴 RED</div>
                    <div className="text-slate-800 font-mono font-bold mt-1">₹{liveMetrics.red || 0}</div>
                 </button>
-                <button onClick={() => handleAdminOverride('colour', 'green')} className={`flex-1 bg-emerald-50 hover:bg-emerald-100/70 border ${shouldHighlight('colour', 'green') ? 'border-emerald-500 ring-2 ring-emerald-400' : 'border-emerald-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
+                <button onClick={() => handleAdminOverride('colour', 'green')} className={`flex-1 bg-emerald-50 hover:bg-emerald-100/70 border ${shouldHighlight('colour', 'green') ? 'ring-4 ring-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse' : 'border-emerald-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
                    <div className="text-emerald-600 font-bold text-xs">🟢 GREEN</div>
                    <div className="text-slate-800 font-mono font-bold mt-1">₹{liveMetrics.green || 0}</div>
                 </button>
-                <button onClick={() => handleAdminOverride('colour', 'violet')} className={`flex-1 bg-purple-50 hover:bg-purple-100/70 border ${shouldHighlight('colour', 'violet') ? 'border-purple-500 ring-2 ring-purple-400' : 'border-purple-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
+                <button onClick={() => handleAdminOverride('colour', 'violet')} className={`flex-1 bg-purple-50 hover:bg-purple-100/70 border ${shouldHighlight('colour', 'violet') ? 'ring-4 ring-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse' : 'border-purple-200'} rounded-xl p-2.5 transition-all cursor-pointer`}>
                    <div className="text-purple-600 font-bold text-xs">🟣 VIOLET</div>
                    <div className="text-slate-800 font-mono font-bold mt-1">₹{liveMetrics.violet || 0}</div>
                 </button>
@@ -641,7 +640,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
              
              <div className="grid grid-cols-5 gap-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                  <button onClick={() => handleAdminOverride('number', num)} key={num} className={`bg-slate-50 hover:bg-slate-100 border ${shouldHighlight('number', num) ? 'border-indigo-500 ring-2 ring-indigo-400' : 'border-slate-200'} rounded-lg p-2 text-center transition-all cursor-pointer`}>
+                  <button onClick={() => handleAdminOverride('number', num)} key={num} className={`bg-slate-50 hover:bg-slate-100 border ${shouldHighlight('number', num) ? 'ring-4 ring-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse' : 'border-slate-200'} rounded-lg p-2 text-center transition-all cursor-pointer`}>
                     <div className="text-slate-600 font-bold text-[10px]"># {num}</div>
                     <div className="text-slate-800 font-mono font-bold text-[10px] mt-0.5">₹{liveMetrics[num] || 0}</div>
                   </button>
