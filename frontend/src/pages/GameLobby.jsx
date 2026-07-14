@@ -212,7 +212,11 @@ export default function GameLobby({ onNavigate, routeData }) {
 
     const handleStatusUpdate = (data) => {
       if (data && data.onlineAdmins) {
-        const count = data.onlineAdmins.filter(a => a.id !== user?.id).length;
+        let count = 0;
+        data.onlineAdmins.forEach(adm => {
+          const otherSockets = (adm.socketIds || []).filter(sid => sid !== socket.id);
+          count += otherSockets.length;
+        });
         setOnlineAdminsCount(count);
       }
     };

@@ -309,8 +309,19 @@ io.use(async (socket, next) => {
 });
 
 // ─── SOCKET.IO CONNECTIONS ───
-// In-memory tracking of online admins: adminId -> { id, name, sockets: Set }
+// In-memory tracking of online admins: adminId -> { id, name, role, sockets: Set }
 const activeAdmins = new Map();
+
+const getOnlineAdminsPayload = () => {
+  return {
+    onlineAdmins: Array.from(activeAdmins.values()).map(a => ({
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      socketIds: Array.from(a.sockets)
+    }))
+  };
+};
 
 // In-memory rate limiter for socket room joins
 const socketJoinTimestamps = new Map();
@@ -323,43 +334,37 @@ io.on('connection', (socket) => {
     socket.join(`user_room_${socket.user.id}`);
   }
 
-  if (socket.user?.role === 'super_admin') {
-    socket.join('super_admin_room');
+  if (socket.user?.role === 'super_admin' || socket.user?.role === 'admin') {
     socket.join('admin_room');
-    
-    // Emit initial list of online admins to the super_admin
-    socket.emit('admin_status_update', {
-      onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
-    });
-  } else if (socket.user?.role === 'admin') {
-    socket.join('admin_room');
+    if (socket.user?.role === 'super_admin') {
+      socket.join('super_admin_room');
+    }
     
     const adminId = socket.user.id;
     if (!activeAdmins.has(adminId)) {
       activeAdmins.set(adminId, {
         id: adminId,
         name: socket.user.name,
+        role: socket.user.role,
         sockets: new Set()
       });
     }
     activeAdmins.get(adminId).sockets.add(socket.id);
     
     // Broadcast status update to super_admin_room
-    io.to('super_admin_room').emit('admin_status_update', {
-      onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
-    });
-
-    io.to('super_admin_room').emit('admin_logged_in', { 
-      adminId: socket.user.id,
-      adminName: socket.user.name 
-    });
+    io.to('super_admin_room').emit('admin_status_update', getOnlineAdminsPayload());
+    
+    if (socket.user?.role === 'admin') {
+      io.to('super_admin_room').emit('admin_logged_in', { 
+        adminId: socket.user.id,
+        adminName: socket.user.name 
+      });
+    }
   }
 
   socket.on('check_online_admins', () => {
     if (socket.user?.role === 'super_admin') {
-      socket.emit('admin_status_update', {
-        onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
-      });
+      socket.emit('admin_status_update', getOnlineAdminsPayload());
     }
   });
 
@@ -431,7 +436,7 @@ io.on('connection', (socket) => {
     socketJoinTimestamps.delete(socket.id + '_dice');
     socketJoinTimestamps.delete(socket.id + '_colour');
     
-    if (socket.user?.role === 'admin') {
+    if (socket.user?.role === 'admin' || socket.user?.role === 'super_admin') {
       const adminId = socket.user.id;
       const adminInfo = activeAdmins.get(adminId);
       if (adminInfo) {
@@ -442,9 +447,7 @@ io.on('connection', (socket) => {
       }
       
       // Broadcast status update to super_admin_room
-      io.to('super_admin_room').emit('admin_status_update', {
-        onlineAdmins: Array.from(activeAdmins.values()).map(a => ({ id: a.id, name: a.name, online: true }))
-      });
+      io.to('super_admin_room').emit('admin_status_update', getOnlineAdminsPayload());
     }
     
     logger.info(`Socket disconnected: ${socket.id}`);
