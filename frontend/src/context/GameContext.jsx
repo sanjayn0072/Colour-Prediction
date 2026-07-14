@@ -174,7 +174,7 @@ export const GameProvider = ({ children }) => {
     return () => {
       socketInstance.disconnect()
     }
-  }, [user !== null])
+  }, [user?.id])
 
   return (
     <GameContext.Provider value={{
