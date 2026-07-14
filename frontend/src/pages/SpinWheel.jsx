@@ -67,28 +67,29 @@ export default function SpinWheel({ onNavigate }) {
   const [wonPrize, setWonPrize] = useState(null)
   const [showWinModal, setShowWinModal] = useState(false)
 
-  // Live winners ticker feed (using game rewards) - Vouchers filtered out
-  const [recentWinners, setRecentWinners] = useState([
-    { uid: '382941', prize: '₹250 Bonus' },
-    { uid: '902844', prize: '₹50 Cash' },
-    { uid: '782912', prize: '₹100 Bonus' },
-    { uid: '682949', prize: '₹10 Cash' },
-    { uid: '293818', prize: '₹500 Bonus' },
-    { uid: '582030', prize: '₹20 Cash' },
-  ])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const randomUid = String(Math.floor(100000 + Math.random() * 900000))
-      const nonVoucherPrizes = WHEEL_PRIZES.filter(p => p.type !== 'voucher')
-      const randomPrize = nonVoucherPrizes[Math.floor(Math.random() * nonVoucherPrizes.length)].label
-      setRecentWinners(prev => [
-        { uid: randomUid, prize: randomPrize },
-        ...prev.slice(0, 5)
-      ])
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+  // Live winners ticker feed pool generated on mount
+  const [recentWinners] = useState(() => {
+    const prefixes = ['98', '87', '99', '95', '88', '70', '81', '91', '96', '77', '85', '90', '93', '94', '78', '89', '97'];
+    const suffixes = ['12', '54', '89', '43', '21', '76', '90', '65', '32', '87', '09', '45', '78', '56', '23', '67', '88'];
+    const names = ['Ravi', 'Amit', 'Sunil', 'Pooja', 'Deepak', 'Sanjay', 'Rahul', 'Ankit', 'Karan', 'Vijay', 'Neha', 'Priya', 'Aman', 'Vikram', 'Rajesh', 'Suresh', 'Manish', 'Jyoti', 'Kiran', 'Ramesh', 'Arun', 'Ajay'];
+    const prizes = [
+      'Cash ₹10', 'Cash ₹20', 'Cash ₹5', 'Bonus ₹100', 'Bonus ₹250', '1 Spin Key', '2 Spin Keys', '5 Spin Keys'
+    ];
+    
+    const pool = [];
+    for (let i = 0; i < 40; i++) {
+      const name = names[Math.floor(Math.random() * names.length)];
+      const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+      const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+      const prize = prizes[Math.floor(Math.random() * prizes.length)];
+      pool.push({
+        name,
+        phone: `${prefix}***${suffix}`,
+        prize
+      });
+    }
+    return pool;
+  });
 
   const handleSpin = async () => {
     if (isSpinning || spinsLeft <= 0) return
@@ -177,11 +178,12 @@ export default function SpinWheel({ onNavigate }) {
 
       {/* ── LIVE WINNERS TICKER ── */}
       <div className="relative z-10 bg-slate-100/80 backdrop-blur-md border-y border-slate-200/80 py-2.5 overflow-hidden select-none shadow-sm">
-        <div className="flex items-center gap-0 animate-[marquee_25s_linear_infinite] whitespace-nowrap w-max">
+        <div className="flex items-center gap-0 animate-[marquee_45s_linear_infinite] whitespace-nowrap w-max">
           {[...recentWinners, ...recentWinners].map((winner, index) => (
-            <div key={index} className="inline-flex items-center gap-2 mx-6 text-xs text-slate-500">
+            <div key={index} className="inline-flex items-center gap-2 mx-6 text-xs text-slate-500 font-sans">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/70" />
-              <span className="font-mono font-bold text-slate-600">UID {winner.uid.slice(0,3) + '***' + winner.uid.slice(-1)}</span>
+              <span className="font-bold text-slate-600">{winner.name}</span>
+              <span className="font-mono text-slate-400">({winner.phone})</span>
               <span className="text-slate-400">won</span>
               <span className="font-extrabold text-amber-600 flex items-center gap-1">
                 <Sparkles size={11} className="inline text-amber-500" />
@@ -370,14 +372,6 @@ export default function SpinWheel({ onNavigate }) {
             </div>
           </div>
 
-          {/* Dynamic Warning Banner */}
-          <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
-            <AlertCircle size={16} className="text-indigo-500 shrink-0 mt-0.5" />
-            <p className="text-[10.5px] text-slate-600 leading-relaxed font-semibold">
-              Winnings from cash/bonus segments carry a <span className="font-bold text-slate-800">10x Wagering Requirement</span> before withdrawal. Vouchers carry no wagering requirements and can be used on your next deposit.
-            </p>
-          </div>
-
           {/* Deposit More button */}
           <button 
             onClick={() => onNavigate?.('wallet')}
@@ -388,7 +382,7 @@ export default function SpinWheel({ onNavigate }) {
         </div>
 
         {/* ── PRIZE CATALOG GRID ── */}
-        <div className="space-y-3 shrink-0 pb-10">
+        <div className="space-y-3 shrink-0">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1.5 flex items-center gap-1.5">
             <Info size={14} className="text-slate-400" />
             Prize segments details
@@ -396,36 +390,85 @@ export default function SpinWheel({ onNavigate }) {
           <div className="grid grid-cols-2 gap-3 font-sans">
             {WHEEL_PRIZES.map((prize) => {
               const Icon = prize.icon
-              const isSelected = selectedCatalogItem === prize.id
               return (
                 <div 
                   key={prize.id}
-                  onClick={() => setSelectedCatalogItem(isSelected ? null : prize.id)}
-                  className={`bg-white border rounded-2xl p-3.5 flex flex-col gap-2 shadow-sm transition-all cursor-pointer hover:shadow-md ${
-                    isSelected ? 'ring-2 ring-indigo-500 border-indigo-500' : 'border-slate-200'
-                  }`}
+                  onClick={() => setSelectedCatalogItem(prize)}
+                  className="bg-white border border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2 shadow-sm transition-all cursor-pointer hover:shadow-md hover:border-indigo-200 active:scale-98"
                 >
                   <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${prize.color} flex items-center justify-center text-white shrink-0`}>
+                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${prize.color} flex items-center justify-center text-indigo-600 shrink-0`}>
                       <Icon size={16} />
                     </div>
-                    <span className="text-xs font-black text-slate-800 truncate">{prize.label}</span>
+                    <span className="text-xs font-bold text-slate-800 truncate">{prize.label}</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 leading-snug">
-                    {prize.desc}
+                  <div className="text-[10px] text-slate-400 font-medium">
+                    Click to view terms
                   </div>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full self-start ${
-                    prize.wager === 'No wagering' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                  }`}>
-                    {prize.wager}
-                  </span>
                 </div>
               )
             })}
           </div>
         </div>
 
+        {/* Compliance Footer */}
+        <footer className="pt-4 pb-8 text-center space-y-1 text-slate-450 px-2 shrink-0">
+          <p className="text-[9px] leading-relaxed font-semibold text-slate-400">
+            Disclaimer: Prizes and rewards obtained through the Spin Wheel promotion are subject to general compliance guidelines. Cash/Bonus rewards may feature standard wagering requirements that are detailed in individual terms. For exact wagering multiplier info, please tap on the respective cards above.
+          </p>
+          <p className="text-[8px] text-slate-400">
+            © 2026 ColourPlay. All rights reserved.
+          </p>
+        </footer>
+
       </div>
+
+      {/* High-Fidelity Prize Terms Modal */}
+      {selectedCatalogItem && (
+        <div className="fixed inset-0 z-[70] bg-black/45 flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-xl relative animate-[slideUp_0.25s_ease-out] border border-slate-100 flex flex-col gap-4">
+            <button 
+              onClick={() => setSelectedCatalogItem(null)} 
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center cursor-pointer hover:bg-slate-200 transition-colors border-0 outline-none"
+            >
+              <X size={14} className="text-slate-500" />
+            </button>
+
+            <div className="flex flex-col items-center text-center gap-2 pt-2">
+              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${selectedCatalogItem.color} flex items-center justify-center text-indigo-650 shadow-md`}>
+                {(() => {
+                  const Icon = selectedCatalogItem.icon;
+                  return <Icon size={24} />;
+                })()}
+              </div>
+              <h3 className="text-base font-extrabold text-slate-800 mt-1">{selectedCatalogItem.label}</h3>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Description</span>
+                <p className="text-xs text-slate-700 font-semibold leading-relaxed">{selectedCatalogItem.desc}</p>
+              </div>
+              
+              <div className="space-y-1 border-t border-slate-200/60 pt-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Wagering Requirement</span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  selectedCatalogItem.wager === 'No wagering' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'
+                }`}>
+                  {selectedCatalogItem.wager}
+                </span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setSelectedCatalogItem(null)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-705 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer border-0 outline-none"
+            >
+              Close Terms
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── WIN MODAL DIALOG ── */}
       {showWinModal && wonPrize && (
