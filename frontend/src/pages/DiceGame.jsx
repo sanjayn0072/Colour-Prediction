@@ -183,55 +183,11 @@ export default function DiceGame({ onNavigate }) {
 
   // Place bet action
   const handlePlaceBet = async () => {
-    const parsedAmount = betAmount === '' ? 0 : parseInt(betAmount)
-    if (parsedAmount > balance || parsedAmount < 1 || parsedAmount > 1000 || isRolling || betPlaced || loading) return
-    
-    setLoading(true)
-    try {
-      const token = localStorage.getItem('token')
-      const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
-      const res = await fetch(`${API_BASE}/api/games/place-bet`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          gameType: 'dice',
-          betType: condition,
-          betValue: String(target),
-          amount: parsedAmount
-        })
-      });
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to place bet')
-      }
-
-      if (data.walletBalance !== undefined) {
-        setRealBalance(data.walletBalance)
-      }
-
-      setBetPlaced(true)
-      setBetDetails({
-        amount: parsedAmount,
-        condition: condition,
-        target: target,
-        multiplier: parseFloat(multiplier),
-        id: data.bet?._id || data.bet?.id,
-        roundId: data.bet?.roundId
-      })
-
-      // Fetch latest bets immediately to display the new pending bet in the list
-      fetchUserHistory()
-    } catch (err) {
-      console.error(err)
-      setErrorToast(translateError(err.message))
-    } finally {
-      setLoading(false)
-    }
+    setErrorToast('⚠️ Dice engine is temporarily under maintenance!')
+    return
   }
+  
+  
 
   // Socket wagers scramble animation trigger
   useEffect(() => {
@@ -305,7 +261,7 @@ export default function DiceGame({ onNavigate }) {
       : `linear-gradient(to right, #fee2e2 0%, #fee2e2 ${target}%, #dcfce7 ${target}%, #dcfce7 ${target + 10}%, #fee2e2 ${target + 10}%, #fee2e2 100%)`
 
   const isLocked = dicePhase === 'locked' || diceTimeLeft <= 5
-  const isBettingDisabled = isRolling || betPlaced || isLocked
+  const isBettingDisabled = true
 
   // Removed early return for isGameActive to support visual glass overlay in background
 
@@ -725,15 +681,11 @@ export default function DiceGame({ onNavigate }) {
             ) : (
               <button 
                 onClick={handlePlaceBet}
-                disabled={betAmount > balance || betAmount <= 0 || loading}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs tracking-wider uppercase shadow-md shadow-indigo-100 transition-all cursor-pointer disabled:opacity-50 disabled:shadow-none active:scale-95 flex items-center justify-center gap-1 border-0"
+                disabled={true}
+                className="w-full py-3.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 font-bold flex items-center justify-center gap-1.5 text-xs cursor-not-allowed opacity-60 border-0 outline-none"
               >
-                {loading ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Play size={12} fill="white" className="border-0 outline-none" />
-                )}
-                {loading ? 'Placing Bet...' : `Place Bet (₹${betAmount})`}
+                <AlertCircle size={12} className="text-red-500" />
+                Dice engine under maintenance
               </button>
             )}
 

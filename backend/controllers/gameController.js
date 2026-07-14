@@ -248,6 +248,10 @@ currentDiceGame.serverHash = hashSeed(currentDiceGame.serverSeed);
 
 export const placeBet = async (req, res) => {
   const { gameType, betType, betValue, amount, session } = req.body;
+
+  if (gameType === 'dice') {
+    return res.status(400).json({ error: 'Dice engine temporarily under maintenance' });
+  }
   
   if (!gameType || !betType || betValue === undefined || !amount) {
     return res.status(400).json({ error: 'All bet parameters are required' });
