@@ -18,7 +18,7 @@ const SUGGESTIONS = [
 ]
 
 export default function Support({ onNavigate }) {
-  const [activeTab, setActiveTab] = useState('chat') // 'chat' | 'email'
+  const [activeTab, setActiveTab] = useState('email') // 'email' only
   
   // Chatbot states
   const [messages, setMessages] = useState([
@@ -129,8 +129,8 @@ export default function Support({ onNavigate }) {
 
   const subjectWords = getWordCount(subject);
   const descWords = getWordCount(description);
-  const isSubjectInvalid = subjectWords > 30;
-  const isDescInvalid = descWords > 250;
+  const isSubjectInvalid = subjectWords > 20;
+  const isDescInvalid = descWords > 100;
   const isRefIdInvalid = refId.length > 20 || (refId.length > 0 && !/^[a-zA-Z0-9]+$/.test(refId));
   const isFormInvalid = isSubjectInvalid || isDescInvalid || isRefIdInvalid;
 
@@ -219,158 +219,14 @@ export default function Support({ onNavigate }) {
           <h1 className="text-base font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
             <HelpCircle size={16} className="text-primary animate-pulse" /> Support Center
           </h1>
-          <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">2 Channels Available</p>
+          <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Official Support Portal</p>
         </div>
         <div className="w-9 h-9" />
       </header>
 
-      {/* ── Tab Selector ── */}
-      <div className="px-4 pt-4">
-        <div className="flex bg-slate-100 border border-slate-200/50 rounded-2xl p-1 shadow-sm">
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 outline-none ${
-              activeTab === 'chat'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 bg-transparent'
-            }`}
-          >
-            <MessageSquare size={14} className={activeTab === 'chat' ? 'text-primary' : 'text-slate-400'} />
-            Live AI Chat
-          </button>
-          <button
-            onClick={() => setActiveTab('email')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 outline-none ${
-              activeTab === 'email'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 bg-transparent'
-            }`}
-          >
-            <Mail size={14} className={activeTab === 'email' ? 'text-primary' : 'text-slate-400'} />
-            Email Ticket
-          </button>
-        </div>
-      </div>
-
       <div className="flex-1 flex flex-col px-4 pt-4 overflow-hidden">
 
-        {/* ── CHAT TAB CONTENT ── */}
-        {activeTab === 'chat' && (
-          <div className="flex-1 flex flex-col space-y-3 min-h-[50vh] relative">
-            
-            {/* Live Chat Support info card */}
-            <div className="bg-white border border-slate-200/60 rounded-2xl p-3 flex items-center justify-between shadow-sm relative overflow-hidden">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-600">
-                  <MessageSquare size={14} className="text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold text-slate-800">
-                    Live Chat Support
-                  </p>
-                  <p className="text-[8px] text-slate-400 font-medium">
-                    Our AI assistant is ready to help you
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={handleClearChat}
-                title="Clear chat history"
-                className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-100 transition-colors cursor-pointer bg-white"
-              >
-                <Trash2 size={12} />
-              </button>
-            </div>
-
-            {/* Chat Messages Log */}
-            <div className="flex-1 bg-white border border-slate-200/60 rounded-3xl p-4 shadow-sm flex flex-col justify-between overflow-hidden min-h-[350px]">
-              
-              {/* Message scroll container */}
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-                {messages.map((msg) => {
-                  const isUser = msg.sender === 'user'
-                  return (
-                    <div 
-                      key={msg.id}
-                      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%] ${
-                        isUser ? 'ml-auto' : 'mr-auto'
-                      }`}
-                    >
-                      <div className={`p-3 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${
-                        isUser 
-                          ? 'bg-primary text-white rounded-tr-none' 
-                          : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none'
-                      }`}>
-                        {msg.text}
-                      </div>
-                      <span className="text-[8px] text-slate-400 font-semibold mt-1 px-1">
-                        {msg.timestamp}
-                      </span>
-                    </div>
-                  )
-                })}
-
-                {/* Assistant Typing Indicator */}
-                {isTyping && (
-                  <div className="flex flex-col items-start max-w-[85%] mr-auto">
-                    <div className="bg-slate-50 text-slate-800 border border-slate-100 p-3.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
-                    </div>
-                    <span className="text-[8px] text-slate-400 font-semibold mt-1 px-1">Thinking...</span>
-                  </div>
-                )}
-                
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Suggestions quick chips */}
-              {messages.length <= 1 && !isTyping && (
-                <div className="border-t border-slate-100 pt-3 mt-3 shrink-0">
-                  <p className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider mb-2 px-1 flex items-center gap-1">
-                    <Sparkles size={10} className="text-primary" /> Click to ask immediately:
-                  </p>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                    {SUGGESTIONS.map((sug, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleSendMessage(sug)}
-                        className="shrink-0 px-3 py-1.5 bg-slate-50 border border-slate-200/80 rounded-full text-[10px] text-slate-650 hover:bg-indigo-50/40 hover:text-primary hover:border-primary/30 transition-all cursor-pointer font-medium"
-                      >
-                        {sug}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Chat Input form */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-1 flex items-center gap-1 shadow-sm shrink-0">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Ask support about games or payments..."
-                disabled={isTyping}
-                className="flex-1 bg-transparent px-3 py-2.5 text-xs text-slate-800 outline-none border-0 placeholder:text-slate-400"
-              />
-              <button
-                onClick={() => handleSendMessage()}
-                disabled={!inputMessage.trim() || isTyping}
-                className="w-10 h-10 rounded-xl bg-primary hover:bg-primary/90 text-white flex items-center justify-center cursor-pointer transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed border-0 outline-none"
-              >
-                <Send size={14} className="ml-0.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── EMAIL TAB CONTENT ── */}
-        {activeTab === 'email' && (
-          <div className="flex-1 flex flex-col space-y-4 animate-[fadeIn_0.15s_ease-out]">
+        <div className="flex-1 flex flex-col space-y-4 animate-[fadeIn_0.15s_ease-out]">
             
             {/* Email Support Header Info */}
             <div className="bg-white border border-slate-200/60 rounded-3xl p-4 shadow-sm flex items-center gap-3">
@@ -424,7 +280,7 @@ export default function Support({ onNavigate }) {
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Subject</label>
                       <span className={`text-[9px] font-bold ${isSubjectInvalid ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
-                        {subjectWords} / 30 words
+                        {subjectWords} / 20 words
                       </span>
                     </div>
                     <input
@@ -436,7 +292,7 @@ export default function Support({ onNavigate }) {
                       className={`w-full px-3 py-2 bg-slate-50 border ${isSubjectInvalid ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-200 focus:ring-primary/20 focus:border-primary'} rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 transition-all`}
                     />
                     {isSubjectInvalid && (
-                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Subject must not exceed 30 words.</p>
+                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Subject must not exceed 20 words.</p>
                     )}
                   </div>
 
@@ -465,7 +321,7 @@ export default function Support({ onNavigate }) {
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Description of Issue</label>
                       <span className={`text-[9px] font-bold ${isDescInvalid ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
-                        {descWords} / 250 words
+                        {descWords} / 100 words
                       </span>
                     </div>
                     <textarea
@@ -477,7 +333,7 @@ export default function Support({ onNavigate }) {
                       className={`w-full px-3 py-2.5 bg-slate-50 border ${isDescInvalid ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-200 focus:ring-primary/20 focus:border-primary'} rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 transition-all resize-none`}
                     />
                     {isDescInvalid && (
-                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Description must not exceed 250 words.</p>
+                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Description must not exceed 100 words.</p>
                     )}
                   </div>
 
@@ -549,9 +405,7 @@ export default function Support({ onNavigate }) {
               </a>
             </p>
           </div>
-        )}
-
+        </div>
       </div>
-    </div>
   )
 }
