@@ -508,10 +508,12 @@ export default function Support({ onNavigate }) {
                           </div>
                         )}
 
-                        {complaint.resolutionNotes && (
-                          <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-800 space-y-1.5 mt-2">
+                        {(complaint.resolutionNotes || complaint.resolution_notes || complaint.resolutionNote) && (
+                          <div className="bg-amber-50/50 border border-amber-105 rounded-xl p-3 text-[11px] text-amber-800 space-y-1.5 mt-2">
                             <span className="font-black uppercase tracking-wider text-[9px] text-amber-600 block">Support Center Note:</span>
-                            <p className="font-semibold leading-relaxed">{complaint.resolutionNotes}</p>
+                            <p className="font-semibold leading-relaxed">
+                              {complaint.resolutionNotes || complaint.resolution_notes || complaint.resolutionNote}
+                            </p>
                           </div>
                         )}
                       </div>
