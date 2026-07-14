@@ -283,7 +283,17 @@ export const updateGameStatusSchema = z.object({
 
 export const checkoutProductSchema = z.object({
   body: z.object({
-    productId: z.number().int().positive('Product ID must be a positive integer')
+    productId: z.union([z.number(), z.string().regex(/^\d+$/).transform(Number)]),
+    address: z.object({
+      name: z.string().trim().min(1, 'Name is required').max(100),
+      mobile: z.string().trim().regex(/^\d{10}$/, 'Mobile number must be exactly 10 digits'),
+      pin: z.string().trim().regex(/^\d{6}$/, 'PIN code must be exactly 6 digits'),
+      landmark: z.string().trim().optional().nullable(),
+      city: z.string().trim().min(1, 'City is required').max(100),
+      state: z.string().trim().min(1, 'State is required').max(100),
+      address: z.string().trim().min(1, 'Address is required').max(500),
+      type: z.string().trim().optional().nullable()
+    })
   })
 });
 

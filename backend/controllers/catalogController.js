@@ -340,11 +340,13 @@ export const checkoutProduct = async (req, res) => {
     );
 
     if (products.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Product not found.' });
     }
 
     const product = products[0];
     if (product.stock <= 0) {
+      await connection.rollback();
       return res.status(400).json({ error: 'Product is out of stock.' });
     }
 
@@ -355,6 +357,7 @@ export const checkoutProduct = async (req, res) => {
     );
 
     if (wallets.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Wallet not found.' });
     }
 
@@ -363,6 +366,7 @@ export const checkoutProduct = async (req, res) => {
     const price = parseFloat(product.price);
 
     if (balance < price) {
+      await connection.rollback();
       return res.status(400).json({ error: 'Insufficient balance to purchase this product.' });
     }
 

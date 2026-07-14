@@ -442,13 +442,19 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
   const visibleProducts = showAllProducts ? activeProducts : activeProducts.slice(0, 4)
 
   const isFormValid = () => {
+    const name = deliveryName || '';
+    const mobile = deliveryMobile || '';
+    const pin = deliveryPin || '';
+    const city = deliveryCity || '';
+    const state = deliveryState || '';
+    const addr = deliveryAddress || '';
     return (
-      deliveryName.trim().length > 1 &&
-      deliveryMobile.length === 10 &&
-      deliveryPin.length === 6 &&
-      deliveryCity.trim().length > 1 &&
-      deliveryState.trim().length > 1 &&
-      deliveryAddress.trim().length > 5
+      name.trim().length > 1 &&
+      /^\d{10}$/.test(mobile) &&
+      /^\d{6}$/.test(pin) &&
+      city.trim().length > 1 &&
+      state.trim().length > 1 &&
+      addr.trim().length > 5
     )
   }
 
@@ -456,10 +462,10 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
     <div className="flex flex-col relative bg-slate-50/50 min-h-screen">
       {/* ── Toast ── */}
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-sm w-[90%] bg-emerald-600 text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-[slideDown_0.3s_ease-out]">
-          <Check size={16} />
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-sm w-[90%] ${toast.startsWith('❌') ? 'bg-rose-600' : 'bg-emerald-600'} text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-[slideDown_0.3s_ease-out]`}>
+          {toast.startsWith('❌') ? <AlertTriangle size={16} /> : <Check size={16} />}
           <span className="flex-1">{toast}</span>
-          <button onClick={() => setToast(null)} className="cursor-pointer"><X size={14} /></button>
+          <button onClick={() => setToast(null)} className="cursor-pointer border-0 bg-transparent text-white outline-none"><X size={14} /></button>
         </div>
       )}
 
@@ -806,7 +812,7 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
                     <Check size={32} className="text-emerald-600" />
                   </div>
                   <div>
-                    <h2 className="text-base font-bold text-slate-800">Order Placed Successfully!</h2>
+                    <h2 className="text-base font-bold text-slate-800">Your order is placed successfully!</h2>
                     <p className="text-xs text-slate-500 mt-1">Thank you for your purchase. Your item is being packed.</p>
                   </div>
 
@@ -823,6 +829,10 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
                       <span className="text-slate-400">Amount Paid</span>
                       <span className="font-bold text-slate-800">₹{selectedProduct.price.toLocaleString()} (Wallet)</span>
                     </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Status</span>
+                      <span className="font-bold text-amber-600 bg-amber-50 border border-amber-100/50 px-2 py-0.5 rounded-lg text-[9px] uppercase tracking-wider">Pending Delivery</span>
+                    </div>
                     <div className="flex justify-between text-xs border-t border-slate-200/80 pt-2.5">
                       <span className="text-slate-400">Expected Delivery</span>
                       <span className="font-semibold text-emerald-600">{deliveryDate}</span>
@@ -832,9 +842,9 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
                   <div className="w-full pt-2">
                     <button 
                       onClick={() => setSelectedProduct(null)}
-                      className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+                      className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all cursor-pointer border-0 outline-none"
                     >
-                      Done
+                      OK
                     </button>
                   </div>
                 </div>
