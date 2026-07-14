@@ -124,7 +124,7 @@ import {
 
 import { protect } from './middleware/authMiddleware.js';
 import { checkRole } from './middleware/roleMiddleware.js';
-import { uploadProductImage, uploadProductImages, verifyUploadMagicBytes } from './utils/uploadService.js';
+import { uploadProductImage, uploadProductImages, verifyUploadMagicBytes, handleScreenshotUpload } from './utils/uploadService.js';
 
 // ─── AUTHENTICATION ENDPOINTS ───
 app.post('/api/auth/send-otp', authRateLimiter, validate(sendOtpSchema), authController.sendOtp);
@@ -207,7 +207,7 @@ app.get('/api/admin/game-center/config', protect, authenticatedActionLimiter, ch
 app.patch('/api/admin/game-center/config', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.updateGameCenterConfig);
 
 // ─── SUPPORT AND COMPLAINTS ───
-app.post('/api/support/complaint', protect, authenticatedActionLimiter, validate(createComplaintSchema), supportController.createComplaint);
+app.post('/api/support/complaint', protect, authenticatedActionLimiter, handleScreenshotUpload, verifyUploadMagicBytes, validate(createComplaintSchema), supportController.createComplaint);
 app.get('/api/support/complaints', protect, authenticatedActionLimiter, supportController.getComplaints);
 app.post('/api/support/chat', protect, authenticatedActionLimiter, validate(chatWithSupportSchema), supportController.chatWithSupport);
 

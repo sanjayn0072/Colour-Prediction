@@ -323,8 +323,18 @@ export const createBannerSchema = z.object({
 
 export const createComplaintSchema = z.object({
   body: z.object({
-    title: z.string().trim().min(1, 'Complaint title is required').max(100),
-    description: z.string().trim().min(1, 'Complaint description is required').max(2000)
+    subject: z.string().trim().min(1, 'Subject is required').max(200).refine(
+      (val) => val.trim().split(/\s+/).filter(Boolean).length <= 30,
+      { message: 'Subject must not exceed 30 words' }
+    ),
+    description: z.string().trim().min(1, 'Description is required').max(3000).refine(
+      (val) => val.trim().split(/\s+/).filter(Boolean).length <= 250,
+      { message: 'Description must not exceed 250 words' }
+    ),
+    refId: z.string().trim().max(20, 'Order number must not exceed 20 characters').refine(
+      (val) => !val || /^[a-zA-Z0-9]+$/.test(val),
+      { message: 'Order number must be alphanumeric' }
+    ).optional().nullable()
   })
 });
 

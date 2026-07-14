@@ -26,12 +26,16 @@ const storage = multer.diskStorage({
 
 // Multer File Type Whitelist Filter
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/webp'];
+  const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExts = ['.png', '.jpg', '.jpeg', '.webp', '.pdf'];
   
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
+  const forbiddenExts = ['.exe', '.bat', '.cmd', '.sh', '.js', '.py', '.php', '.html', '.htm', '.jsp', '.asp', '.aspx', '.cgi', '.msi'];
+  
+  if (forbiddenExts.includes(ext) || !allowedExts.includes(ext) || !allowedMimeTypes.includes(file.mimetype)) {
+    cb(new Error('Security Violation: Invalid file type uploaded'), false);
   } else {
-    cb(new Error('Invalid file type. Only PNG, JPEG, and WEBP images are allowed.'), false);
+    cb(null, true);
   }
 };
 
@@ -107,14 +111,14 @@ export const verifyUploadMagicBytes = (req, res, next) => {
       const parts = baseName.split('.');
       if (parts.length < 2) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        return res.status(400).json({ error: 'Upload rejected: File has no extension.' });
+        return res.status(400).json({ error: 'Security Violation: Invalid file type uploaded' });
       }
       const ext = '.' + parts[parts.length - 1];
-      const forbiddenExts = ['.php', '.js', '.sh', '.exe', '.bat', '.cmd', '.py', '.html', '.htm', '.jsp', '.asp', '.aspx', '.cgi'];
+      const forbiddenExts = ['.php', '.js', '.sh', '.exe', '.bat', '.cmd', '.py', '.html', '.htm', '.jsp', '.asp', '.aspx', '.cgi', '.msi'];
 
       if (forbiddenExts.includes(ext) || baseName.includes('.php') || baseName.includes('.js')) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        return res.status(400).json({ error: 'Upload rejected: Insecure file format.' });
+        return res.status(400).json({ error: 'Security Violation: Invalid file type uploaded' });
       }
 
       // 2. Validate magic bytes (first 12 bytes of file content)
@@ -125,14 +129,15 @@ export const verifyUploadMagicBytes = (req, res, next) => {
 
       const hex = buffer.toString('hex').toUpperCase();
       
-      // Match exact hex headers: PNG, JPEG, WEBP (RIFF ... WEBP)
+      // Match exact hex headers: PNG, JPEG, WEBP (RIFF ... WEBP), PDF (%PDF)
       const isPNG = hex.startsWith('89504E470D0A1A0A');
       const isJPEG = hex.startsWith('FFD8FF');
       const isWEBP = hex.startsWith('52494646') && hex.substring(16, 24) === '57454250'; // 'RIFF' at 0, 'WEBP' at 8 (index 16 in hex)
+      const isPDF = hex.startsWith('25504446'); // %PDF
 
-      if (!isPNG && !isJPEG && !isWEBP) {
+      if (!isPNG && !isJPEG && !isWEBP && !isPDF) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        return res.status(400).json({ error: 'Upload rejected: File content does not match allowed image formats (PNG, JPEG, WEBP).' });
+        return res.status(400).json({ error: 'Security Violation: Invalid file type uploaded' });
       }
     } catch (err) {
       if (file.path && fs.existsSync(file.path)) {
@@ -143,4 +148,13 @@ export const verifyUploadMagicBytes = (req, res, next) => {
   }
 
   next();
+};
+
+export const handleScreenshotUpload = (req, res, next) => {
+  uploadScreenshot(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Security Violation: Invalid file type uploaded' });
+    }
+    next();
+  });
 };

@@ -123,26 +123,43 @@ export default function Support({ onNavigate }) {
     }
   }
 
+  const getWordCount = (str) => {
+    return str.trim().split(/\s+/).filter(Boolean).length;
+  };
+
+  const subjectWords = getWordCount(subject);
+  const descWords = getWordCount(description);
+  const isSubjectInvalid = subjectWords > 30;
+  const isDescInvalid = descWords > 250;
+  const isRefIdInvalid = refId.length > 20 || (refId.length > 0 && !/^[a-zA-Z0-9]+$/.test(refId));
+  const isFormInvalid = isSubjectInvalid || isDescInvalid || isRefIdInvalid;
+
   // Handle email form submit
   const handleEmailSubmit = async (e) => {
     e.preventDefault()
-    if (!subject.trim() || !description.trim()) return
+    if (!subject.trim() || !description.trim() || isFormInvalid) return
 
     setSendingEmail(true)
     const token = localStorage.getItem('token')
     const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
 
     try {
+      const formData = new FormData();
+      formData.append('subject', subject.trim());
+      formData.append('description', description.trim());
+      if (refId.trim()) {
+        formData.append('refId', refId.trim());
+      }
+      if (attachment) {
+        formData.append('screenshot', attachment);
+      }
+
       const response = await fetch(`${API_BASE}/api/support/complaint`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          subject: subject,
-          description: description
-        })
+        body: formData
       });
       const data = await response.json();
       if (!response.ok) {
@@ -384,7 +401,7 @@ export default function Support({ onNavigate }) {
                   </p>
                 </div>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 w-full max-w-xs text-left text-[11px] text-slate-600 space-y-1">
-                  <p>• <strong>Contact:</strong> support@rrclub.com</p>
+                  <p>• <strong>Contact:</strong> coloursupport@gmail.com</p>
                   <p>• <strong>Subject:</strong> {subject}</p>
                   <p>• <strong>Status:</strong> Assigned (Pending review)</p>
                   {refId && <p>• <strong>Ref ID:</strong> {refId}</p>}
@@ -404,40 +421,64 @@ export default function Support({ onNavigate }) {
                   
                   {/* Subject input */}
                   <div>
-                    <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider mb-1 block">Subject</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Subject</label>
+                      <span className={`text-[9px] font-bold ${isSubjectInvalid ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+                        {subjectWords} / 30 words
+                      </span>
+                    </div>
                     <input
                       type="text"
                       required
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                       placeholder="e.g. Deposit not credited / Withdrawal pending"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      className={`w-full px-3 py-2 bg-slate-50 border ${isSubjectInvalid ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-200 focus:ring-primary/20 focus:border-primary'} rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 transition-all`}
                     />
+                    {isSubjectInvalid && (
+                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Subject must not exceed 30 words.</p>
+                    )}
                   </div>
 
                   {/* Period/Order ID reference */}
                   <div>
-                    <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider mb-1 block">Order / Game Period ID (Optional)</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Order / Game Period ID (Optional)</label>
+                      <span className={`text-[9px] font-bold ${isRefIdInvalid ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+                        {refId.length} / 20 chars
+                      </span>
+                    </div>
                     <input
                       type="text"
                       value={refId}
                       onChange={(e) => setRefId(e.target.value)}
                       placeholder="e.g. TRX-90812 / Period #1002"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-850 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-mono"
+                      className={`w-full px-3 py-2 bg-slate-50 border ${isRefIdInvalid ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-200 focus:ring-primary/20 focus:border-primary'} rounded-xl text-xs text-slate-850 focus:outline-none focus:ring-2 transition-all font-mono`}
                     />
+                    {isRefIdInvalid && (
+                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Order ID must be alphanumeric and max 20 characters.</p>
+                    )}
                   </div>
 
                   {/* Description text area */}
                   <div>
-                    <label className="text-[9px] font-bold text-slate-450 uppercase tracking-wider mb-1 block">Description of Issue</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Description of Issue</label>
+                      <span className={`text-[9px] font-bold ${isDescInvalid ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+                        {descWords} / 250 words
+                      </span>
+                    </div>
                     <textarea
                       required
                       rows={4}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       placeholder="Please provide details (payment method used, amount, date, error messages, etc.)"
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+                      className={`w-full px-3 py-2.5 bg-slate-50 border ${isDescInvalid ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-200 focus:ring-primary/20 focus:border-primary'} rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 transition-all resize-none`}
                     />
+                    {isDescInvalid && (
+                      <p className="text-[9px] text-red-500 font-bold mt-1">⚠️ Description must not exceed 250 words.</p>
+                    )}
                   </div>
 
                   {/* File Upload mock component */}
@@ -484,7 +525,7 @@ export default function Support({ onNavigate }) {
                 {/* Submit button */}
                 <button
                   type="submit"
-                  disabled={sendingEmail || !subject.trim() || !description.trim()}
+                  disabled={sendingEmail || !subject.trim() || !description.trim() || isFormInvalid}
                   className="w-full mt-4 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs tracking-wider uppercase shadow-md shadow-indigo-100 transition-all cursor-pointer disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2 border-0 outline-none"
                 >
                   {sendingEmail ? (
@@ -503,8 +544,8 @@ export default function Support({ onNavigate }) {
             {/* Email link fallback */}
             <p className="text-[10px] text-slate-400 text-center font-medium">
               Having issues? You can also email us directly at{' '}
-              <a href="mailto:support@rrclub.com" className="text-primary font-bold hover:underline">
-                support@rrclub.com
+              <a href="mailto:coloursupport@gmail.com" className="text-primary font-bold hover:underline">
+                coloursupport@gmail.com
               </a>
             </p>
           </div>

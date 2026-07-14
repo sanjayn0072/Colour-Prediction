@@ -3,16 +3,19 @@ import { decryptConfigValue } from '../utils/configEncryption.js';
 
 // POST /api/support/complaint
 export const createComplaint = async (req, res) => {
-  const { subject, description } = req.body;
+  const { subject, description, refId } = req.body;
 
   if (!subject || !description) {
     return res.status(400).json({ error: 'Subject and description are required.' });
   }
 
+  const imageUrl = req.file ? `/uploads/screenshots/${req.file.filename}` : null;
+  const finalDescription = refId ? `[Order ID: ${refId}]\n${description}` : description;
+
   try {
     await query(
-      'INSERT INTO complaints (user_id, subject, description, status, priority) VALUES (?, ?, ?, "open", "medium")',
-      [req.user.id, subject, description]
+      'INSERT INTO complaints (user_id, subject, description, status, priority, image_url, complaint_type) VALUES (?, ?, ?, "open", "medium", ?, ?)',
+      [req.user.id, subject, finalDescription, imageUrl, refId || null]
     );
     return res.json({ message: 'Complaint submitted successfully. Our support team will resolve it soon.' });
   } catch (err) {
