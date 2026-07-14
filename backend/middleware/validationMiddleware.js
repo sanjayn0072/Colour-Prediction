@@ -245,9 +245,11 @@ export const updateComplaintStatusSchema = z.object({
     id: z.string().regex(/^\d+$/, 'Complaint ID must be numeric')
   }),
   body: z.object({
-    status: z.enum(['Pending', 'Resolved'], {
-      errorMap: () => ({ message: 'Valid status is required (Pending or Resolved).' })
-    })
+    status: z.enum(['open', 'in_progress', 'resolved', 'closed'], {
+      errorMap: () => ({ message: 'Valid status is required (open, in_progress, resolved, or closed).' })
+    }),
+    assignedAdmin: z.number().int().positive().nullable().optional(),
+    resolutionNotes: z.string().trim().max(2000).nullable().optional()
   })
 });
 

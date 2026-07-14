@@ -572,7 +572,7 @@ export const getAdminComplaints = async (req, res) => {
     let sql = `
       SELECT c.id, c.subject, c.description, c.status, c.priority, c.resolution_notes as resolutionNotes,
              c.image_url as imageUrl, c.complaint_type as complaintType, c.created_at as createdAt,
-             u.name as userName, u.phone as userPhone, a.name as adminName
+             u.name as userName, u.phone as userPhone, u.uid as userUid, a.name as adminName
       FROM complaints c
       JOIN users u ON c.user_id = u.id
       LEFT JOIN users a ON c.assigned_admin = a.id

@@ -8,7 +8,7 @@ import { useGame } from '../context/GameContext'
 import { 
   ArrowLeft, Shield, Activity, Database, Settings, Plus, Trash2, Edit2, Save, 
   AlertTriangle, TrendingUp, Users, Wallet, Clock, Lock, Check, RefreshCw, X, AlertCircle,
-  ShoppingBag, Tag, Gamepad2, FileText, Copy, QrCode, Eye, EyeOff, Bell, CreditCard, Trophy
+  ShoppingBag, Tag, Gamepad2, FileText, Copy, QrCode, Eye, EyeOff, Bell, CreditCard, Trophy, Paperclip
 } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 
@@ -5744,70 +5744,119 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
               </button>
             </div>
 
-            <form onSubmit={handleUpdateComplaintSubmit} className="p-4 space-y-3.5">
-              <div>
-                <p className="text-xs font-bold text-white">Subject: {selectedComplaint.subject}</p>
-                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">{selectedComplaint.description}</p>
-              </div>
+            {(() => {
+              const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+              return (
+                <form onSubmit={handleUpdateComplaintSubmit} className="p-4 space-y-3.5">
+                  <div>
+                    <p className="text-xs font-bold text-white">Subject: {selectedComplaint.subject}</p>
+                    <p className="text-[10px] text-indigo-400 font-bold mt-0.5">
+                      User: {selectedComplaint.userName || 'N/A'} (UID: {selectedComplaint.userUid || 'N/A'})
+                    </p>
+                    {selectedComplaint.complaintType && (
+                      <p className="text-[9px] text-amber-500 font-bold">
+                        Type: {selectedComplaint.complaintType}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-2 leading-relaxed bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-medium">
+                      {selectedComplaint.description}
+                    </p>
+                  </div>
 
-              <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Ticket Status*</label>
-                <select
-                  value={complaintStatusUpdate}
-                  onChange={(e) => setComplaintStatusUpdate(e.target.value)}
-                  className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-750"
-                >
-                  <option value="open">Open</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="resolved">Resolved</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </div>
+                  {/* Attachment Display */}
+                  {selectedComplaint.imageUrl && (
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Attachment / Evidence</label>
+                      {selectedComplaint.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                        <a
+                          href={`${API_BASE}${selectedComplaint.imageUrl}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 p-2 bg-slate-955 border border-slate-800 rounded-lg text-[10px] font-semibold text-indigo-400 hover:text-indigo-305 transition-colors no-underline"
+                        >
+                          <Paperclip size={12} />
+                          <span>View PDF Evidence</span>
+                        </a>
+                      ) : (
+                        <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-800 bg-slate-955 group">
+                          <img 
+                            src={`${API_BASE}${selectedComplaint.imageUrl}`} 
+                            alt="Evidence" 
+                            className="w-full h-full object-cover"
+                          />
+                          <a 
+                            href={`${API_BASE}${selectedComplaint.imageUrl}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="absolute inset-0 bg-slate-955/65 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-bold text-white transition-opacity no-underline"
+                          >
+                            View Full
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-              <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Assign Admin (Your ID)*</label>
-                <input
-                  type="text"
-                  required
-                  value={assignedAdminUpdate}
-                  onChange={(e) => setAssignedAdminUpdate(e.target.value)}
-                  className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-750 font-mono"
-                />
-              </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Ticket Status*</label>
+                    <select
+                      value={complaintStatusUpdate}
+                      onChange={(e) => setComplaintStatusUpdate(e.target.value)}
+                      className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-750"
+                    >
+                      <option value="open">Open</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Resolution Notes*</label>
-                <textarea
-                  required
-                  value={resolutionNotes}
-                  onChange={(e) => setResolutionNotes(e.target.value)}
-                  placeholder="Provide resolution details for this support ticket..."
-                  className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-750 h-20 resize-none"
-                />
-              </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Assign Admin (Your ID)*</label>
+                    <input
+                      type="text"
+                      required
+                      value={assignedAdminUpdate}
+                      onChange={(e) => setAssignedAdminUpdate(e.target.value)}
+                      className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-750 font-mono"
+                    />
+                  </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 mt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedComplaint(null)
-                    setResolutionNotes('')
-                    setComplaintStatusUpdate('open')
-                    setAssignedAdminUpdate('')
-                  }}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl text-slate-350 transition-colors border-0"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={updatingComplaintId === selectedComplaint.id}
-                  className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors border-0 cursor-pointer"
-                >
-                  {updatingComplaintId === selectedComplaint.id ? 'Updating...' : 'Update Ticket'}
-                </button>
-              </div>
-            </form>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Resolution Notes*</label>
+                    <textarea
+                      required
+                      value={resolutionNotes}
+                      onChange={(e) => setResolutionNotes(e.target.value)}
+                      placeholder="Provide resolution details for this support ticket..."
+                      className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-750 h-20 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedComplaint(null)
+                        setResolutionNotes('')
+                        setComplaintStatusUpdate('open')
+                        setAssignedAdminUpdate('')
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl text-slate-350 transition-colors border-0"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={updatingComplaintId === selectedComplaint.id}
+                      className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors border-0 cursor-pointer"
+                    >
+                      {updatingComplaintId === selectedComplaint.id ? 'Updating...' : 'Update Ticket'}
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
           </div>
         </div>
       )}
