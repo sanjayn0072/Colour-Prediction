@@ -10,8 +10,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load connection options from environment variables
-const poolConfig = process.env.MYSQL_URL
-  ? process.env.MYSQL_URL
+const mysqlUrl = process.env.MYSQL_URL || process.env.MYSQL_PUBLIC_URL;
+const poolConfig = mysqlUrl
+  ? mysqlUrl
   : {
       host: process.env.MYSQL_HOST,
       user: process.env.MYSQL_USER,
@@ -39,7 +40,7 @@ const poolConfig = process.env.MYSQL_URL
 export const ensureDatabaseExists = async () => {
   // Skip creating the database when using a connection URL.
   // Railway databases are already created.
-  if (process.env.MYSQL_URL) {
+  if (process.env.MYSQL_URL || process.env.MYSQL_PUBLIC_URL) {
     return;
   }
 

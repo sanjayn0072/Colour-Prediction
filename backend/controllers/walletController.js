@@ -5,7 +5,7 @@ import { ioInstance } from './gameController.js';
 import { createNotification } from '../utils/notifier.js';
 import { getCouponSplit, processReferralReward } from './depositController.js';
 
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'cplay_jwt_secret') {
+if (!process.env.JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is missing, undefined, or set to insecure default fallback.');
 }
 
