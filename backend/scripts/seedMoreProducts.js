@@ -1,13 +1,5 @@
 import '../config/env.js';
-import mysql from 'mysql2/promise';
-
-
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'Kumar870@',
-  database: process.env.DB_NAME || 'colourplay'
-});
+import { pool } from '../config/db.js';
 
 const run = async () => {
   const connection = await pool.getConnection();

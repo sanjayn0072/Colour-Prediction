@@ -1,16 +1,10 @@
 import '../config/env.js';
 import bcrypt from 'bcryptjs';
-import mysql from 'mysql2/promise';
+import { pool } from '../config/db.js';
 import path from 'path';
 
 
 const seedAdmin = async () => {
-  const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || 'root',
-    database: process.env.DB_NAME || 'colourplay'
-  });
 
   try {
     const salt = await bcrypt.genSalt(10);
@@ -20,7 +14,7 @@ const seedAdmin = async () => {
     // If the system relies on 'status' = 'active', we're setting that.
     const [result] = await pool.query(
       `INSERT INTO users (uid, name, phone, email, password_hash, role, status) 
-       VALUES ('ADMIN001', 'Admin', '9467029857', 'coloursupport@gmail.com', ?, 'admin', 'active')
+       VALUES ('ADM001', 'Admin', '9467029857', 'coloursupport@gmail.com', ?, 'admin', 'active')
        ON DUPLICATE KEY UPDATE password_hash = ?, role = 'admin', name = 'Admin', phone = '9467029857'`,
       [hashedPassword, hashedPassword]
     );
@@ -36,7 +30,7 @@ const seedAdmin = async () => {
   } catch (err) {
     console.error('Error seeding admin:', err);
   } finally {
-    pool.end();
+    await pool.end();
   }
 };
 

@@ -254,4 +254,15 @@ const connectDB = async () => {
   }
 };
 
+if (process.argv[1] && (process.argv[1].endsWith('db.js') || process.argv[1] === fileURLToPath(import.meta.url))) {
+  console.log("Running db.js connection verification directly...");
+  connectDB().then(() => {
+    console.log("Database verification succeeded.");
+    process.exit(0);
+  }).catch((err) => {
+    console.error("Database verification failed:", err);
+    process.exit(1);
+  });
+}
+
 export default connectDB;

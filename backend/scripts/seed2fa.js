@@ -1,5 +1,5 @@
 import '../config/env.js';
-import mysql from 'mysql2/promise';
+import { pool } from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
@@ -8,19 +8,11 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
- });
 
-const dbConfig = {
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  port: process.env.MYSQL_PORT ? parseInt(process.env.MYSQL_PORT, 10) : 3306,
-};
 
 async function run() {
   console.log('Starting Admin 2FA database migration and seeding...');
-  const conn = await mysql.createConnection(dbConfig);
+  const conn = await pool.getConnection();
 
   try {
     // 1. Alter users table to support role super_admin and 2FA columns
@@ -138,7 +130,8 @@ async function run() {
   } catch (error) {
     console.error('Error during migration/seeding:', error);
   } finally {
-    await conn.end();
+    if (conn) conn.release();
+    await pool.end();
   }
 }
 
