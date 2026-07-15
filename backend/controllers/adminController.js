@@ -382,6 +382,9 @@ export const adjustUserBalance = async (req, res) => {
   if (!balanceType || !['real', 'bonus', 'wagering'].includes(balanceType)) {
     return res.status(400).json({ error: 'Valid balanceType (real, bonus or wagering) is required.' });
   }
+  if (!description || typeof description !== 'string' || description.trim() === '') {
+    return res.status(400).json({ error: 'Transaction Notes are mandatory.' });
+  }
 
   const adjustVal = parseFloat(amount);
   const connection = await pool.getConnection();
@@ -527,7 +530,7 @@ export const updateOrderStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  if (!status || !['pending', 'shipped', 'delivered', 'cancelled'].includes(status)) {
+  if (!status || !['pending', 'shipped', 'delivered', 'cancelled', 'rejected'].includes(status)) {
     return res.status(400).json({ error: 'Invalid order status.' });
   }
 
@@ -535,12 +538,13 @@ export const updateOrderStatus = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const [orders] = await connection.query('SELECT user_id, total_price FROM product_orders WHERE id = ?', [id]);
+    const [orders] = await connection.query('SELECT user_id, total_price, order_status FROM product_orders WHERE id = ? FOR UPDATE', [id]);
     if (orders.length === 0) {
       await connection.rollback();
       return res.status(404).json({ error: 'Order not found.' });
     }
 
+    const order = orders[0];
     const deliveredAt = status === 'delivered' ? new Date() : null;
 
     // Set expected delivery to now if completed, or update dates
@@ -548,6 +552,43 @@ export const updateOrderStatus = async (req, res) => {
       'UPDATE product_orders SET order_status = ?, delivered_at = ? WHERE id = ?',
       [status, deliveredAt, id]
     );
+
+    // Order Rejection Refund Loop
+    if (status === 'rejected') {
+      if (order.order_status === 'rejected' || order.order_status === 'cancelled') {
+        await connection.rollback();
+        return res.status(400).json({ error: 'Order is already cancelled or rejected.' });
+      }
+
+      // Lock user's wallet
+      const [wallets] = await connection.query('SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE', [order.user_id]);
+      if (wallets.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'User wallet not found.' });
+      }
+
+      const wallet = wallets[0];
+      const balanceBefore = parseFloat(wallet.balance || 0);
+      const refundAmount = parseFloat(order.total_price || 0);
+      const balanceAfter = balanceBefore + refundAmount;
+
+      // Credit amount back to target user's primary cash wallet balance
+      await connection.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [refundAmount, order.user_id]);
+
+      // Record transaction ledger
+      await connection.query(
+        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) VALUES (?, ?, ?, "deposit", "product_orders", ?, ?, ?, ?)',
+        [
+          order.user_id,
+          wallet.id,
+          refundAmount,
+          id,
+          balanceBefore,
+          balanceAfter,
+          `Refund for rejected order #${id}`
+        ]
+      );
+    }
 
     await logAdminAction(
       connection,

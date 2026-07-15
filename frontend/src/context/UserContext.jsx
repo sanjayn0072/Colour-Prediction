@@ -455,6 +455,7 @@ export function UserProvider({ children }) {
   const [lockedBalance, setLockedBalance] = useState(0)
   const [bonusBalance, setBonusBalance] = useState(0)
   const [betsList, setBetsList] = useState([])
+  const [walletTransactions, setWalletTransactions] = useState([])
 
   const fetchUserHistory = async () => {
     const token = localStorage.getItem('token')
@@ -551,6 +552,11 @@ export function UserProvider({ children }) {
             setSavedUpis([])
           }
         }
+      }
+      
+      if (txRes.ok) {
+        const txData = await txRes.json()
+        setWalletTransactions(txData || [])
       }
 
       if (depositRes.ok) {
@@ -1086,6 +1092,7 @@ export function UserProvider({ children }) {
       betRecords, setBetRecords,
       betsList, setBetsList,
       fetchUserHistory,
+      walletTransactions,
       fetchWinLossStats,
       claimedVipRewards, setClaimedVipRewards,
       wagerMultipliers, saveWagerMultipliers,

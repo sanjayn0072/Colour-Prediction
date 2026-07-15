@@ -5,9 +5,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load env variables
- });
-
 import connectDB, { pool } from './db.js';
 import logger from '../utils/logger.js';
 
@@ -72,6 +69,14 @@ const runMigration = async () => {
     await connection.query('CREATE INDEX idx_withdrawals_user ON withdrawals(user_id)');
     await connection.query('CREATE INDEX idx_withdrawals_id ON withdrawals(withdrawal_id)');
     logger.info('Created indices for withdrawals table.');
+
+    // Add 'rejected' to order_status enum if not already there
+    try {
+      await connection.query("ALTER TABLE product_orders MODIFY COLUMN order_status ENUM('pending', 'shipped', 'delivered', 'cancelled', 'rejected') NOT NULL DEFAULT 'pending'");
+      logger.info("Successfully altered product_orders status ENUM to include 'rejected'.");
+    } catch (enumErr) {
+      logger.error(enumErr, "Failed to alter product_orders status ENUM");
+    }
 
     logger.info('--- Migration completed successfully! ---');
     process.exit(0);

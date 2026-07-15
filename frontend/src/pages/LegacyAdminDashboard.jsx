@@ -1004,6 +1004,12 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     }
   }
 
+  const handleRejectOrder = (orderId) => {
+    if (window.confirm("Are you sure you want to reject this order? This will cancel the order and issue an auto-refund back to the user's primary cash wallet balance.")) {
+      handleUpdateOrderStatus(orderId, 'rejected');
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     const token = adminToken || localStorage.getItem('token')
     const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
@@ -3959,7 +3965,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
           <div className="space-y-4">
             {/* Status Filters */}
             <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-1">
-              {['ALL', 'pending', 'shipped', 'delivered', 'cancelled'].map((status) => (
+              {['ALL', 'pending', 'shipped', 'delivered', 'cancelled', 'rejected'].map((status) => (
                 <button
                   key={status}
                   onClick={() => {
@@ -4032,6 +4038,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                               ord.orderStatus === 'delivered' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                               ord.orderStatus === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
                               ord.orderStatus === 'shipped' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                              ord.orderStatus === 'rejected' ? 'bg-rose-500/15 text-rose-400 border-rose-500/30' :
                               'bg-red-500/10 text-red-400 border-red-500/20'
                             }`}>
                               {ord.orderStatus}
@@ -4041,7 +4048,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                             {updatingOrderId === ord.id ? (
                               <span className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin inline-block" />
                             ) : (
-                              ord.orderStatus !== 'delivered' && ord.orderStatus !== 'cancelled' && (
+                              ord.orderStatus !== 'delivered' && ord.orderStatus !== 'cancelled' && ord.orderStatus !== 'rejected' && (
                                 <div className="flex gap-1.5 justify-end">
                                   {ord.orderStatus === 'pending' && (
                                     <button
@@ -4059,6 +4066,12 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                                       Delivered
                                     </button>
                                   )}
+                                  <button
+                                    onClick={() => handleRejectOrder(ord.id)}
+                                    className="px-2.5 py-1.5 bg-rose-955/35 hover:bg-rose-900/45 text-rose-400 text-[10px] font-bold rounded-lg cursor-pointer border-0"
+                                  >
+                                    Reject
+                                  </button>
                                   <button
                                     onClick={() => handleUpdateOrderStatus(ord.id, 'cancelled')}
                                     className="px-2.5 py-1.5 bg-red-955/30 hover:bg-red-900/40 text-red-400 text-[10px] font-bold rounded-lg cursor-pointer border-0"
@@ -4089,6 +4102,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                           ord.orderStatus === 'delivered' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                           ord.orderStatus === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
                           ord.orderStatus === 'shipped' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                          ord.orderStatus === 'rejected' ? 'bg-rose-500/15 text-rose-400 border-rose-500/30' :
                           'bg-red-500/10 text-red-400 border-red-500/20'
                         }`}>
                           {ord.orderStatus}
@@ -4113,7 +4127,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                           <span className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin inline-block" />
                         </div>
                       ) : (
-                        ord.orderStatus !== 'delivered' && ord.orderStatus !== 'cancelled' && (
+                        ord.orderStatus !== 'delivered' && ord.orderStatus !== 'cancelled' && ord.orderStatus !== 'rejected' && (
                           <div className="flex gap-2 justify-end">
                             {ord.orderStatus === 'pending' && (
                               <button
@@ -4131,6 +4145,12 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                                 Mark Delivered
                               </button>
                             )}
+                            <button
+                              onClick={() => handleRejectOrder(ord.id)}
+                              className="px-2.5 py-1.5 bg-rose-955/35 hover:bg-rose-900/45 text-rose-400 text-[10px] font-bold rounded-lg cursor-pointer border-0"
+                            >
+                              Reject Order
+                            </button>
                             <button
                               onClick={() => handleUpdateOrderStatus(ord.id, 'cancelled')}
                               className="px-2.5 py-1.5 bg-red-955/30 hover:bg-red-900/40 text-red-400 text-[10px] font-bold rounded-lg cursor-pointer border-0"
