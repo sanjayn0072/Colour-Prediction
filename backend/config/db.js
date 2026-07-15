@@ -175,20 +175,84 @@ const seedSystemData = async () => {
     const [productsCount] = await pool.query('SELECT COUNT(*) as count FROM products');
     if (Number(productsCount[0].count) === 0) {
       const products = [
-        { title: 'AuraPods Pro', price: 1499, original: 2499, rating: 4.8, reviews: 124, desc: 'Immersive sound with high-fidelity drivers, active noise cancellation up to 40dB, and 40 hours of combined battery life with the wireless charging case. IPX5 water resistant.' },
-        { title: 'Chronos Watch S', price: 2999, original: 4999, rating: 4.7, reviews: 89, desc: 'Track your fitness goals, receive calls, and manage your health metrics on a stunning 1.43-inch AMOLED display. Features up to 14 days of battery life per charge.' },
-        { title: 'Apex Mechanical Keyboard', price: 3499, original: 5999, rating: 4.9, reviews: 45, desc: 'Hot-swappable mechanical switches, double-shot PBT keycaps, and triple-mode connectivity (Bluetooth, 2.4G wireless, or USB-C wired). Ergonomic design with custom RGB.' },
-        { title: 'Viper Wireless Mouse', price: 1899, original: 2999, rating: 4.8, reviews: 67, desc: 'Lightweight 65g shell optimized for performance. Incorporates a high-precision 26K DPI optical sensor and zero-latency wireless connectivity. Up to 80 hours of battery life.' },
-        { title: 'AuraPods Lite', price: 999, original: 1999, rating: 4.5, reviews: 210, desc: 'Comfortable fit, dynamic bass boost driver, clear calls with ENC mic, and 28 hours total battery life with fast charge.' },
-        { title: 'Chronos Watch Active', price: 1999, original: 3499, rating: 4.6, reviews: 112, desc: 'Sporty layout with lightweight build, custom training metrics, notifications, and 7-day battery life.' },
-        { title: 'Apex Silent Keyboard', price: 2499, original: 3999, rating: 4.7, reviews: 33, desc: 'Quiet dampening switches for office environment, sleek low profile structure, and long-lasting wireless rechargeable battery.' },
-        { title: 'Viper Gaming Mouse', price: 1199, original: 1999, rating: 4.6, reviews: 54, desc: 'Vertical 57-degree hand grip design reduces wrist fatigue. Multi-device Bluetooth connection and quick flow scroll wheel.' }
+        { 
+          title: 'AuraPods Pro', 
+          price: 1499, 
+          original: 2499, 
+          rating: 4.8, 
+          reviews: 124, 
+          desc: 'Immersive sound with high-fidelity drivers, active noise cancellation up to 40dB, and 40 hours of combined battery life with the wireless charging case. IPX5 water resistant.',
+          image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'Chronos Watch S', 
+          price: 2999, 
+          original: 4999, 
+          rating: 4.7, 
+          reviews: 89, 
+          desc: 'Track your fitness goals, receive calls, and manage your health metrics on a stunning 1.43-inch AMOLED display. Features up to 14 days of battery life per charge.',
+          image: 'https://images.unsplash.com/photo-1542496658-e33a6d0d50f6?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'Apex Mechanical Keyboard', 
+          price: 3499, 
+          original: 5999, 
+          rating: 4.9, 
+          reviews: 45, 
+          desc: 'Hot-swappable mechanical switches, double-shot PBT keycaps, and triple-mode connectivity (Bluetooth, 2.4G wireless, or USB-C wired). Ergonomic design with custom RGB.',
+          image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'Viper Wireless Mouse', 
+          price: 1899, 
+          original: 2999, 
+          rating: 4.8, 
+          reviews: 67, 
+          desc: 'Lightweight 65g shell optimized for performance. Incorporates a high-precision 26K DPI optical sensor and zero-latency wireless connectivity. Up to 80 hours of battery life.',
+          image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'AuraPods Lite', 
+          price: 999, 
+          original: 1999, 
+          rating: 4.5, 
+          reviews: 210, 
+          desc: 'Comfortable fit, dynamic bass boost driver, clear calls with ENC mic, and 28 hours total battery life with fast charge.',
+          image: 'https://images.unsplash.com/photo-1608156639585-b3a032ef9689?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'Chronos Watch Active', 
+          price: 1999, 
+          original: 3499, 
+          rating: 4.6, 
+          reviews: 112, 
+          desc: 'Sporty layout with lightweight build, custom training metrics, notifications, and 7-day battery life.',
+          image: 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'Apex Silent Keyboard', 
+          price: 2499, 
+          original: 3999, 
+          rating: 4.7, 
+          reviews: 33, 
+          desc: 'Quiet dampening switches for office environment, sleek low profile structure, and long-lasting wireless rechargeable battery.',
+          image: 'https://images.unsplash.com/photo-1595225476474-87563907a212?auto=format&fit=crop&w=600&q=80'
+        },
+        { 
+          title: 'Viper Gaming Mouse', 
+          price: 1199, 
+          original: 1999, 
+          rating: 4.6, 
+          reviews: 54, 
+          desc: 'Vertical 57-degree hand grip design reduces wrist fatigue. Multi-device Bluetooth connection and quick flow scroll wheel.',
+          image: 'https://images.unsplash.com/photo-1613040809024-b4ef7ba99bc3?auto=format&fit=crop&w=600&q=80'
+        }
       ];
 
       for (let i = 0; i < products.length; i++) {
         const p = products[i];
         const [prodResult] = await pool.query(
-          "INSERT INTO products (title, price, original_price, description, rating, reviews_count, stock) VALUES (?, ?, ?, ?, ?, ?, 100)",
+          "INSERT INTO products (title, price, original_price, description, rating, reviews_count, stock, category) VALUES (?, ?, ?, ?, ?, ?, 100, 'Tech')",
           [p.title, p.price, p.original, p.desc, p.rating, p.reviews]
         );
         const prodId = prodResult.insertId;
@@ -196,7 +260,7 @@ const seedSystemData = async () => {
         // Seed product images
         await pool.query(
           "INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, 1)",
-          [prodId, `/src/assets/${p.title.toLowerCase().split(' ')[0]}.png`]
+          [prodId, p.image]
         );
       }
       logger.info('Products and images seeded successfully.');

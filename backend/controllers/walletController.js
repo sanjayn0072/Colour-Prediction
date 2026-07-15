@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import { query, pool } from '../config/db.js';
-import { ioInstance } from './gameController.js';
+import { ioInstance, checkAndConvertBonus } from './gameController.js';
 import { createNotification } from '../utils/notifier.js';
 import { getCouponSplit, processReferralReward } from './depositController.js';
 
@@ -150,13 +150,22 @@ export const linkBank = async (req, res) => {
     return res.status(400).json({ error: 'All bank details are required.' });
   }
 
+  // Validate account number: must be numeric, 9-16 digits
+  const sanitizedAccount = String(accountNumber).replace(/[^0-9]/g, '');
+  if (sanitizedAccount.length < 9 || sanitizedAccount.length > 16) {
+    return res.status(400).json({ error: 'Account number must be between 9 and 16 digits.' });
+  }
+  if (!/^\d{9,16}$/.test(sanitizedAccount)) {
+    return res.status(400).json({ error: 'Account number must contain only digits.' });
+  }
+
   try {
     // Delete existing bank config if any to keep 1 payment method per user for simple demo
     await query('DELETE FROM payment_methods WHERE user_id = ? AND type = "bank"', [req.user.id]);
 
     await query(
       'INSERT INTO payment_methods (user_id, type, account_name, account_number, ifsc_code, qr_code_url, is_default) VALUES (?, "bank", ?, ?, ?, ?, ?)',
-      [req.user.id, req.user.name, accountNumber, ifsc, qrCodeUrl || null, isDefault ? 1 : 0]
+      [req.user.id, req.user.name, sanitizedAccount, ifsc, qrCodeUrl || null, isDefault ? 1 : 0]
     );
 
     return res.json({ message: 'Bank account linked successfully' });
@@ -319,9 +328,40 @@ export const deposit = async (req, res) => {
 
     await connection.commit();
 
+    let walletBalance = newBalance;
+
+    // Run micro-transaction to check and convert bonus right after deposit completes
+    const checkConn = await pool.getConnection();
+    try {
+      await checkConn.beginTransaction();
+      const convResult = await checkAndConvertBonus(req.user.id, checkConn);
+      if (convResult.converted) {
+        await checkConn.commit();
+        walletBalance = convResult.newBalance;
+        
+        // Emit Socket.IO event 'bonus_converted'
+        if (ioInstance) {
+          ioInstance.to(`user_room_${req.user.id}`).emit('bonus_converted', {
+            userId: req.user.id,
+            amount: convResult.amount,
+            newBalance: convResult.newBalance,
+            newBonusBalance: convResult.newBonusBalance,
+            requiredWager: convResult.requiredWager
+          });
+        }
+      } else {
+        await checkConn.rollback();
+      }
+    } catch (checkErr) {
+      await checkConn.rollback();
+      logger.error(checkErr, `Failed checkAndConvertBonus after deposit for user ${req.user.id}`);
+    } finally {
+      checkConn.release();
+    }
+
     return res.json({ 
       message: 'Deposit successful', 
-      walletBalance: newBalance 
+      walletBalance 
     });
   } catch (err) {
     await connection.rollback();

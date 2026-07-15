@@ -685,7 +685,7 @@ function DepositTab({ onNavigate, showToast }) {
 }
 
 function WithdrawTab({ onNavigate }) {
-  const { user, availableBalance, realBalance, bonusBalance, requiredWager, depositRecords, withdrawRecords, setWithdrawRecords, savedBanks, savedUpis, fetchUserHistory } = useUser()
+  const { user, availableBalance, realBalance, bonusBalance, requiredWager, requiredBonusWager, depositRecords, withdrawRecords, setWithdrawRecords, savedBanks, savedUpis, fetchUserHistory } = useUser()
   const [amount, setAmount] = useState('')
   const [customAmount, setCustomAmount] = useState('')
   const [withdrawMethod, setWithdrawMethod] = useState(savedBanks.length > 0 ? 'bank' : savedUpis.length > 0 ? 'upi' : 'bank')
@@ -840,13 +840,27 @@ function WithdrawTab({ onNavigate }) {
     <div className="space-y-5">
 
       {/* Wagering Requirement Alert */}
+      {/* Withdrawal Wagering Block Alert */}
       {requiredWager > 0 && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-150 rounded-2xl p-4 shadow-sm border-dashed border-red-250 animate-[fadeIn_0.2s_ease-out]">
+          <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5 animate-pulse" />
+          <div>
+            <p className="text-xs font-bold text-red-800">Withdrawal Locked</p>
+            <p className="text-[11px] text-red-700 mt-1 leading-relaxed">
+              You must complete a total settled wager of ₹{requiredWager.toLocaleString()} more in games before initiating any withdrawals.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Bonus Wagering Alert */}
+      {requiredBonusWager > 0 && bonusBalance > 0 && (
         <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-2xl p-4 shadow-sm border-dashed border-amber-250 animate-[fadeIn_0.2s_ease-out]">
           <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5 animate-pulse" />
           <div>
             <p className="text-xs font-bold text-amber-800">Active Bonus Wagering (Informational)</p>
             <p className="text-[11px] text-amber-700 mt-1 leading-relaxed">
-              Your bonus balance (₹{bonusBalance.toFixed(2)}) is locked. You can still withdraw your real money balance (₹{realBalance.toFixed(2)}). To convert your bonus to withdrawable real cash, wager ₹{requiredWager.toLocaleString()} more in games.
+              Your bonus balance (₹{bonusBalance.toFixed(2)}) is locked. You can still withdraw your real money balance (₹{realBalance.toFixed(2)}) if your withdrawal is not locked. To convert your bonus to withdrawable real cash, wager ₹{requiredBonusWager.toLocaleString()} more in games.
             </p>
           </div>
         </div>

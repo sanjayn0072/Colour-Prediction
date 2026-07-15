@@ -6,7 +6,7 @@ import { useUser } from './UserContext'
 const GameContext = createContext(null)
 
 export const GameProvider = ({ children }) => {
-  const { user, setRealBalance, fetchUserHistory } = useUser()
+  const { user, setRealBalance, setBonusBalance, setRequiredWager, setRequiredBonusWager, fetchUserHistory } = useUser()
   
   // Dice Game states
   const [diceTimeLeft, setDiceTimeLeft] = useState(30)
@@ -168,6 +168,21 @@ export const GameProvider = ({ children }) => {
 
     socketInstance.on('round_ended', (data) => {
       const event = new CustomEvent('round_ended', { detail: data });
+      window.dispatchEvent(event);
+    });
+
+    socketInstance.on('bonus_converted', (data) => {
+      console.log('Bonus converted socket event received:', data);
+      if (data && data.newBalance !== undefined) {
+        setRealBalance(data.newBalance);
+      }
+      setBonusBalance(0);
+      setRequiredBonusWager(0);
+      if (data && data.requiredWager !== undefined) {
+        setRequiredWager(data.requiredWager);
+      }
+      // Dispatch custom DOM event so that other components can show alerts/toasts
+      const event = new CustomEvent('bonus_converted', { detail: data });
       window.dispatchEvent(event);
     });
 

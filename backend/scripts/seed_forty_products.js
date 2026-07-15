@@ -148,7 +148,7 @@ const productsData = [
     rating: 4.84,
     reviews_count: 94,
     description: 'Hot-swappable custom linear switches, solid aluminium frame, and premium PBT double-shot keycaps. Beautiful custom addressable RGB.',
-    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'TECH-GD-03',
@@ -160,7 +160,7 @@ const productsData = [
     rating: 4.76,
     reviews_count: 104,
     description: 'Futuristic optical mouse with zero-latency wireless connectivity and 26,000 DPI sensor. Features ergonomic design and magnetic chargers.',
-    image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'TECH-GD-04',
@@ -172,7 +172,7 @@ const productsData = [
     rating: 4.70,
     reviews_count: 165,
     description: 'Active noise cancellation earbuds with high-fidelity acoustic chamber. Up to 36 hours total battery life with fast charge case.',
-    image: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'TECH-GD-05',
@@ -208,19 +208,7 @@ const productsData = [
     rating: 4.96,
     reviews_count: 31,
     description: 'Headband accessory reading neural delta-waves for high-immersion VR calibration. Lightweight fabric fit with cooling gel pads.',
-    image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80'
-  },
-  {
-    product_id: 'TECH-GD-08',
-    title: 'Infinity Glass Tablet Terminal',
-    price: 11999.00,
-    original_price: 18999.00,
-    category: 'Tech Gadgets',
-    stock: 25,
-    rating: 4.93,
-    reviews_count: 47,
-    description: 'Fully transparent OLED tablet terminal with customizable neon interface presets and inductive touch controls.',
-    image: 'https://images.unsplash.com/photo-1611085583191-a3b1a1e27d81?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1593508512255-86ab42a8e620?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'TECH-GD-09',
@@ -232,7 +220,7 @@ const productsData = [
     rating: 4.80,
     reviews_count: 73,
     description: 'Cyberpunk face shield with active side filter pods and custom programmable LED front grids. Includes rechargeable battery module.',
-    image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'TECH-GD-10',
@@ -244,10 +232,10 @@ const productsData = [
     rating: 4.62,
     reviews_count: 101,
     description: 'Rugged water-resistant 20,000mAh external battery featuring folding solar panel receptors and quick-charge output loops.',
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1620714223084-8fcacc6dfd8d?auto=format&fit=crop&w=600&q=80'
   },
 
-  // Minimalist Accessories (10 items)
+  // Minimalist Accessories (9 items)
   {
     product_id: 'MIN-AC-01',
     title: 'Carbon-Fiber RFID Shield Cardholder',
@@ -258,7 +246,7 @@ const productsData = [
     rating: 4.78,
     reviews_count: 144,
     description: 'RFID-blocking minimalist cardholder made of military-grade carbon fiber panels. Elastic cash strap holds up to 12 cards comfortably.',
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'MIN-AC-02',
@@ -306,7 +294,7 @@ const productsData = [
     rating: 4.70,
     reviews_count: 76,
     description: 'Stunning writing pen machined from a single billet of aircraft-grade aluminium. Magnetic cap suspension system and premium ink refills.',
-    image: 'https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=600&q=80'
   },
   {
     product_id: 'MIN-AC-06',
@@ -345,18 +333,6 @@ const productsData = [
     image: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&q=80'
   },
   {
-    product_id: 'MIN-AC-09',
-    title: 'Matte-Black Blue-Light Specs',
-    price: 1499.00,
-    original_price: 2199.00,
-    category: 'Minimalist Accessories',
-    stock: 110,
-    rating: 4.67,
-    reviews_count: 122,
-    description: 'Lightweight TR90 composite frame glasses with blue-light filtering lenses. Reduces eye strain during long screen exposure sessions.',
-    image: 'https://images.unsplash.com/photo-1501127122-f385ca6ddd96?auto=format&fit=crop&w=600&q=80'
-  },
-  {
     product_id: 'MIN-AC-10',
     title: 'Premium Cordura Tech Belt',
     price: 799.00,
@@ -369,19 +345,7 @@ const productsData = [
     image: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=600&q=80'
   },
 
-  // High-Detail Artwork Apparels (10 items)
-  {
-    product_id: 'ART-AP-01',
-    title: 'Ukiyo-e Wave Embroidered Kimono',
-    price: 3999.00,
-    original_price: 5999.00,
-    category: 'High-Detail Artwork Apparels',
-    stock: 70,
-    rating: 4.94,
-    reviews_count: 91,
-    description: 'Stunning lightweight kimono featuring an entire back panel of high-detail traditional Japanese wave embroidery. Premium satin collar panels.',
-    image: 'https://images.unsplash.com/photo-1618005198143-e5283b519a7f?auto=format&fit=crop&w=600&q=80'
-  },
+  // High-Detail Artwork Apparels (9 items)
   {
     product_id: 'ART-AP-02',
     title: 'Cyber-Samurai High-Detail Graphic Hoodie',
@@ -488,7 +452,7 @@ const productsData = [
     rating: 4.77,
     reviews_count: 104,
     description: 'Premium heavyweight cotton tee featuring detailed traditional Koi fish embroidery on the left chest with satin accent threads.',
-    image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80'
   }
 ];
 

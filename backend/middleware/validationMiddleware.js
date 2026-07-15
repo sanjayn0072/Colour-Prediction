@@ -381,6 +381,7 @@ export const profileUpdateSchema = z.object({
       invalid_type_error: "Full Name is immutable and cannot be updated."
     }),
     avatar: z.string().trim().optional(),
-    email: z.string().trim().email('Invalid email address format').optional().nullable().or(z.literal(''))
+    email: z.string().trim().email('Invalid email address format').optional().nullable().or(z.literal('')),
+    location: z.string().trim().optional().nullable()
   })
 });
