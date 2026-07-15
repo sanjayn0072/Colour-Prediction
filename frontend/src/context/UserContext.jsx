@@ -554,9 +554,11 @@ export function UserProvider({ children }) {
         }
       }
       
+      let adjustments = []
       if (txRes.ok) {
         const txData = await txRes.json()
         setWalletTransactions(txData || [])
+        adjustments = (txData || []).filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:')))
       }
 
       if (depositRes.ok) {
@@ -577,6 +579,30 @@ export function UserProvider({ children }) {
           timestamp: new Date(d.createdAt).getTime()
         }))
 
+        // Append positive manual adjustments as deposits
+        adjustments.forEach(t => {
+          const amt = parseFloat(t.amount)
+          if (amt >= 0) {
+            const adminNotes = t.description ? t.description.replace('Admin adjustment: ', '') : 'Game Rebate Reward';
+            deposits.push({
+              id: `ADJ-${t.id}`,
+              dbId: t.id,
+              amount: amt,
+              bonus: 0,
+              status: 'Completed',
+              appealStatus: null,
+              appealAdminNote: null,
+              date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+              method: 'Adjustment',
+              voucher: null,
+              isAdjustment: true,
+              adminNotes: adminNotes,
+              timestamp: new Date(t.createdAt).getTime()
+            })
+          }
+        })
+
+        deposits.sort((a, b) => b.timestamp - a.timestamp)
         setDepositRecords(deposits)
       }
 
@@ -610,6 +636,35 @@ export function UserProvider({ children }) {
             timestamp: new Date(w.createdAt).getTime()
           }
         })
+        // Append negative manual adjustments as withdrawals
+        adjustments.forEach(t => {
+          const amt = parseFloat(t.amount)
+          if (amt < 0) {
+            const adminNotes = t.description ? t.description.replace('Admin adjustment: ', '') : 'Wallet Adjustment';
+            const absoluteAmt = Math.abs(amt)
+            withdrawals.push({
+              id: `ADJ-${t.id}`,
+              dbId: t.id,
+              amount: absoluteAmt,
+              fee: 0,
+              netAmount: absoluteAmt,
+              status: 'PAID', // mark as completed / PAID
+              date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+              method: 'Adjustment',
+              upiId: '',
+              accountHolderName: '',
+              accountNumber: '',
+              ifscCode: '',
+              utrNumber: '',
+              adminNote: adminNotes,
+              paidAt: t.createdAt,
+              isAdjustment: true,
+              timestamp: new Date(t.createdAt).getTime()
+            })
+          }
+        })
+
+        withdrawals.sort((a, b) => b.timestamp - a.timestamp)
         setWithdrawRecords(withdrawals)
       }
 

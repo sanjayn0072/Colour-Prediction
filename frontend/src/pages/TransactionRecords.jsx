@@ -221,17 +221,6 @@ export default function TransactionRecords({ onBack }) {
             <svg className={`w-3.5 h-3.5 ${activeTab === 'bets' ? 'text-indigo-600' : 'text-slate-400'}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Game Bets
           </button>
-          <button
-            onClick={() => setActiveTab('adjustments')}
-            className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer border-0 outline-none ${
-              activeTab === 'adjustments'
-                ? 'bg-white text-indigo-650 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 bg-transparent'
-            }`}
-          >
-            <Info size={13} className={activeTab === 'adjustments' ? 'text-indigo-600' : 'text-slate-400'} />
-            Adjusts
-          </button>
         </div>
       </div>
 
@@ -258,7 +247,7 @@ export default function TransactionRecords({ onBack }) {
           ) : (
             depositRecords.map((rec) => {
               const showAppealForm = appealingId === rec.id
-              const isAppealable = rec.status.toLowerCase() === 'pending' && (Date.now() - rec.timestamp <= 7 * 24 * 60 * 60 * 1000)
+              const isAppealable = !rec.isAdjustment && rec.status.toLowerCase() === 'pending' && (Date.now() - rec.timestamp <= 7 * 24 * 60 * 60 * 1000)
 
               return (
                 <div key={rec.id} className={`bg-white border rounded-2xl p-3.5 shadow-sm transition-all ${
@@ -273,7 +262,9 @@ export default function TransactionRecords({ onBack }) {
                     {/* Middle Column */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-800">Deposit via {rec.method || 'UPI'}</span>
+                        <span className="text-xs font-bold text-slate-800">
+                          {rec.isAdjustment ? 'Game Rebate Reward' : `Deposit via ${rec.method || 'UPI'}`}
+                        </span>
                         {rec.voucher && (
                           <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider shrink-0 border border-indigo-100">Voucher</span>
                         )}
@@ -296,6 +287,9 @@ export default function TransactionRecords({ onBack }) {
                       </div>
                       {rec.voucher && (
                         <p className="text-[9px] text-indigo-500 font-semibold mt-1">🎟️ code: {rec.voucher}</p>
+                      )}
+                      {rec.isAdjustment && rec.adminNotes && (
+                        <p className="text-[10px] text-slate-500 font-semibold mt-1">Notes: {rec.adminNotes}</p>
                       )}
                     </div>
 
@@ -481,7 +475,7 @@ export default function TransactionRecords({ onBack }) {
               return (
                 <div 
                   key={rec.id} 
-                  onClick={() => setExpandedId(isExpanded ? null : rec.id)}
+                  onClick={() => !rec.isAdjustment && setExpandedId(isExpanded ? null : rec.id)}
                   className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm hover:border-slate-300 transition-colors cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3.5">
@@ -493,7 +487,7 @@ export default function TransactionRecords({ onBack }) {
                     {/* Middle Column */}
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-bold text-slate-800 block">
-                        Withdrawal to {(rec.method || '').includes('Bank') || rec.method === 'BANK' ? 'Bank' : 'UPI'}
+                        {rec.isAdjustment ? 'Game Rebate Reward' : `Withdrawal to ${(rec.method || '').includes('Bank') || rec.method === 'BANK' ? 'Bank' : 'UPI'}`}
                       </span>
                       <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-medium mt-0.5">
                         <span>{rec.date}</span>
@@ -511,9 +505,15 @@ export default function TransactionRecords({ onBack }) {
                           {copiedId === rec.id && <span className="text-[8px] text-emerald-650 font-bold">Copied</span>}
                         </button>
                       </div>
-                      <p className="text-[9px] text-slate-550 font-medium mt-1">
-                        Fee: <span className="text-red-500 font-bold">₹{rec.fee}</span> · Net: <span className="text-emerald-600 font-bold">₹{rec.netAmount}</span>
-                      </p>
+                       {!rec.isAdjustment ? (
+                        <p className="text-[9px] text-slate-550 font-medium mt-1">
+                          Fee: <span className="text-red-500 font-bold">₹{rec.fee}</span> · Net: <span className="text-emerald-600 font-bold">₹{rec.netAmount}</span>
+                        </p>
+                      ) : (
+                        rec.adminNote && (
+                          <p className="text-[10px] text-slate-550 font-semibold mt-1">Notes: {rec.adminNote}</p>
+                        )
+                      )}
                     </div>
 
                     {/* Right Column (Amount & Status) */}
@@ -531,7 +531,7 @@ export default function TransactionRecords({ onBack }) {
                         }`}>
                           {rec.status}
                         </span>
-                        {isExpanded ? <ChevronUp size={12} className="text-slate-400" /> : <ChevronDown size={12} className="text-slate-400" />}
+                        {!rec.isAdjustment && (isExpanded ? <ChevronUp size={12} className="text-slate-400" /> : <ChevronDown size={12} className="text-slate-400" />)}
                       </div>
                     </div>
                   </div>
@@ -648,7 +648,7 @@ export default function TransactionRecords({ onBack }) {
               )
             })
           )
-        ) : activeTab === 'bets' ? (
+        ) : (
           betRecords.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <svg className="w-12 h-12 mb-3 stroke-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -699,42 +699,6 @@ export default function TransactionRecords({ onBack }) {
                 </div>
               </div>
             ))
-          )
-        ) : (
-          walletTransactions.filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:'))).length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-              <Info size={32} className="mb-3 opacity-30 text-slate-450" />
-              <p className="text-xs font-bold text-slate-500">No adjustments found</p>
-              <p className="text-[10px] text-slate-400 mt-1">Manual adjustments will appear here.</p>
-            </div>
-          ) : (
-            walletTransactions
-              .filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:')))
-              .map((t) => {
-                const isCredit = parseFloat(t.amount) >= 0;
-                const adminNotes = t.description ? t.description.replace('Admin adjustment: ', '') : 'No notes provided.';
-                return (
-                  <div key={t.id} className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm hover:border-slate-350 transition-all flex items-center gap-3.5">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${
-                      isCredit ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
-                    }`}>
-                      {isCredit ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start">
-                        <p className="text-xs font-black text-slate-800">Game Rebate Reward</p>
-                        <p className={`text-xs font-black ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {isCredit ? '+' : ''}₹{Math.abs(parseFloat(t.amount)).toFixed(2)}
-                        </p>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-semibold mt-1">Notes: {adminNotes}</p>
-                      <p className="text-[9px] text-slate-400 mt-1">
-                        Date: {new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
           )
         )}
       </div>
