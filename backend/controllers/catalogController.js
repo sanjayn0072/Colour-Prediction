@@ -335,7 +335,10 @@ export const checkoutProduct = async (req, res) => {
 
     // 1. Lock and check product stock and price
     const [products] = await connection.query(
-      'SELECT id, price, stock, title FROM products WHERE id = ? FOR UPDATE',
+      `SELECT p.id, p.price, p.stock, p.title, pi.image_url 
+       FROM products p 
+       LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = 1
+       WHERE p.id = ? FOR UPDATE`,
       [productId]
     );
 
@@ -423,7 +426,8 @@ export const checkoutProduct = async (req, res) => {
         product: {
           id: product.id,
           title: product.title,
-          price: price
+          price: price,
+          image: product.image_url
         },
         status: 'Confirmed',
         orderDate: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),

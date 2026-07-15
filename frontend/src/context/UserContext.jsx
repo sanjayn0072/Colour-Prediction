@@ -262,16 +262,17 @@ const imageMap = {
   '/src/assets/viper.png': mouseImg,
 };
 
+export const resolveImg = (imgStr) => {
+  if (!imgStr) return earbudsImg;
+  if (imageMap[imgStr]) return imageMap[imgStr];
+  if (imgStr.startsWith('/uploads/')) {
+    const base = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+    return `${base}${imgStr}`;
+  }
+  return imgStr;
+};
+
 const mapProduct = (p) => {
-  const resolveImg = (imgStr) => {
-    if (!imgStr) return earbudsImg;
-    if (imageMap[imgStr]) return imageMap[imgStr];
-    if (imgStr.startsWith('/uploads/')) {
-      const base = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
-      return `${base}${imgStr}`;
-    }
-    return imgStr;
-  };
   return {
     ...p,
     id: p._id || p.id,
@@ -526,6 +527,9 @@ export function UserProvider({ children }) {
           }
           if (profileData.user.requiredWager !== undefined) {
             setRequiredWager(profileData.user.requiredWager)
+          }
+          if (profileData.user.requiredBonusWager !== undefined) {
+            setRequiredBonusWager(profileData.user.requiredBonusWager)
           }
           if (profileData.user.claimedVipRewards !== undefined) {
             setClaimedVipRewards(profileData.user.claimedVipRewards)
@@ -829,6 +833,9 @@ export function UserProvider({ children }) {
     if (userData.requiredWager !== undefined) {
       setRequiredWager(userData.requiredWager)
     }
+    if (userData.requiredBonusWager !== undefined) {
+      setRequiredBonusWager(userData.requiredBonusWager)
+    }
     if (userData.claimedVipRewards !== undefined) {
       setClaimedVipRewards(userData.claimedVipRewards)
     }
@@ -912,6 +919,7 @@ export function UserProvider({ children }) {
   ])
 
   const [requiredWager, setRequiredWager] = useState(0)
+  const [requiredBonusWager, setRequiredBonusWager] = useState(0)
   const [depositRecords, setDepositRecords] = useState(INITIAL_DEPOSITS)
   const [withdrawRecords, setWithdrawRecords] = useState(INITIAL_WITHDRAWALS)
   const [savedBanks, setSavedBanks] = useState(() => {
@@ -996,8 +1004,13 @@ export function UserProvider({ children }) {
 
     setRequiredWager(w => {
       if (w <= 0) return 0
-      const nextWager = Math.max(0, parseFloat((w - amount).toFixed(2)))
-      if (nextWager === 0) {
+      return Math.max(0, parseFloat((w - tempRealUsed).toFixed(2)))
+    })
+
+    setRequiredBonusWager(bw => {
+      if (bw <= 0) return 0
+      const nextBonusWager = Math.max(0, parseFloat((bw - tempBonusUsed).toFixed(2)))
+      if (nextBonusWager === 0) {
         setTimeout(() => {
           setBonusBalance(currBonus => {
             if (currBonus > 0) {
@@ -1007,7 +1020,7 @@ export function UserProvider({ children }) {
           })
         }, 0)
       }
-      return nextWager
+      return nextBonusWager
     })
     
     return { realUsed: tempRealUsed, bonusUsed: tempBonusUsed }
@@ -1140,6 +1153,7 @@ export function UserProvider({ children }) {
       directReferralReward, setDirectReferralReward,
       betCommissionReward, setBetCommissionReward,
       requiredWager, setRequiredWager,
+      requiredBonusWager, setRequiredBonusWager,
       depositRecords, setDepositRecords,
       withdrawRecords, setWithdrawRecords,
       savedBanks, setSavedBanks,

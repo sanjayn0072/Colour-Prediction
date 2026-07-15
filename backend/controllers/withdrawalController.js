@@ -59,6 +59,11 @@ export const createWithdrawal = async (req, res) => {
     if (!accountNumber || accountNumber.trim() === '') {
       return res.status(400).json({ success: false, message: 'Account number is required for bank withdrawals.' });
     }
+    // Validate account number: must be numeric, 9-16 digits
+    const cleanedAccNum = String(accountNumber).replace(/[^0-9]/g, '');
+    if (cleanedAccNum.length < 9 || cleanedAccNum.length > 16) {
+      return res.status(400).json({ success: false, message: 'Account number must be between 9 and 16 digits.' });
+    }
     if (!ifscCode || ifscCode.trim() === '') {
       return res.status(400).json({ success: false, message: 'IFSC code is required for bank withdrawals.' });
     }

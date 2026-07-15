@@ -275,7 +275,7 @@ export const placeBet = async (req, res) => {
 
   // STRICT CORE GLOBAL RULE: Reject bets if remaining time is below session lock threshold
   const lockThreshold = gameType === 'colour'
-    ? (session === '30s' ? 10 : session === '1m' ? 10 : session === '2m' ? 15 : 30)
+    ? (session === '30s' ? 5 : session === '1m' ? 10 : session === '2m' ? 15 : 20)
     : 10;
   if (activeGame.timeLeft <= lockThreshold || activeGame.phase === 'locked') {
     return res.status(400).json({ error: 'Betting closed for this round' });
@@ -464,6 +464,39 @@ export const placeBet = async (req, res) => {
 
     await connection.commit();
 
+    let walletBalance = newBalance;
+    let bonusBalance = newBonusBalance;
+
+    // Run micro-transaction to check and convert bonus post-commit
+    const checkConn = await pool.getConnection();
+    try {
+      await checkConn.beginTransaction();
+      const convResult = await checkAndConvertBonus(req.user.id, checkConn);
+      if (convResult.converted) {
+        await checkConn.commit();
+        walletBalance = convResult.newBalance;
+        bonusBalance = convResult.newBonusBalance;
+        
+        // Emit Socket.IO event 'bonus_converted'
+        if (ioInstance) {
+          ioInstance.to(`user_room_${req.user.id}`).emit('bonus_converted', {
+            userId: req.user.id,
+            amount: convResult.amount,
+            newBalance: walletBalance,
+            newBonusBalance: bonusBalance,
+            requiredWager: convResult.requiredWager
+          });
+        }
+      } else {
+        await checkConn.rollback();
+      }
+    } catch (checkErr) {
+      await checkConn.rollback();
+      logger.error(checkErr, `Failed checkAndConvertBonus after placeBet for user ${req.user.id}`);
+    } finally {
+      checkConn.release();
+    }
+
     // Query back the newly created bet formatted
     const [insertedBets] = await connection.query('SELECT * FROM bets WHERE id = ? LIMIT 1', [betId]);
     const formattedBet = mapKeys(insertedBets[0]);
@@ -473,8 +506,8 @@ export const placeBet = async (req, res) => {
     return res.status(201).json({
       message: 'Bet placed successfully',
       bet: formattedBet,
-      walletBalance: newBalance,
-      bonusBalance: newBonusBalance
+      walletBalance,
+      bonusBalance
     });
   } catch (error) {
     await connection.rollback();
@@ -536,6 +569,66 @@ const generateNextRoundId = async (gameCode) => {
   } finally {
     connection.release();
   }
+};
+
+export const checkAndConvertBonus = async (userId, connection) => {
+  const [wallets] = await connection.query(
+    'SELECT id, balance, bonus_balance, required_bonus_wager, required_wager FROM wallets WHERE user_id = ? FOR UPDATE',
+    [userId]
+  );
+
+  if (!wallets || wallets.length === 0) {
+    return { converted: false };
+  }
+
+  const wallet = wallets[0];
+  const balance = parseFloat(wallet.balance || 0);
+  const bonusBalance = parseFloat(wallet.bonus_balance || 0);
+  const requiredBonusWager = parseFloat(wallet.required_bonus_wager || 0);
+  const requiredWager = parseFloat(wallet.required_wager || 0);
+
+  if (requiredBonusWager <= 0 && bonusBalance > 0) {
+    const convertedAmount = bonusBalance;
+    const newBalance = parseFloat((balance + convertedAmount).toFixed(4));
+    const newBonusBalance = 0.0000;
+    const newRequiredBonusWager = 0.0000;
+
+    // Update wallet
+    await connection.query(
+      'UPDATE wallets SET balance = ?, bonus_balance = ?, required_bonus_wager = ? WHERE user_id = ?',
+      [newBalance, newBonusBalance, newRequiredBonusWager, userId]
+    );
+
+    // Insert wallet transaction ledger entry
+    await connection.query(
+      'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) ' +
+      'VALUES (?, ?, ?, "bonus_claim", "wallets", ?, ?, ?, ?)',
+      [userId, wallet.id, convertedAmount, wallet.id, balance, newBalance, 'Bonus Winnings Conversion - Wagering Requirement Completed']
+    );
+
+    // Create a notification
+    try {
+      await createNotification(
+        userId,
+        'Bonus Converted! 💰',
+        `Congratulations! Your bonus of ₹${convertedAmount.toFixed(2)} has been converted to withdrawable cash.`,
+        'WALLET',
+        connection
+      );
+    } catch (notifyErr) {
+      logger.error(notifyErr, `Notification failed during bonus conversion for user ${userId}`);
+    }
+
+    return {
+      converted: true,
+      amount: convertedAmount,
+      newBalance,
+      newBonusBalance,
+      requiredWager
+    };
+  }
+
+  return { converted: false };
 };
 
 export let ioInstance = null;
@@ -831,9 +924,22 @@ export const initializeGameLoop = async (io) => {
           );
 
           const outcomeStr = `${winNumber} ${winColor.toUpperCase()}`;
-          await settleRoundBetsInBulk(connection, settledBetsDetails, outcomeStr, game.gameId, `colour_${key}`);
+          const conversions = await settleRoundBetsInBulk(connection, settledBetsDetails, outcomeStr, game.gameId, `colour_${key}`);
 
           await connection.commit();
+
+          // Emit WebSocket events for conversions after commit
+          if (conversions && conversions.length > 0 && ioInstance) {
+            conversions.forEach(c => {
+              ioInstance.to(`user_room_${c.userId}`).emit('bonus_converted', {
+                userId: c.userId,
+                amount: c.amount,
+                newBalance: c.newBalance,
+                newBonusBalance: c.newBonusBalance,
+                requiredWager: c.requiredWager
+              });
+            });
+          }
 
           // Trigger risk assessment for each unique user in the round
           const userIds = [...new Set(bets.map(b => b.user_id))];
@@ -1047,9 +1153,22 @@ export const initializeGameLoop = async (io) => {
         );
 
           const outcomeStr = String(roll);
-          await settleRoundBetsInBulk(connection, settledBetsDetails, outcomeStr, currentDiceGame.gameId, 'dice');
+          const conversions = await settleRoundBetsInBulk(connection, settledBetsDetails, outcomeStr, currentDiceGame.gameId, 'dice');
 
           await connection.commit();
+
+          // Emit WebSocket events for conversions after commit
+          if (conversions && conversions.length > 0 && ioInstance) {
+            conversions.forEach(c => {
+              ioInstance.to(`user_room_${c.userId}`).emit('bonus_converted', {
+                userId: c.userId,
+                amount: c.amount,
+                newBalance: c.newBalance,
+                newBonusBalance: c.newBonusBalance,
+                requiredWager: c.requiredWager
+              });
+            });
+          }
 
         // Trigger risk assessment for each unique user in the round
         const userIds = [...new Set(bets.map(b => b.user_id))];
@@ -1475,7 +1594,7 @@ export const broadcastLeaderboard = async () => {
     const [rows] = await pool.query(
       'SELECT u.name as username, SUM(b.payout_amount - b.bet_amount) as total_profit ' +
       'FROM users u JOIN bets b ON u.id = b.user_id ' +
-      'WHERE b.status = "won" ' +
+      'WHERE b.status = "won" AND u.role NOT IN ("admin", "super_admin") ' +
       'GROUP BY u.id ORDER BY total_profit DESC LIMIT 10'
     );
     const leaderboard = rows.map((r, index) => ({
@@ -1496,7 +1615,7 @@ export const getLeaderboard = async (req, res) => {
     const [rows] = await pool.query(
       'SELECT u.name as username, SUM(b.payout_amount - b.bet_amount) as total_profit ' +
       'FROM users u JOIN bets b ON u.id = b.user_id ' +
-      'WHERE b.status = "won" ' +
+      'WHERE b.status = "won" AND u.role NOT IN ("admin", "super_admin") ' +
       'GROUP BY u.id ORDER BY total_profit DESC LIMIT 10'
     );
     const leaderboard = rows.map((r, index) => ({
@@ -1571,7 +1690,7 @@ export const settleRoundBetsInBulk = async (connection, settledBetsDetails, outc
     if (winUserIds.length > 0) {
       // 3. Lock all user wallets at once!
       const [wallets] = await connection.query(
-        'SELECT id, user_id, balance, bonus_balance, required_wager FROM wallets WHERE user_id IN (?) FOR UPDATE',
+        'SELECT id, user_id, balance, bonus_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id IN (?) FOR UPDATE',
         [winUserIds]
       );
 
@@ -1712,6 +1831,25 @@ export const settleRoundBetsInBulk = async (connection, settledBetsDetails, outc
         );
       }
 
+      // 7.1 Check and convert bonus for winning users whose wagering requirements are completed
+      const conversionResults = [];
+      for (const uId of winUserIds) {
+        try {
+          const convResult = await checkAndConvertBonus(uId, connection);
+          if (convResult.converted) {
+            conversionResults.push({
+              userId: uId,
+              amount: convResult.amount,
+              newBalance: convResult.newBalance,
+              newBonusBalance: convResult.newBonusBalance,
+              requiredWager: convResult.requiredWager
+            });
+          }
+        } catch (convErr) {
+          logger.error(convErr, `Failed checkAndConvertBonus for user ${uId} during bulk round settlement`);
+        }
+      }
+
       // 8. Send notifications in parallel
       if (notificationsToSend.length > 0) {
         await Promise.all(
@@ -1721,8 +1859,11 @@ export const settleRoundBetsInBulk = async (connection, settledBetsDetails, outc
           )
         );
       }
+
+      return conversionResults;
     }
   }
+  return [];
 };
 
 // Cryptographic game center configuration getters

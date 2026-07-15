@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useUser } from '../context/UserContext'
+import { useUser, resolveImg } from '../context/UserContext'
 import { useGame } from '../context/GameContext'
 import { getVipLevel, VIP_TIERS } from '../utils/vipTiers'
 import { 
@@ -699,7 +699,6 @@ function AccountDetails({ onSelectAvatarClick }) {
   const name = user?.name || 'Demo User'
   const email = user?.email || 'demo@rrclub.com'
   const phone = user?.phone || '+91 99999 99999'
-  const location = user?.location || 'Mumbai, India'
 
   const handleSaveProfile = async () => {
     if (!nameVal.trim()) {
@@ -822,12 +821,6 @@ function AccountDetails({ onSelectAvatarClick }) {
             </div>
           </div>
 
-          <div>
-            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Location</label>
-            <div className="w-full px-4 py-3 bg-slate-100 border border-transparent rounded-xl text-xs font-semibold text-slate-500 select-none">
-              {location}
-            </div>
-          </div>
 
           <div>
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Member Since</label>
@@ -1620,6 +1613,33 @@ function MyOrders({ orders }) {
   const [activeTrackingOrder, setActiveTrackingOrder] = useState(null)
 
   if (activeTrackingOrder) {
+    const trackingTimeline = activeTrackingOrder.tracking || [
+      { 
+        title: 'Order Confirmed', 
+        desc: 'Your order has been confirmed.', 
+        time: activeTrackingOrder.orderDate || 'Just now', 
+        completed: true 
+      },
+      { 
+        title: 'Shipped', 
+        desc: 'Item is being processed at warehouse.', 
+        time: 'In transit', 
+        completed: activeTrackingOrder.status === 'Shipped' || activeTrackingOrder.status === 'Delivered' 
+      },
+      { 
+        title: 'Out for Delivery', 
+        desc: 'Courier agent has left for delivery.', 
+        time: 'Pending', 
+        completed: activeTrackingOrder.status === 'Delivered' 
+      },
+      { 
+        title: 'Delivered', 
+        desc: 'Order delivered to customer.', 
+        time: activeTrackingOrder.deliveryDate || 'Within 5 days', 
+        completed: activeTrackingOrder.status === 'Delivered' 
+      }
+    ];
+
     return (
       <div className="space-y-4 pb-10">
         <button 
@@ -1633,7 +1653,7 @@ function MyOrders({ orders }) {
         <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
           <div className="flex items-start gap-3 border-b border-slate-100 pb-3">
             <img 
-              src={activeTrackingOrder.product.image} 
+              src={resolveImg(activeTrackingOrder.product.image)} 
               alt={activeTrackingOrder.product.title} 
               className="w-16 h-16 object-contain rounded-lg bg-slate-50 p-1 border border-slate-100 shrink-0" 
             />
@@ -1673,7 +1693,7 @@ function MyOrders({ orders }) {
           <div>
             <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Delivery Timeline</h5>
             <div className="relative pl-6 space-y-5 border-l-2 border-slate-100 ml-2.5">
-              {activeTrackingOrder.tracking.map((track, i) => (
+              {trackingTimeline.map((track, i) => (
                 <div key={i} className="relative">
                   {/* Timeline bullet */}
                   <span className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 bg-white flex items-center justify-center ${
@@ -1725,7 +1745,7 @@ function MyOrders({ orders }) {
         <div key={order.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-start gap-3">
             <img 
-              src={order.product.image} 
+              src={resolveImg(order.product.image)} 
               alt={order.product.title} 
               className="w-12 h-12 object-contain rounded-lg bg-slate-50 p-1 border border-slate-100 shrink-0" 
             />

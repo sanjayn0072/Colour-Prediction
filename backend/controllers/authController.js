@@ -264,7 +264,7 @@ export const login = async (req, res) => {
 
     // Query users with wallet balances
     const users = await query(
-      'SELECT u.id, u.name, u.phone, u.email, u.password_hash, u.role, u.status, w.balance as wallet_balance, w.bonus_balance, w.locked_balance, w.required_wager ' +
+      'SELECT u.id, u.name, u.phone, u.email, u.password_hash, u.role, u.status, w.balance as wallet_balance, w.bonus_balance, w.locked_balance, w.required_wager, w.required_bonus_wager ' +
       'FROM users u ' +
       'JOIN wallets w ON u.id = w.user_id ' +
       'WHERE u.phone = ? OR u.email = ? LIMIT 1',
@@ -306,6 +306,7 @@ export const login = async (req, res) => {
         lockedBalance: parseFloat(user.locked_balance || 0),
         bonusBalance: parseFloat(user.bonus_balance || 0),
         requiredWager: parseFloat(user.required_wager || 0),
+        requiredBonusWager: parseFloat(user.required_bonus_wager || 0),
         claimedVipRewards: claimedRewards,
         role: user.role
       }
@@ -324,10 +325,10 @@ export const getProfile = async (req, res) => {
   try {
     // Fetch wallet balance
     const wallets = await query(
-      'SELECT balance as wallet_balance, bonus_balance, locked_balance, required_wager FROM wallets WHERE user_id = ? LIMIT 1',
+      'SELECT balance as wallet_balance, bonus_balance, locked_balance, required_wager, required_bonus_wager FROM wallets WHERE user_id = ? LIMIT 1',
       [req.user.id]
     );
-    const wallet = wallets[0] || { wallet_balance: 0, bonus_balance: 0, locked_balance: 0, required_wager: 0 };
+    const wallet = wallets[0] || { wallet_balance: 0, bonus_balance: 0, locked_balance: 0, required_wager: 0, required_bonus_wager: 0 };
 
     // Fetch claimed VIP rewards
     const vipClaims = await query(
@@ -381,6 +382,7 @@ export const getProfile = async (req, res) => {
         lockedBalance: parseFloat(wallet.locked_balance || 0),
         bonusBalance: parseFloat(wallet.bonus_balance || 0),
         requiredWager: parseFloat(wallet.required_wager || 0),
+        requiredBonusWager: parseFloat(wallet.required_bonus_wager || 0),
         claimedVipRewards: claimedRewards,
         role: req.user.role,
         bankDetails: bank ? {

@@ -458,6 +458,38 @@ export const pay0Webhook = async (req, res) => {
 
       await connection.commit();
       logger.info(`[Pay0 Webhook Success]: Settle transaction complete for User: ${userId}, Amount: ${depositAmount}`);
+
+      // Dynamic check and convert to avoid circular dependencies
+      try {
+        const { checkAndConvertBonus, ioInstance } = await import('./gameController.js');
+        const checkConn = await pool.getConnection();
+        try {
+          await checkConn.beginTransaction();
+          const convResult = await checkAndConvertBonus(userId, checkConn);
+          if (convResult.converted) {
+            await checkConn.commit();
+            if (ioInstance) {
+              ioInstance.to(`user_room_${userId}`).emit('bonus_converted', {
+                userId,
+                amount: convResult.amount,
+                newBalance: convResult.newBalance,
+                newBonusBalance: convResult.newBonusBalance,
+                requiredWager: convResult.requiredWager
+              });
+            }
+          } else {
+            await checkConn.rollback();
+          }
+        } catch (txSubErr) {
+          await checkConn.rollback();
+          logger.error(txSubErr, 'Sub-transaction failed in Webhook handler');
+        } finally {
+          checkConn.release();
+        }
+      } catch (impErr) {
+        logger.error(impErr, 'Dynamic import in Webhook handler failed');
+      }
+
       return res.json({ success: true, message: 'Deposit settled successfully' });
 
     } catch (txErr) {
@@ -757,6 +789,39 @@ export const resolveAppeal = async (req, res) => {
 
     await connection.commit();
     logger.info(`[Appeal Resolved]: Appeal ID ${id} resolved with status ${status} by Admin ${req.user.id}`);
+
+    // Dynamic check and convert to avoid circular dependencies
+    if (status === 'completed') {
+      try {
+        const { checkAndConvertBonus, ioInstance } = await import('./gameController.js');
+        const checkConn = await pool.getConnection();
+        try {
+          await checkConn.beginTransaction();
+          const convResult = await checkAndConvertBonus(userId, checkConn);
+          if (convResult.converted) {
+            await checkConn.commit();
+            if (ioInstance) {
+              ioInstance.to(`user_room_${userId}`).emit('bonus_converted', {
+                userId,
+                amount: convResult.amount,
+                newBalance: convResult.newBalance,
+                newBonusBalance: convResult.newBonusBalance,
+                requiredWager: convResult.requiredWager
+              });
+            }
+          } else {
+            await checkConn.rollback();
+          }
+        } catch (txSubErr) {
+          await checkConn.rollback();
+          logger.error(txSubErr, 'Sub-transaction failed in Appeal Resolver');
+        } finally {
+          checkConn.release();
+        }
+      } catch (impErr) {
+        logger.error(impErr, 'Dynamic import in Appeal Resolver failed');
+      }
+    }
     
     // Dispatch Telegram admin bot log
     await sendAdminAlert(`📢 Deposit Appeal Resolved\nAppeal ID: ${id}\nAdmin: ${req.user.name}\nStatus: ${status.toUpperCase()}\nNote: ${adminNote || 'None'}`);
