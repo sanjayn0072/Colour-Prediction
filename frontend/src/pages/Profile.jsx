@@ -1767,8 +1767,8 @@ function TransactionHistory() {
   const allTxns = [
     ...depositRecords.map(r => ({
       id: r.id,
-      title: `Deposit via ${r.method}`,
-      desc: r.voucher ? `Voucher: ${r.voucher}` : 'Completed payment',
+      title: r.isAdjustment ? 'Game Rebate Reward' : `Deposit via ${r.method}`,
+      desc: r.isAdjustment ? (r.adminNotes || 'Completed payment') : (r.voucher ? `Voucher: ${r.voucher}` : 'Completed payment'),
       amount: `+₹${(r.amount + (r.bonus || 0)).toLocaleString()}`,
       color: 'text-emerald-600',
       dot: 'bg-emerald-500',
@@ -1778,8 +1778,8 @@ function TransactionHistory() {
     })),
     ...withdrawRecords.map(r => ({
       id: r.id,
-      title: `Withdrawal to ${r.method.includes('Bank') ? 'Bank Account' : 'UPI Account'}`,
-      desc: `Processing Fee: -₹${r.fee}`,
+      title: r.isAdjustment ? 'Game Rebate Reward' : `Withdrawal to ${r.method.includes('Bank') ? 'Bank Account' : 'UPI Account'}`,
+      desc: r.isAdjustment ? (r.adminNote || 'Wallet Adjustment') : `Processing Fee: -₹${r.fee}`,
       amount: `-₹${r.amount.toLocaleString()}`,
       color: 'text-red-500',
       dot: 'bg-red-500',
