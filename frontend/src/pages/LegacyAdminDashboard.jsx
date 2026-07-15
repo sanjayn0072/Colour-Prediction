@@ -628,6 +628,18 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   const [predefinedReason, setPredefinedReason] = useState('Suspicious betting pattern detected')
   const [expandedRows, setExpandedRows] = useState({})
 
+  // Deposits Tracking admin states
+  const [depositsList, setDepositsList] = useState([])
+  const [depositSearch, setDepositSearch] = useState('')
+  const [depositSearchVal, setDepositSearchVal] = useState('')
+  const [depositFilter, setDepositFilter] = useState('ALL')
+  const [depositPage, setDepositPage] = useState(1)
+  const [depositTotalPages, setDepositTotalPages] = useState(1)
+  const [depositTotalCount, setDepositTotalCount] = useState(0)
+  const [loadingDeposits, setLoadingDeposits] = useState(false)
+  const [resolvingAppealId, setResolvingAppealId] = useState(null)
+  const [appealResolutionNote, setAppealResolutionNote] = useState('')
+
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedWithdrawal, setSelectedWithdrawal] = useState(null);
   const [copiedState, setCopiedState] = useState("");
@@ -759,6 +771,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   const tabs = isSuperAdmin ? [
     { id: 'overview', label: 'Overview', icon: Activity },
     { id: 'users', label: 'Users & Audits', icon: Users },
+    { id: 'deposits', label: 'Deposits', icon: Wallet },
     { id: 'withdrawals', label: 'Withdrawals', icon: Clock },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'support', label: 'Support Tickets', icon: AlertTriangle },
@@ -772,6 +785,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   ] : [
     { id: 'overview', label: 'Overview', icon: Activity },
     { id: 'users', label: 'Users & Audits', icon: Users },
+    { id: 'deposits', label: 'Deposits', icon: Wallet },
     { id: 'withdrawals', label: 'Withdrawals', icon: Clock },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'support', label: 'Support Tickets', icon: AlertTriangle },
@@ -869,6 +883,30 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
       }
     } catch (err) {
       console.error('Failed to load admin withdrawals:', err)
+    }
+  }
+
+  const fetchDeposits = async () => {
+    const token = adminToken || localStorage.getItem('token')
+    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+    setLoadingDeposits(true)
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/deposits?status=${depositFilter}&search=${depositSearch}&page=${depositPage}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setDepositsList(data.records || [])
+        setDepositTotalPages(data.pagination?.pages || 1)
+        setDepositTotalCount(data.pagination?.total || 0)
+      }
+    } catch (err) {
+      console.error('Failed to load admin deposits:', err)
+    } finally {
+      setLoadingDeposits(false)
     }
   }
 
@@ -1314,6 +1352,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   useEffect(() => {
     if (activeTab === 'withdrawals') {
       fetchWithdrawals()
+    } else if (activeTab === 'deposits') {
+      fetchDeposits()
     } else if (activeTab === 'users') {
       fetchUsers()
     } else if (activeTab === 'orders') {
@@ -1329,7 +1369,14 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     } else if (activeTab === 'config') {
       fetchStoreConfig()
     }
-  }, [activeTab, withdrawFilter, withdrawSearch, withdrawPage, usersSearch, usersPage, ordersStatusFilter, ordersPage, complaintsStatusFilter])
+  }, [activeTab, withdrawFilter, withdrawSearch, withdrawPage, depositFilter, depositSearch, depositPage, usersSearch, usersPage, ordersStatusFilter, ordersPage, complaintsStatusFilter])
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDepositSearch(depositSearchVal)
+    }, 400)
+    return () => clearTimeout(handler)
+  }, [depositSearchVal])
 
   const handleApprove = async (id) => {
     setWithdrawProcessingId(id)
@@ -1382,6 +1429,37 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
       await fetchDashboardData()
     } catch (err) {
       showToast(err.message, 'error')
+    }
+  }
+
+  const handleResolveDepositAppeal = async (appealId, status) => {
+    if (!appealId) return
+    const token = adminToken || localStorage.getItem('token')
+    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+    try {
+      const res = await fetch(`${API_BASE}/api/payment/admin/appeals/${appealId}/resolve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status,
+          adminNote: appealResolutionNote
+        })
+      })
+      if (res.ok) {
+        showToast(`Appeal resolved as ${status} successfully!`, 'success')
+        setResolvingAppealId(null)
+        setAppealResolutionNote('')
+        fetchDeposits()
+        fetchDashboardData()
+      } else {
+        const err = await res.json()
+        showToast(err.error || 'Failed to resolve appeal', 'error')
+      }
+    } catch (err) {
+      showToast('Error resolving appeal', 'error')
     }
   }
 
@@ -1599,6 +1677,28 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
       (req.user_name || req.userName)?.toString().toLowerCase().includes(query) ||
       (req.phone_number || req.userPhone || req.phone)?.toString().includes(query) ||
       (req.withdrawal_id || req.withdrawalId)?.toString().toLowerCase().includes(query)
+    );
+  });
+
+  const filteredDeposits = depositsList.filter(req => {
+    const matchesStatus =
+      depositFilter === 'ALL' ||
+      (depositFilter === 'PENDING' && req.status?.toLowerCase() === 'pending') ||
+      (depositFilter === 'PAID' && req.status?.toLowerCase() === 'completed') ||
+      (depositFilter === 'FAILED' && (req.status?.toLowerCase() === 'failed' || req.status?.toLowerCase() === 'rejected')) ||
+      (depositFilter === 'APPEAL' && req.appealId);
+
+    if (!matchesStatus) return false;
+
+    const query = depositSearch?.toLowerCase() || '';
+    if (!query) return true;
+
+    return (
+      req.id?.toString().toLowerCase().includes(query) ||
+      (req.userName)?.toString().toLowerCase().includes(query) ||
+      (req.userPhone)?.toString().includes(query) ||
+      (req.transactionId || req.appealUtr)?.toString().toLowerCase().includes(query) ||
+      (req.userId)?.toString().toLowerCase().includes(query)
     );
   });
 
@@ -3956,6 +4056,385 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                   Next
                 </button>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TABS: DEPOSITS ── */}
+        {activeTab === 'deposits' && (
+          <div className="space-y-5 animate-[fadeIn_0.3s_ease-out] font-sans pb-20">
+            
+            {/* Quick Metrics Stats Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-[#0b1021]/60 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pending Deposits</p>
+                  <p className="text-xl font-black text-white mt-1">
+                    {filteredDeposits.filter(d => d.status === 'pending').length} <span className="text-[10px] text-amber-500 font-normal">requests</span>
+                  </p>
+                </div>
+                <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/15">
+                  <Clock className="w-4 h-4 text-amber-400" />
+                </div>
+              </div>
+
+              <div className="bg-[#0b1021]/60 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pending Appeals</p>
+                  <p className="text-xl font-black text-white mt-1">
+                    {filteredDeposits.filter(d => d.appealId && d.appealStatus === 'pending').length} <span className="text-[10px] text-indigo-400 font-normal">appeals</span>
+                  </p>
+                </div>
+                <div className="bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/15">
+                  <AlertCircle className="w-4 h-4 text-indigo-400" />
+                </div>
+              </div>
+
+              <div className="bg-[#0b1021]/60 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Total Value (Completed)</p>
+                  <p className="text-xl font-black text-emerald-450 mt-1 font-mono">
+                    ₹{filteredDeposits.filter(d => d.status === 'completed').reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/15">
+                  <Wallet className="w-4 h-4 text-emerald-400" />
+                </div>
+              </div>
+
+              <div className="bg-[#0b1021]/60 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Total Count</p>
+                  <p className="text-xl font-black text-white mt-1">
+                    {depositTotalCount} <span className="text-[10px] text-slate-550 font-normal">total</span>
+                  </p>
+                </div>
+                <div className="bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/15">
+                  <Users className="w-4 h-4 text-indigo-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={depositSearchVal}
+                onChange={(e) => {
+                  setDepositSearchVal(e.target.value)
+                }}
+                placeholder="Search by User UID or Deposit TRX/UTR ID..."
+                className="flex-1 h-10 bg-slate-950 border border-slate-850 focus:border-slate-700 text-slate-200 rounded-xl px-4 text-xs placeholder:text-slate-655 focus:outline-none transition-colors font-sans"
+              />
+              <button
+                onClick={fetchDeposits}
+                className="w-10 h-10 bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer border-0 flex items-center justify-center shrink-0"
+                title="Refresh List"
+              >
+                <RefreshCw size={14} className="hover:rotate-180 transition-transform duration-500" />
+              </button>
+            </div>
+
+            {/* Status Pills */}
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-1">
+              {['ALL', 'PENDING', 'PAID', 'FAILED', 'APPEAL'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setDepositFilter(status)
+                    setDepositPage(1)
+                  }}
+                  className={`px-4 py-1.5 rounded-full text-[9px] font-black border transition-all cursor-pointer shrink-0 uppercase tracking-wider border-0 ${
+                    depositFilter === status
+                      ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/35 shadow-lg shadow-indigo-500/5'
+                      : 'bg-[#0a0f1d] text-slate-500 border border-slate-900 hover:text-slate-350'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+
+            {/* Deposits Grid/List */}
+            {filteredDeposits.length === 0 ? (
+              <div className="bg-[#0c1225]/40 border border-slate-850/80 rounded-2xl p-12 text-center text-slate-500 shadow-xl">
+                <Wallet size={32} className="mx-auto text-slate-700 mb-3" />
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">No deposits found</p>
+                <p className="text-[10px] text-slate-600 mt-1 max-w-xs mx-auto leading-relaxed">Deposit records matching the criteria will list here.</p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden lg:block bg-[#0c1225]/40 border border-slate-800/80 backdrop-blur-md rounded-2xl overflow-hidden shadow-xl">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800/80 bg-slate-950/30 text-[9px] font-black text-slate-450 uppercase tracking-widest select-none">
+                        <th className="px-6 py-3.5">User</th>
+                        <th className="px-6 py-3.5">Transaction ID & Date</th>
+                        <th className="px-6 py-3.5">Amount</th>
+                        <th className="px-6 py-3.5">Proof / Appeal</th>
+                        <th className="px-6 py-3.5">Status</th>
+                        <th className="px-6 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40 text-xs">
+                      {filteredDeposits.map((rec) => {
+                        const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+                        return (
+                          <tr key={rec.id} className="hover:bg-slate-900/15 transition-all duration-200">
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-200">{rec.userName || 'Unknown User'}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">UID: {rec.userId} · Phone: {rec.userPhone || 'No Phone'}</div>
+                            </td>
+                            <td className="px-6 py-4 font-mono text-[11px]">
+                              <div className="text-slate-400 select-all">{rec.transactionId}</div>
+                              <div className="text-[10px] text-slate-550 mt-1">Created: {new Date(rec.createdAt).toLocaleString()}</div>
+                              {rec.appealUtr && (
+                                <div className="text-[10px] text-indigo-400 mt-1 select-all font-sans font-semibold">Appeal UTR: {rec.appealUtr}</div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 font-mono">
+                              <span className="text-sm font-black text-emerald-450 font-mono">₹{parseFloat(rec.amount).toFixed(2)}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {rec.screenshotUrl ? (
+                                <a
+                                  href={`${API_BASE}${rec.screenshotUrl}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-bold bg-indigo-500/10 px-2.5 py-1.5 rounded-xl border border-indigo-500/20 transition-all cursor-pointer decoration-none"
+                                >
+                                  <Paperclip size={11} /> View Proof
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-slate-600">No Proof</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md border uppercase tracking-wide ${
+                                  rec.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                  rec.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
+                                  'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                }`}>
+                                  {rec.status === 'completed' ? 'Paid' : rec.status}
+                                </span>
+                                {rec.appealId && (
+                                  <span className={`text-[7px] font-black px-1 py-0.5 rounded border uppercase tracking-wide ${
+                                    rec.appealStatus === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                    rec.appealStatus === 'pending' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 animate-pulse' :
+                                    'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                  }`}>
+                                    Appeal: {rec.appealStatus}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex gap-2 justify-end items-center">
+                                {rec.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleManualVerifyPay0(rec.transactionId)}
+                                    className="px-2.5 py-1.5 bg-[#0b0c15] hover:bg-slate-800 border border-slate-750 text-slate-300 text-[10px] font-semibold rounded-xl cursor-pointer transition-all"
+                                  >
+                                    Verify Pay0
+                                  </button>
+                                )}
+
+                                {rec.appealId && rec.appealStatus === 'pending' && (
+                                  resolvingAppealId === rec.appealId ? (
+                                    <div className="flex flex-col gap-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/80 text-left w-56">
+                                      <input
+                                        type="text"
+                                        value={appealResolutionNote}
+                                        onChange={(e) => setAppealResolutionNote(e.target.value)}
+                                        placeholder="Resolution note..."
+                                        className="w-full h-8 bg-slate-900 border border-slate-800 text-slate-205 px-3 text-[10px] rounded-lg focus:outline-none"
+                                      />
+                                      <div className="flex gap-2 justify-end">
+                                        <button
+                                          onClick={() => handleResolveDepositAppeal(rec.appealId, 'approved')}
+                                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[9px] rounded-md border-0 cursor-pointer transition-all"
+                                        >
+                                          Approve
+                                        </button>
+                                        <button
+                                          onClick={() => handleResolveDepositAppeal(rec.appealId, 'rejected')}
+                                          className="px-2 py-1 bg-red-655 hover:bg-red-500 text-white font-bold text-[9px] rounded-md border-0 cursor-pointer transition-all"
+                                        >
+                                          Reject
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setResolvingAppealId(null)
+                                            setAppealResolutionNote('')
+                                          }}
+                                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-355 font-bold text-[9px] rounded-md border-0 cursor-pointer transition-all"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setResolvingAppealId(rec.appealId)
+                                        setAppealResolutionNote('')
+                                      }}
+                                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded-xl border-0 cursor-pointer transition-all shadow-md shadow-indigo-650/10 flex items-center gap-1"
+                                    >
+                                      Resolve Appeal
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="grid grid-cols-1 gap-3.5 lg:hidden">
+                  {filteredDeposits.map((rec) => {
+                    const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
+                    return (
+                      <div key={rec.id} className="bg-[#0c1225]/40 border border-slate-850/80 rounded-2xl p-4 shadow-lg space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-bold text-slate-200 text-sm">{rec.userName || 'Unknown User'}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">UID: {rec.userId} · Phone: {rec.userPhone || 'No Phone'}</p>
+                          </div>
+                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md border uppercase tracking-wide ${
+                            rec.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            rec.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
+                            'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                          }`}>
+                            {rec.status === 'completed' ? 'Paid' : rec.status}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 text-[11px] font-mono text-slate-400 bg-slate-950/20 p-2.5 rounded-xl border border-slate-855/30">
+                          <p className="truncate"><span className="text-slate-655">TRX ID:</span> {rec.transactionId}</p>
+                          <p><span className="text-slate-655">Created:</span> {new Date(rec.createdAt).toLocaleString()}</p>
+                          {rec.appealUtr && (
+                            <p className="text-indigo-400 font-sans font-semibold"><span className="text-slate-655 font-normal">Appeal UTR:</span> {rec.appealUtr}</p>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1">
+                          <div>
+                            <p className="text-[9px] text-slate-550">Deposit Amount</p>
+                            <p className="text-base font-black text-emerald-450 font-mono mt-0.5">₹{parseFloat(rec.amount).toFixed(2)}</p>
+                          </div>
+                          {rec.screenshotUrl && (
+                            <a
+                              href={`${API_BASE}${rec.screenshotUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-bold bg-indigo-500/10 px-2.5 py-1.5 rounded-xl border border-indigo-500/20 transition-all cursor-pointer decoration-none"
+                            >
+                              <Paperclip size={11} /> Proof
+                            </a>
+                          )}
+                        </div>
+
+                        {rec.appealId && (
+                          <div className="flex justify-between items-center border-t border-slate-850/50 pt-3">
+                            <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wide ${
+                              rec.appealStatus === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                              rec.appealStatus === 'pending' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 animate-pulse' :
+                              'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                            }`}>
+                              Appeal: {rec.appealStatus}
+                            </span>
+                            {rec.appealStatus === 'pending' && (
+                              resolvingAppealId === rec.appealId ? (
+                                <div className="flex flex-col gap-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/80 text-left w-full mt-2">
+                                  <input
+                                    type="text"
+                                    value={appealResolutionNote}
+                                    onChange={(e) => setAppealResolutionNote(e.target.value)}
+                                    placeholder="Resolution note..."
+                                    className="w-full h-8 bg-slate-900 border border-slate-800 text-slate-205 px-3 text-[10px] rounded-lg focus:outline-none"
+                                  />
+                                  <div className="flex gap-2 justify-end">
+                                    <button
+                                      onClick={() => handleResolveDepositAppeal(rec.appealId, 'approved')}
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[9px] rounded-md border-0 cursor-pointer transition-all"
+                                    >
+                                      Approve
+                                    </button>
+                                    <button
+                                      onClick={() => handleResolveDepositAppeal(rec.appealId, 'rejected')}
+                                      className="px-2 py-1 bg-red-655 hover:bg-red-500 text-white font-bold text-[9px] rounded-md border-0 cursor-pointer transition-all"
+                                    >
+                                      Reject
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setResolvingAppealId(null)
+                                        setAppealResolutionNote('')
+                                      }}
+                                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-355 font-bold text-[9px] rounded-md border-0 cursor-pointer transition-all"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setResolvingAppealId(rec.appealId)
+                                    setAppealResolutionNote('')
+                                  }}
+                                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded-xl border-0 cursor-pointer transition-all shadow-md shadow-indigo-650/10 flex items-center gap-1"
+                                >
+                                  Resolve Appeal
+                                </button>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                        {rec.status === 'pending' && !rec.appealId && (
+                          <div className="border-t border-slate-850/50 pt-3 flex justify-end">
+                            <button
+                              onClick={() => handleManualVerifyPay0(rec.transactionId)}
+                              className="px-2.5 py-1.5 bg-[#0b0c15] hover:bg-slate-800 border border-slate-750 text-slate-300 text-[10px] font-semibold rounded-xl cursor-pointer transition-all"
+                            >
+                              Verify Pay0
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Pagination */}
+                {depositTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-3 pt-2">
+                    <button
+                      disabled={depositPage === 1}
+                      onClick={() => setDepositPage(p => Math.max(1, p - 1))}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs font-bold text-slate-355 cursor-pointer border-0"
+                    >
+                      Prev
+                    </button>
+                    <span className="text-xs font-bold text-slate-400">Page {depositPage} of {depositTotalPages}</span>
+                    <button
+                      disabled={depositPage === depositTotalPages}
+                      onClick={() => setDepositPage(p => Math.min(depositTotalPages, p + 1))}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs font-bold text-slate-355 cursor-pointer border-0"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

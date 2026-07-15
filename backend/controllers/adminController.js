@@ -525,6 +525,107 @@ export const getAdminOrders = async (req, res) => {
   }
 };
 
+// GET /api/admin/deposits
+export const getAdminDeposits = async (req, res) => {
+  const { status = 'ALL', search = '', page = 1, limit = 20 } = req.query;
+
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 20;
+  const offset = (pageNum - 1) * limitNum;
+
+  try {
+    let sql = `
+      SELECT d.id, d.amount, d.fee, d.transaction_id as transactionId, d.status, d.created_at as createdAt,
+             u.id as userId, u.name as userName, u.phone as userPhone, u.role as userRole,
+             a.id as appealId, a.screenshot_url as screenshotUrl, a.utr_number as appealUtr, a.status as appealStatus, a.admin_note as appealAdminNote
+      FROM deposits d
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN deposit_appeals a ON d.id = a.deposit_id
+    `;
+    const params = [];
+
+    sql += " WHERE 1=1";
+
+    if (status && status !== 'ALL') {
+      if (status === 'PENDING') {
+        sql += ' AND d.status = "pending"';
+      } else if (status === 'PAID') {
+        sql += ' AND d.status = "completed"';
+      } else if (status === 'FAILED') {
+        sql += ' AND d.status IN ("failed", "rejected")';
+      } else if (status === 'APPEAL') {
+        sql += ' AND a.id IS NOT NULL';
+      }
+    }
+
+    if (search && search.trim() !== '') {
+      const searchStr = search.trim();
+      if (!isNaN(searchStr)) {
+        sql += ' AND (u.id = ? OR d.transaction_id LIKE ? OR a.utr_number LIKE ?)';
+        params.push(parseInt(searchStr, 10), `%${searchStr}%`, `%${searchStr}%`);
+      } else {
+        sql += ' AND (d.transaction_id LIKE ? OR a.utr_number LIKE ? OR u.name LIKE ?)';
+        params.push(`%${searchStr}%`, `%${searchStr}%`, `%${searchStr}%`);
+      }
+    }
+
+    sql += ' ORDER BY d.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limitNum, offset);
+
+    const [deposits] = await pool.query(sql, params);
+
+    // Count query
+    let countSql = `
+      SELECT COUNT(*) as total
+      FROM deposits d
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN deposit_appeals a ON d.id = a.deposit_id
+    `;
+    const countParams = [];
+
+    countSql += " WHERE 1=1";
+
+    if (status && status !== 'ALL') {
+      if (status === 'PENDING') {
+        countSql += ' AND d.status = "pending"';
+      } else if (status === 'PAID') {
+        countSql += ' AND d.status = "completed"';
+      } else if (status === 'FAILED') {
+        countSql += ' AND d.status IN ("failed", "rejected")';
+      } else if (status === 'APPEAL') {
+        countSql += ' AND a.id IS NOT NULL';
+      }
+    }
+
+    if (search && search.trim() !== '') {
+      const searchStr = search.trim();
+      if (!isNaN(searchStr)) {
+        countSql += ' AND (u.id = ? OR d.transaction_id LIKE ? OR a.utr_number LIKE ?)';
+        countParams.push(parseInt(searchStr, 10), `%${searchStr}%`, `%${searchStr}%`);
+      } else {
+        countSql += ' AND (d.transaction_id LIKE ? OR a.utr_number LIKE ? OR u.name LIKE ?)';
+        countParams.push(`%${searchStr}%`, `%${searchStr}%`, `%${searchStr}%`);
+      }
+    }
+
+    const [countRes] = await pool.query(countSql, countParams);
+    const total = countRes[0]?.total || 0;
+
+    return res.json({
+      records: deposits,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (err) {
+    logger.error(err, 'Failed to fetch admin deposits list');
+    return res.status(200).json({ records: [], pagination: { total: 0, page: pageNum, limit: limitNum, pages: 0 } });
+  }
+};
+
 // PUT /api/admin/orders/:id/status
 export const updateOrderStatus = async (req, res) => {
   const { id } = req.params;

@@ -248,6 +248,7 @@ app.put('/api/admin/games/:id/override', protect, authenticatedActionLimiter, ch
 
 // ─── SUPER ADMIN ADVANCED MANAGEMENT ENDPOINTS ───
 app.get('/api/admin/users', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminUsers);
+app.get('/api/admin/deposits', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminDeposits);
 app.post('/api/superadmin/update-user', protect, authenticatedActionLimiter, checkRole(['super_admin']), validate(updateUserRoleSchema), adminController.updateUserRole);
 app.get('/api/admin/users/:id/history', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getUserHistory);
 app.put('/api/admin/users/:id/status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateUserStatusSchema), adminController.updateUserStatus);
