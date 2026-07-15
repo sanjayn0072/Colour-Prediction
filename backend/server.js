@@ -340,7 +340,7 @@ io.on('connection', (socket) => {
     if (socket.user?.role === 'super_admin') {
       socket.join('super_admin_room');
     }
-    
+
     const adminId = socket.user.id;
     if (socket.user?.role !== 'super_admin') {
       if (!activeAdmins.has(adminId)) {
@@ -353,14 +353,14 @@ io.on('connection', (socket) => {
       }
       activeAdmins.get(adminId).sockets.add(socket.id);
     }
-    
+
     // Broadcast status update to super_admin_room
     io.to('super_admin_room').emit('admin_status_update', getOnlineAdminsPayload());
-    
+
     if (socket.user?.role === 'admin') {
-      io.to('super_admin_room').emit('admin_logged_in', { 
+      io.to('super_admin_room').emit('admin_logged_in', {
         adminId: socket.user.id,
-        adminName: socket.user.name 
+        adminName: socket.user.name
       });
     }
   }
@@ -438,7 +438,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     socketJoinTimestamps.delete(socket.id + '_dice');
     socketJoinTimestamps.delete(socket.id + '_colour');
-    
+
     if (socket.user?.role === 'admin' || socket.user?.role === 'super_admin') {
       const adminId = socket.user.id;
       const adminInfo = activeAdmins.get(adminId);
@@ -448,11 +448,11 @@ io.on('connection', (socket) => {
           activeAdmins.delete(adminId);
         }
       }
-      
+
       // Broadcast status update to super_admin_room
       io.to('super_admin_room').emit('admin_status_update', getOnlineAdminsPayload());
     }
-    
+
     logger.info(`Socket disconnected: ${socket.id}`);
   });
 });
@@ -467,7 +467,9 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT,"0.0.0.0", () => {
+server.listen(PORT, "0.0.0.0", () => {
   logger.info(`Zero-Trust server running on port ${PORT}`);
+  console.log(`Zero-Trust server running on port ${PORT}`);
+
   startBehavioralRewardsWorker();
 });

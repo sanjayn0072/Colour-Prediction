@@ -463,11 +463,16 @@ async function run() {
   try {
     logger.info('--- Launching Database Seeder Script for 40+ Products ---');
     
-    // 1. Ensure product_id column exists
+    // 1. Ensure product_id and category columns exist
     const [columns] = await connection.query("SHOW COLUMNS FROM products LIKE 'product_id'");
     if (columns.length === 0) {
       logger.info('Creating product_id column in products table...');
       await connection.query('ALTER TABLE products ADD COLUMN product_id VARCHAR(100) UNIQUE NULL');
+    }
+    const [catColumns] = await connection.query("SHOW COLUMNS FROM products LIKE 'category'");
+    if (catColumns.length === 0) {
+      logger.info('Creating category column in products table...');
+      await connection.query('ALTER TABLE products ADD COLUMN category VARCHAR(100) NULL');
     }
     
     // 2. Perform safe Upsert (ON DUPLICATE KEY UPDATE) for each product

@@ -6,4 +6,5 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load the unified .env file located at the project root
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+console.log(path.resolve(__dirname, '../.env'))
+dotenv.config({ path: path.resolve(__dirname, '../.env') });

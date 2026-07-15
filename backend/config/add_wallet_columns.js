@@ -6,7 +6,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load env variables
- });
 
 import connectDB, { pool } from './db.js';
 import logger from '../utils/logger.js';
