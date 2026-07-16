@@ -202,7 +202,8 @@ export const verify2FaSession = async (req, res) => {
 // Kept for backward compatibility and fallback access
 
 export const adminLogin = async (req, res) => {
-  const { phoneOrEmail, password } = req.body;
+  const phoneOrEmail = req.body.phoneOrEmail || req.body.username;
+  const { password } = req.body;
 
   if (!phoneOrEmail || !password) {
     return res.status(400).json({ error: 'Phone number/Email and password are required' });

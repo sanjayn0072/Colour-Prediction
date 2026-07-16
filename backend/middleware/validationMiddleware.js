@@ -151,8 +151,12 @@ export const resetPasswordSchema = z.object({
 
 export const adminLoginSchema = z.object({
   body: z.object({
-    username: z.string().trim().min(1, 'Username is required'),
+    username: z.string().trim().min(1, 'Username is required').optional(),
+    phoneOrEmail: z.string().trim().min(1, 'Phone number or Email is required').optional(),
     password: z.string().min(1, 'Password is required')
+  }).refine(data => data.username || data.phoneOrEmail, {
+    message: "Either username or phoneOrEmail must be provided",
+    path: ["username"]
   })
 });
 
