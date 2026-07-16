@@ -72,7 +72,7 @@ export default function JackpotLotto() {
     <div className="px-4 pt-4">
       <div className="relative overflow-hidden rounded-3xl bg-slate-950 shadow-xl flex flex-col items-center justify-center w-full max-w-md mx-auto aspect-[1.6/1]">
         <img
-          src="/jackpot_lotto.png"
+          src="/jackpot_lotto.webp"
           className="w-full h-full object-cover"
           alt="Jackpot Lotto"
         />

@@ -92,14 +92,14 @@ export const get2FaStatus = async (req, res) => {
       
       if (!secret) {
         const generated = speakeasy.generateSecret({
-          name: `RRClub:${user.name} (${user.phone})`,
+          name: `Playnixclub:${user.name} (${user.phone})`,
           length: 20
         });
         secret = generated.base32;
         await query('UPDATE users SET two_factor_secret = ? WHERE id = ?', [encryptSecret(secret), req.user.id]);
       }
 
-      const otpauthUrl = `otpauth://totp/RRClub:${encodeURIComponent(user.name)}%20(${user.phone})?secret=${secret}&issuer=RRClub`;
+      const otpauthUrl = `otpauth://totp/Playnixclub:${encodeURIComponent(user.name)}%20(${user.phone})?secret=${secret}&issuer=Playnixclub`;
       const qrCodeDataUrl = await qrcode.toDataURL(otpauthUrl);
 
       return res.status(200).json({
@@ -172,6 +172,12 @@ export const verify2FaSession = async (req, res) => {
 
     // Issue new administrative token with adminVerified = true
     const token = generateAdminToken(req.user.id, user.role, true);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 12 * 60 * 60 * 1000 // 12 hours
+    });
 
     return res.status(200).json({
       success: true,
@@ -238,6 +244,12 @@ export const adminLogin = async (req, res) => {
     }
 
     const token = generateAdminToken(user.id, user.role, true);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 12 * 60 * 60 * 1000 // 12 hours
+    });
     return res.status(200).json({
       token,
       user: {
@@ -309,6 +321,12 @@ export const verify2FA = async (req, res) => {
     }
 
     const token = generateAdminToken(user.id, user.role, true);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 12 * 60 * 60 * 1000 // 12 hours
+    });
     return res.status(200).json({
       token,
       user: {

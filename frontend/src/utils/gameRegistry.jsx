@@ -1,7 +1,7 @@
 import React from 'react';
-import colourPredictionThumb from '../assets/colour_prediction_lobby.png';
-import diceGameThumb from '../assets/dice_game_lobby.png';
-import spinWheelThumb from '../assets/spin_wheel_lobby.png';
+import colourPredictionThumb from '../assets/colour_prediction_lobby.webp';
+import diceGameThumb from '../assets/dice_game_lobby.webp';
+import spinWheelThumb from '../assets/spin_wheel_lobby.webp';
 
 export const gameRegistry = [
   {

@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import React, { useState, useEffect } from 'react'
 import { translateError } from '../utils/errorTranslator'
 import axios from 'axios'
+axios.defaults.withCredentials = true;
 import { useUser } from '../context/UserContext'
 import { useGame } from '../context/GameContext'
 import { 
@@ -378,7 +379,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
       
       const data = await res.json();
       if (res.ok) {
-        showSuccessToast('📋 RRClub Bot Threshold updated successfully!');
+        showSuccessToast('📋 Playnixclub Bot Threshold updated successfully!');
         setStoreConfig(prev => ({
           ...prev,
           trafficThresholdAmount: parseInt(botThreshold, 10)
@@ -748,6 +749,9 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
   const [newCouponMinDeposit, setNewCouponMinDeposit] = useState('')
   const [newCouponMaxUses, setNewCouponMaxUses] = useState('')
   const [newCouponExpiresAt, setNewCouponExpiresAt] = useState('')
+  const [newCouponMonthlyLimit, setNewCouponMonthlyLimit] = useState('1000')
+  const [newCouponValidityDays, setNewCouponValidityDays] = useState('')
+  const [editingCouponId, setEditingCouponId] = useState(null)
   const [creatingCoupon, setCreatingCoupon] = useState(false)
 
   // Super Admin: Spin config & Game status states
@@ -789,6 +793,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     { id: 'withdrawals', label: 'Withdrawals', icon: Clock },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'support', label: 'Support Tickets', icon: AlertTriangle },
+    { id: 'promotions', label: 'Coupons & Promos', icon: Tag },
     { id: 'game-controls', label: 'Game Center', icon: Gamepad2 },
     { id: 'config', label: 'Store Config', icon: Settings },
     { id: 'appeals', label: 'Payment Appeals', icon: CreditCard },
@@ -1162,16 +1167,29 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
     const token = adminToken || localStorage.getItem('token')
     const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
     setCreatingCoupon(true)
+    const isEditing = editingCouponId !== null
     try {
+      const url = isEditing 
+        ? `${API_BASE}/api/admin/coupons/${editingCouponId}`
+        : `${API_BASE}/api/admin/coupons`
       const response = await fetch(
-        `${API_BASE}/api/admin/coupons`,
+        url,
         {
-          method: 'POST',
+          method: isEditing ? 'PUT' : 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
+            coupon_code: newCouponCode,
+            discount_type: newCouponDiscountType,
+            discount_value: parseFloat(newCouponValue),
+            min_deposit_amount: parseFloat(newCouponMinDeposit) || 0.0,
+            usage_limit: parseInt(newCouponMaxUses) || 1,
+            monthly_limit: parseInt(newCouponMonthlyLimit) || 1000,
+            validity_days: parseInt(newCouponValidityDays) || null,
+            expire_date: newCouponExpiresAt ? new Date(newCouponExpiresAt).toISOString() : null,
+            // Legacy fallbacks for safety
             code: newCouponCode,
             discountType: newCouponDiscountType,
             value: parseFloat(newCouponValue),
@@ -1182,21 +1200,44 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         }
       )
       if (response.ok) {
-        showToast('Coupon created successfully!', 'success')
+        showToast(isEditing ? 'Coupon updated successfully!' : 'Coupon created successfully!', 'success')
         setNewCouponCode('')
         setNewCouponValue('')
         setNewCouponMinDeposit('')
         setNewCouponMaxUses('')
         setNewCouponExpiresAt('')
+        setNewCouponMonthlyLimit('1000')
+        setNewCouponValidityDays('')
+        setEditingCouponId(null)
         fetchCoupons()
       } else {
         const err = await response.json()
-        showToast(err.error || 'Failed to create coupon', 'error')
+        showToast(err.error || 'Failed to submit coupon', 'error')
       }
     } catch (err) {
-      showToast('Error creating coupon', 'error')
+      showToast('Error submitting coupon', 'error')
     } finally {
       setCreatingCoupon(false)
+    }
+  }
+
+  const handleEditCouponClick = (c) => {
+    setEditingCouponId(c.id)
+    setNewCouponCode(c.code)
+    setNewCouponDiscountType(c.discountType || 'flat')
+    setNewCouponValue(String(c.value))
+    setNewCouponMinDeposit(String(c.minDeposit))
+    setNewCouponMaxUses(String(c.maxUses))
+    setNewCouponMonthlyLimit(String(c.monthlyLimit || '1000'))
+    setNewCouponValidityDays(c.validityDays ? String(c.validityDays) : '')
+    
+    if (c.expiresAt) {
+      const d = new Date(c.expiresAt)
+      const offset = d.getTimezoneOffset()
+      const localTime = new Date(d.getTime() - offset * 60000)
+      setNewCouponExpiresAt(localTime.toISOString().slice(0, 16))
+    } else {
+      setNewCouponExpiresAt('')
     }
   }
 
@@ -1541,7 +1582,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         
         const mapProduct = (p) => {
           const resolveImg = (imgStr) => {
-            if (!imgStr) return '/src/assets/earbuds.png';
+            if (!imgStr) return '/src/assets/earbuds.webp';
             if (imgStr.startsWith('/uploads/')) {
               return `${API_BASE}${imgStr}`;
             }
@@ -1625,7 +1666,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         
         const mapProduct = (p) => {
           const resolveImg = (imgStr) => {
-            if (!imgStr) return '/src/assets/earbuds.png';
+            if (!imgStr) return '/src/assets/earbuds.webp';
             if (imgStr.startsWith('/uploads/')) {
               return `${API_BASE}${imgStr}`;
             }
@@ -1931,9 +1972,9 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
           {/* Logo Section */}
 
           <div className="flex items-center gap-3">
-            <img src="/logo.jpg" alt="RRClub Logo" className="w-9 h-9 rounded-xl object-cover shadow-lg border border-slate-700/50" />
+            <img src="/logo.jpg" alt="Playnixclub Logo" className="w-9 h-9 rounded-xl object-cover shadow-lg border border-slate-700/50" />
             <div>
-              <h1 className="text-sm font-black tracking-wide text-white uppercase">RRClub</h1>
+              <h1 className="text-sm font-black tracking-wide text-white uppercase">Playnixclub</h1>
               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Admin Panel</p>
             </div>
           </div>
@@ -3748,7 +3789,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                         const isProcessing = withdrawProcessingId === rec.id
                         const isUpi = rec.paymentMethod === 'UPI'
                         const upiLink = isUpi
-                          ? `upi://pay?pa=${rec.upiId}&pn=${encodeURIComponent(rec.userName || 'RRClub User')}&am=${rec.amount}&cu=INR&tn=${encodeURIComponent(rec.withdrawalId)}&tr=${encodeURIComponent(rec.withdrawalId)}`
+                          ? `upi://pay?pa=${rec.upiId}&pn=${encodeURIComponent(rec.userName || 'Playnixclub User')}&am=${rec.amount}&cu=INR&tn=${encodeURIComponent(rec.withdrawalId)}&tr=${encodeURIComponent(rec.withdrawalId)}`
                           : ''
                         const isExpanded = !!expandedRows[rec.id];
                         return (
@@ -3906,7 +3947,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                     const isProcessing = withdrawProcessingId === rec.id
                     const isUpi = rec.paymentMethod === 'UPI'
                     const upiLink = isUpi
-                      ? `upi://pay?pa=${rec.upiId}&pn=${encodeURIComponent(rec.userName || 'RRClub User')}&am=${rec.amount}&cu=INR&tn=${encodeURIComponent(rec.withdrawalId)}&tr=${encodeURIComponent(rec.withdrawalId)}`
+                      ? `upi://pay?pa=${rec.upiId}&pn=${encodeURIComponent(rec.userName || 'Playnixclub User')}&am=${rec.amount}&cu=INR&tn=${encodeURIComponent(rec.withdrawalId)}&tr=${encodeURIComponent(rec.withdrawalId)}`
                       : ''
 
                     return (
@@ -4710,10 +4751,24 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50 text-xs">
-                      {complaintsList.map((complaint) => (
-                        <tr key={complaint.id} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="px-6 py-4 max-w-sm">
-                            <div className="font-bold text-white text-[13px]">{complaint.subject}</div>
+                      {complaintsList.map((complaint) => {
+                        const isPending = complaint.status === 'open' || complaint.status === 'in_progress';
+                        return (
+                          <tr
+                            key={complaint.id}
+                            className={`hover:bg-slate-900/30 transition-colors border-l-2 ${
+                              isPending ? 'border-l-amber-500 bg-amber-500/5' : 'border-l-transparent'
+                            }`}
+                          >
+                            <td className="px-6 py-4 max-w-sm">
+                              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                {isPending && (
+                                  <span className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-400 text-[8px] font-black px-1.5 py-0.5 rounded border border-amber-500/30 uppercase tracking-wider animate-pulse">
+                                    ● PENDING
+                                  </span>
+                                )}
+                                <div className="font-bold text-white text-[13px]">{complaint.subject}</div>
+                              </div>
                             <div className="text-[11px] text-slate-350 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800/80 leading-relaxed mt-2 font-medium">
                               {complaint.description}
                             </div>
@@ -4807,29 +4862,44 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile Cards List View */}
                 <div className="lg:hidden space-y-3.5">
-                  {complaintsList.map((complaint) => (
-                    <div key={complaint.id} className="bg-slate-955/30 border border-slate-805 rounded-2xl p-4 space-y-3 hover:border-slate-750 transition-colors">
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-black text-white">{complaint.subject}</span>
-                            <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border uppercase tracking-wider ${
-                              complaint.priority === 'high' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                              complaint.priority === 'medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                              'bg-slate-800 text-slate-400 border-slate-700'
-                            }`}>
-                              {complaint.priority}
-                            </span>
+                  {complaintsList.map((complaint) => {
+                    const isPending = complaint.status === 'open' || complaint.status === 'in_progress';
+                    return (
+                      <div
+                        key={complaint.id}
+                        className={`border rounded-2xl p-4 space-y-3 hover:border-slate-750 transition-colors ${
+                          isPending
+                            ? 'border-amber-500/30 bg-amber-500/5 shadow-sm shadow-amber-500/5'
+                            : 'bg-slate-955/30 border-slate-805'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isPending && (
+                                <span className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-400 text-[8px] font-black px-1.5 py-0.5 rounded border border-amber-500/30 uppercase tracking-wider animate-pulse">
+                                  ● PENDING
+                                </span>
+                              )}
+                              <span className="text-xs font-black text-white">{complaint.subject}</span>
+                              <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border uppercase tracking-wider ${
+                                complaint.priority === 'high' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                complaint.priority === 'medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                'bg-slate-800 text-slate-400 border-slate-700'
+                              }`}>
+                                {complaint.priority}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-indigo-400 font-bold mt-1 uppercase tracking-wider">{complaint.complaintType}</p>
                           </div>
-                          <p className="text-[10px] text-indigo-400 font-bold mt-1 uppercase tracking-wider">{complaint.complaintType}</p>
-                        </div>
                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wider ${
                           complaint.status === 'resolved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                           complaint.status === 'open' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
@@ -4896,7 +4966,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                         </button>
                       </div>
                     </div>
-                  ))}
+                      );
+                    })}
                 </div>
               </>
             )}
@@ -4904,97 +4975,136 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         )}
 
         {/* ── TABS: PROMOTIONS ── */}
-        {activeTab === 'promotions' && isSuperAdmin && (
+        {activeTab === 'promotions' && (isSuperAdmin || isAdmin) && (
           <div className="space-y-6">
             
-            {/* Create Coupon Card */}
-            <div className="bg-slate-955/30 border border-slate-800 rounded-2xl p-4">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                <Plus size={14} className="text-emerald-400" />
-                Create Gift Voucher Coupon
-              </h3>
+             {/* Create Coupon Card */}
+             <div className="bg-slate-955/30 border border-slate-800 rounded-2xl p-4">
+               <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                 <Plus size={14} className="text-emerald-400" />
+                 {editingCouponId !== null ? 'Edit Promo Coupon' : 'Create Gift Voucher Coupon'}
+               </h3>
 
-              <form onSubmit={handleCreateCouponSubmit} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Coupon Code*</label>
-                    <input
-                      type="text"
-                      required
-                      value={newCouponCode}
-                      onChange={(e) => setNewCouponCode(e.target.value)}
-                      placeholder="e.g. EXTRA50"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Discount Type*</label>
-                    <select
-                      value={newCouponDiscountType}
-                      onChange={(e) => setNewCouponDiscountType(e.target.value)}
-                      className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
-                    >
-                      <option value="flat">Flat Cash (₹)</option>
-                      <option value="percentage">Percentage (%)</option>
-                    </select>
-                  </div>
-                </div>
+               <form onSubmit={handleCreateCouponSubmit} className="space-y-3">
+                 <div className="grid grid-cols-2 gap-3">
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Coupon Code*</label>
+                     <input
+                       type="text"
+                       required
+                       value={newCouponCode}
+                       onChange={(e) => setNewCouponCode(e.target.value)}
+                       placeholder="e.g. EXTRA50"
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Discount Type*</label>
+                     <select
+                       value={newCouponDiscountType}
+                       onChange={(e) => setNewCouponDiscountType(e.target.value)}
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     >
+                       <option value="flat">Flat Cash (₹)</option>
+                       <option value="percentage">Percentage (%)</option>
+                     </select>
+                   </div>
+                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Value*</label>
-                    <input
-                      type="number"
-                      required
-                      value={newCouponValue}
-                      onChange={(e) => setNewCouponValue(e.target.value)}
-                      placeholder="50"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Min. Deposit</label>
-                    <input
-                      type="number"
-                      value={newCouponMinDeposit}
-                      onChange={(e) => setNewCouponMinDeposit(e.target.value)}
-                      placeholder="100"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Max Uses</label>
-                    <input
-                      type="number"
-                      value={newCouponMaxUses}
-                      onChange={(e) => setNewCouponMaxUses(e.target.value)}
-                      placeholder="1"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
-                    />
-                  </div>
-                </div>
+                 <div className="grid grid-cols-3 gap-3">
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Value*</label>
+                     <input
+                       type="number"
+                       required
+                       value={newCouponValue}
+                       onChange={(e) => setNewCouponValue(e.target.value)}
+                       placeholder="50"
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Min. Deposit</label>
+                     <input
+                       type="number"
+                       value={newCouponMinDeposit}
+                       onChange={(e) => setNewCouponMinDeposit(e.target.value)}
+                       placeholder="100"
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Max Uses</label>
+                     <input
+                       type="number"
+                       value={newCouponMaxUses}
+                       onChange={(e) => setNewCouponMaxUses(e.target.value)}
+                       placeholder="1"
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                 </div>
 
-                <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Expiry Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={newCouponExpiresAt}
-                    onChange={(e) => setNewCouponExpiresAt(e.target.value)}
-                    className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
-                  />
-                </div>
+                 <div className="grid grid-cols-3 gap-3">
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Expiry Date & Time</label>
+                     <input
+                       type="datetime-local"
+                       value={newCouponExpiresAt}
+                       onChange={(e) => setNewCouponExpiresAt(e.target.value)}
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Validity (Days)</label>
+                     <input
+                       type="number"
+                       value={newCouponValidityDays}
+                       onChange={(e) => setNewCouponValidityDays(e.target.value)}
+                       placeholder="e.g. 2"
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                   <div>
+                     <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Monthly Limit (Claims)</label>
+                     <input
+                       type="number"
+                       value={newCouponMonthlyLimit}
+                       onChange={(e) => setNewCouponMonthlyLimit(e.target.value)}
+                       placeholder="1000"
+                       className="w-full bg-slate-955 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-700"
+                     />
+                   </div>
+                 </div>
 
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    disabled={creatingCoupon}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-xs font-black rounded-xl cursor-pointer disabled:opacity-50 border-0"
-                  >
-                    {creatingCoupon ? 'Creating...' : 'Create Coupon'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                 <div className="flex justify-end gap-2 pt-2">
+                   {editingCouponId !== null && (
+                     <button
+                       type="button"
+                       onClick={() => {
+                         setEditingCouponId(null)
+                         setNewCouponCode('')
+                         setNewCouponValue('')
+                         setNewCouponMinDeposit('')
+                         setNewCouponMaxUses('')
+                         setNewCouponExpiresAt('')
+                         setNewCouponMonthlyLimit('1000')
+                       }}
+                       className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-350 text-xs font-bold rounded-xl cursor-pointer border-0"
+                     >
+                       Cancel Edit
+                     </button>
+                   )}
+                   <button
+                     type="submit"
+                     disabled={creatingCoupon}
+                     className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-xs font-black rounded-xl cursor-pointer disabled:opacity-50 border-0"
+                   >
+                     {creatingCoupon ? 'Submitting...' : editingCouponId !== null ? 'Update Coupon' : 'Create Coupon'}
+                   </button>
+                 </div>
+               </form>
+             </div>
 
             {/* Coupons List */}
             <div className="bg-slate-955/30 border border-slate-800 rounded-2xl p-4">
@@ -5016,7 +5126,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                           <th className="px-6 py-4">Discount Value</th>
                           <th className="px-6 py-4">Min. Deposit</th>
                           <th className="px-6 py-4">Usage Limit</th>
-                          <th className="px-6 py-4">Expiry Date</th>
+                          <th className="px-6 py-4">Expiry / Validity</th>
                           <th className="px-6 py-4 text-right">Action</th>
                         </tr>
                       </thead>
@@ -5031,16 +5141,39 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                             </td>
                             <td className="px-6 py-4 font-bold text-slate-300">₹{parseFloat(c.minDeposit).toFixed(2)}</td>
                             <td className="px-6 py-4 text-slate-400 font-semibold">
-                              Used: <span className="text-white font-bold">{c.usedCount || 0}</span> / {c.maxUses}
+                              <div>Used: <span className="text-white font-bold">{c.usedCount || 0}</span> / {c.maxUses}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">Monthly Limit: <span className="text-slate-400 font-bold">{c.monthlyLimit || 1000}</span></div>
                             </td>
                             <td className="px-6 py-4 text-slate-500">
-                              {c.expiresAt ? new Date(c.expiresAt).toLocaleString() : 'Never'}
+                              <div className="flex items-center gap-2">
+                                <span>{c.expiresAt ? new Date(c.expiresAt).toLocaleString() : (c.validityDays ? `${c.validityDays} Days` : 'Never')}</span>
+                                {(() => {
+                                  const now = new Date();
+                                  const expires = c.expiresAt ? new Date(c.expiresAt) : null;
+                                  const isExpired = expires && expires < now;
+                                  const isDepleted = c.usedCount >= c.maxUses;
+                                  if (isExpired) {
+                                    return <span className="text-[8px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Expired</span>;
+                                  }
+                                  if (isDepleted) {
+                                    return <span className="text-[8px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Depleted</span>;
+                                  }
+                                  return <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Active</span>;
+                                })()}
+                              </div>
                             </td>
                             <td className="px-6 py-4 text-right">
                               <button
+                                onClick={() => handleEditCouponClick(c)}
+                                className="p-1.5 bg-indigo-955/35 hover:bg-indigo-900/50 text-indigo-400 rounded-lg transition-colors cursor-pointer border-0 mr-1.5"
+                                title="Edit Coupon"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                              <button
                                 onClick={() => handleDeleteCoupon(c.id)}
                                 className="p-1.5 bg-red-955/30 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors cursor-pointer border-0"
-                                title="Delete Coupon"
+                                  title="Delete Coupon"
                               >
                                 <Trash2 size={12} />
                               </button>
@@ -5061,22 +5194,51 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                             <span className="text-[8px] font-bold bg-indigo-500/10 text-indigo-400 px-1 py-0.2 rounded uppercase">
                               {c.discountType === 'percentage' ? `${c.value}%` : `₹${c.value}`}
                             </span>
+                            {(() => {
+                              const now = new Date();
+                              const expires = c.expiresAt ? new Date(c.expiresAt) : null;
+                              const isExpired = expires && expires < now;
+                              const isDepleted = c.usedCount >= c.maxUses;
+                              if (isExpired) {
+                                return <span className="text-[6px] bg-red-500/10 text-red-400 border border-red-500/20 px-1 py-0.2 rounded font-black uppercase">Expired</span>;
+                              }
+                              if (isDepleted) {
+                                return <span className="text-[6px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 py-0.2 rounded font-black uppercase">Depleted</span>;
+                              }
+                              return <span className="text-[6px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1 py-0.2 rounded font-black uppercase">Active</span>;
+                            })()}
                           </div>
                           <p className="text-[10px] text-slate-400 mt-1">
                             Min Deposit: ₹{parseFloat(c.minDeposit).toFixed(2)} · Used: {c.usedCount || 0} / {c.maxUses}
                           </p>
-                          {c.expiresAt && (
+                          <p className="text-[9px] text-slate-500 mt-0.5">
+                            Monthly Limit: {c.monthlyLimit || 1000}
+                          </p>
+                          {c.expiresAt ? (
                             <p className="text-[9px] text-slate-500 mt-0.5">Expires: {new Date(c.expiresAt).toLocaleString()}</p>
+                          ) : (
+                            c.validityDays && (
+                              <p className="text-[9px] text-slate-500 mt-0.5">Validity: {c.validityDays} Days</p>
+                            )
                           )}
                         </div>
 
-                        <button
-                          onClick={() => handleDeleteCoupon(c.id)}
-                          className="p-1.5 bg-red-955/30 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors cursor-pointer border-0"
-                          title="Delete Coupon"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        <div className="flex flex-col gap-1.5">
+                          <button
+                            onClick={() => handleEditCouponClick(c)}
+                            className="p-1.5 bg-indigo-955/35 hover:bg-indigo-900/50 text-indigo-400 rounded-lg transition-colors cursor-pointer border-0"
+                            title="Edit Coupon"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCoupon(c.id)}
+                            className="p-1.5 bg-red-955/30 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors cursor-pointer border-0"
+                            title="Delete Coupon"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -5786,7 +5948,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                   
                   <div className="bg-white p-4 rounded-xl shadow-lg border-4 border-slate-800 mb-4 inline-block">
                     <QRCodeSVG 
-                      value={upiQrData || `upi://pay?pa=${selectedWithdrawal.upiId}&pn=${encodeURIComponent(selectedWithdrawal.userName || 'RRClub User')}&am=${selectedWithdrawal.amount}&cu=INR&tn=${encodeURIComponent(selectedWithdrawal.withdrawalId)}&tr=${encodeURIComponent(selectedWithdrawal.withdrawalId)}`} 
+                      value={upiQrData || `upi://pay?pa=${selectedWithdrawal.upiId}&pn=${encodeURIComponent(selectedWithdrawal.userName || 'Playnixclub User')}&am=${selectedWithdrawal.amount}&cu=INR&tn=${encodeURIComponent(selectedWithdrawal.withdrawalId)}&tr=${encodeURIComponent(selectedWithdrawal.withdrawalId)}`} 
                       size={220} 
                       level="H"
                       includeMargin={false}
@@ -5796,7 +5958,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
 
                   {/* Quick Payout App Deep Links */}
                   {(() => {
-                    const baseLink = upiQrData || `upi://pay?pa=${selectedWithdrawal.upiId}&pn=${encodeURIComponent(selectedWithdrawal.userName || 'RRClub User')}&am=${selectedWithdrawal.amount}&cu=INR&tn=${encodeURIComponent(selectedWithdrawal.withdrawalId)}&tr=${encodeURIComponent(selectedWithdrawal.withdrawalId)}`;
+                    const baseLink = upiQrData || `upi://pay?pa=${selectedWithdrawal.upiId}&pn=${encodeURIComponent(selectedWithdrawal.userName || 'Playnixclub User')}&am=${selectedWithdrawal.amount}&cu=INR&tn=${encodeURIComponent(selectedWithdrawal.withdrawalId)}&tr=${encodeURIComponent(selectedWithdrawal.withdrawalId)}`;
                     const phonePeLink = baseLink.replace('upi://', 'phonepe://');
                     const gpayLink = baseLink.replace('upi://', 'tez://upi/');
                     const paytmLink = baseLink.replace('upi://', 'paytmmp://');

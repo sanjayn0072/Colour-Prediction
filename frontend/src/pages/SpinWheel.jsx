@@ -55,6 +55,7 @@ export default function SpinWheel({ onNavigate }) {
   const [rotation, setRotation] = useState(0)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState(null)
   const [copiedVoucher, setCopiedVoucher] = useState(false)
+  const [timeLeft, setTimeLeft] = useState('')
   
   // Sync latest user details from server on mount
   useEffect(() => {
@@ -63,6 +64,50 @@ export default function SpinWheel({ onNavigate }) {
 
   const totalDeposit = user?.todayDeposits !== undefined ? user.todayDeposits : 0
   const spinsLeft = user?.spinsLeft !== undefined ? user.spinsLeft : 0
+
+  useEffect(() => {
+    if (!user?.resetTime || totalDeposit < 2000) {
+      setTimeLeft('')
+      return
+    }
+
+    const updateTimer = () => {
+      const now = Date.now()
+      const diff = user.resetTime - now
+      if (diff <= 0) {
+        setTimeLeft('00:00:00')
+        fetchUserHistory()
+        return
+      }
+
+      const hours = String(Math.floor((diff / (1000 * 60 * 60)) % 24)).padStart(2, '0')
+      const minutes = String(Math.floor((diff / (1000 * 60)) % 60)).padStart(2, '0')
+      const seconds = String(Math.floor((diff / 1000) % 60)).padStart(2, '0')
+
+      setTimeLeft(`${hours}:${minutes}:${seconds}`)
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+    return () => clearInterval(interval)
+  }, [user?.resetTime, totalDeposit])
+
+  const getProgressPercent = (deposit) => {
+    if (deposit <= 0) return 0
+    if (deposit <= 200) {
+      return (deposit / 200) * 25
+    }
+    if (deposit <= 1000) {
+      return 25 + ((deposit - 200) / 800) * 25
+    }
+    if (deposit <= 1300) {
+      return 50 + ((deposit - 1000) / 300) * 25
+    }
+    if (deposit <= 2000) {
+      return 75 + ((deposit - 1300) / 700) * 25
+    }
+    return 100
+  }
 
   const [wonPrize, setWonPrize] = useState(null)
   const [showWinModal, setShowWinModal] = useState(false)
@@ -337,26 +382,44 @@ export default function SpinWheel({ onNavigate }) {
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs font-bold text-slate-700 px-1 font-sans">
               <span>Deposit Milestones Progress</span>
-              <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md text-[10px]">{Math.floor(totalDeposit / 200)} Spin{Math.floor(totalDeposit / 200) !== 1 ? 's' : ''} Earned</span>
+              {(() => {
+                let milestonesEarned = 0;
+                if (totalDeposit >= 200) milestonesEarned += 1;
+                if (totalDeposit >= 1000) milestonesEarned += 1;
+                if (totalDeposit >= 1300) milestonesEarned += 1;
+                if (totalDeposit >= 2000) milestonesEarned += 1;
+                return (
+                  <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md text-[10px]">
+                    {milestonesEarned} Spin{milestonesEarned !== 1 ? 's' : ''} Earned
+                  </span>
+                )
+              })()}
             </div>
             
-            <div className="relative px-3 py-2 bg-slate-50 border border-slate-150 rounded-2xl">
-              <div className="h-1.5 w-[92%] bg-slate-200 rounded-full absolute top-[21px] left-3" />
+            <div className="relative px-3 py-2 bg-slate-50 border border-slate-150 rounded-2xl h-16">
+              {/* Grey track */}
+              <div className="h-1.5 w-[92%] bg-slate-200 rounded-full absolute top-[21px] left-[4%]" />
+              {/* Filled track */}
               <div 
-                className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full absolute top-[21px] left-3 transition-all duration-700" 
-                style={{ width: `${Math.min(92, (totalDeposit / 2000) * 92)}%` }} 
+                className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full absolute top-[21px] left-[4%] transition-all duration-700" 
+                style={{ width: `${getProgressPercent(totalDeposit) * 0.92}%` }} 
               />
               
-              <div className="relative flex justify-between px-1">
+              {/* Milestone markers */}
+              <div className="absolute top-2 left-[4%] w-[92%] h-12">
                 {[
-                  { val: 200, label: '₹200' },
-                  { val: 1000, label: '₹1K' },
-                  { val: 1300, label: '₹1.3K' },
-                  { val: 2000, label: '₹2K' },
+                  { val: 200, label: '₹200', pct: 25 },
+                  { val: 1000, label: '₹1K', pct: 50 },
+                  { val: 1300, label: '₹1.3K', pct: 75 },
+                  { val: 2000, label: '₹2K', pct: 100 },
                 ].map((milestone, i) => {
                   const isReached = totalDeposit >= milestone.val
                   return (
-                    <div key={i} className="flex flex-col items-center z-10">
+                    <div 
+                      key={i} 
+                      className="absolute flex flex-col items-center -translate-x-1/2 transition-all duration-300"
+                      style={{ left: `${milestone.pct}%` }}
+                    >
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] shadow-sm transition-all border font-mono font-bold ${
                         isReached 
                           ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-100' 
@@ -372,13 +435,24 @@ export default function SpinWheel({ onNavigate }) {
             </div>
           </div>
 
-          {/* Deposit More button */}
-          <button 
-            onClick={() => onNavigate?.('wallet')}
-            className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-sm tracking-wider uppercase rounded-2xl shadow-lg shadow-indigo-200/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 border-0"
-          >
-            Deposit Funds to Unlock Keys
-          </button>
+          {/* Deposit More button or Countdown timer */}
+          {totalDeposit >= 2000 ? (
+            <div className="w-full py-4 bg-slate-50 text-slate-500 font-extrabold text-sm tracking-wider uppercase rounded-2xl flex flex-col items-center justify-center border border-slate-200 shadow-inner">
+              <span className="text-[10px] text-indigo-500 font-bold tracking-widest">Milestones Completed</span>
+              {timeLeft && (
+                <span className="text-base font-black text-indigo-650 font-mono mt-0.5 tracking-wider animate-pulse">
+                  Resets in: {timeLeft}
+                </span>
+              )}
+            </div>
+          ) : (
+            <button 
+              onClick={() => onNavigate?.('wallet')}
+              className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-sm tracking-wider uppercase rounded-2xl shadow-lg shadow-indigo-200/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 border-0"
+            >
+              Deposit Funds to Unlock Keys
+            </button>
+          )}
         </div>
 
         {/* ── PRIZE CATALOG GRID ── */}
@@ -417,7 +491,7 @@ export default function SpinWheel({ onNavigate }) {
             Disclaimer: Prizes and rewards obtained through the Spin Wheel promotion are subject to general compliance guidelines. Cash/Bonus rewards may feature standard wagering requirements that are detailed in individual terms. For exact wagering multiplier info, please tap on the respective cards above.
           </p>
           <p className="text-[8px] text-slate-400">
-            © 2026 ColourPlay. All rights reserved.
+            © 2026 Playnixclub. All rights reserved.
           </p>
         </footer>
 

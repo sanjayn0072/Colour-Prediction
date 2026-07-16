@@ -218,6 +218,12 @@ export const verifyOtpRegister = async (req, res) => {
     await connection.commit();
 
     const token = generateToken(newUserId);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
     return res.status(201).json({
       token,
       user: {
@@ -293,6 +299,12 @@ export const login = async (req, res) => {
     const claimedRewards = vipClaims.map(c => `${c.vip_level}-${c.reward_type}`);
 
     const token = generateToken(user.id);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
     return res.json({
       token,
       user: {
@@ -367,7 +379,21 @@ export const getProfile = async (req, res) => {
       [req.user.id]
     );
     const todaySpinsUsed = parseInt(todaySpinsRows[0]?.todaySpinsUsed || 0, 10);
-    const todaySpinsLeft = Math.max(0, Math.floor(todayDeposits / 200) - todaySpinsUsed);
+
+    let totalSpinsEarned = 0;
+    if (todayDeposits >= 200) totalSpinsEarned += 1;
+    if (todayDeposits >= 1000) totalSpinsEarned += 1;
+    if (todayDeposits >= 1300) totalSpinsEarned += 1;
+    if (todayDeposits >= 2000) totalSpinsEarned += 1;
+
+    const todaySpinsLeft = Math.max(0, totalSpinsEarned - todaySpinsUsed);
+
+    // Calculate seconds until next daily reset on the server timezone
+    const resetTimeRows = await query(
+      'SELECT UNIX_TIMESTAMP(CURDATE() + INTERVAL 1 DAY) - UNIX_TIMESTAMP(NOW()) as secondsUntilReset'
+    );
+    const secondsUntilReset = parseInt(resetTimeRows[0]?.secondsUntilReset || 0, 10);
+    const resetTime = Date.now() + secondsUntilReset * 1000;
 
     return res.json({
       user: {
@@ -399,6 +425,7 @@ export const getProfile = async (req, res) => {
         todayDeposits,
         todaySpinsUsed,
         spinsLeft: todaySpinsLeft,
+        resetTime,
         ordersCount: parseInt(stats.orders_count || 0, 10),
         gamesPlayed: parseInt(stats.games_played || 0, 10),
         totalWinnings: parseFloat(stats.total_winnings_won || 0)
@@ -564,4 +591,13 @@ export const getReferralSignups = async (req, res) => {
     logger.error(err, 'Failed to fetch referral signups');
     return res.status(500).json({ error: 'Internal Server Error' });
   }
+};
+
+export const logout = async (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none'
+  });
+  return res.json({ success: true, message: 'Logged out successfully.' });
 };

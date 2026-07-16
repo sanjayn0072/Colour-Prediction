@@ -38,8 +38,7 @@ export const GameProvider = ({ children }) => {
   }, [fetchUserHistory])
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    if (!user) return;
 
     const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
     const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_BACKEND_URL || API_BASE;
@@ -48,7 +47,7 @@ export const GameProvider = ({ children }) => {
     const socketInstance = io(SOCKET_URL, {
       transports: ['websocket'],
       autoConnect: true,
-      auth: { token }
+      auth: { token: localStorage.getItem('token') || '' }
     })
 
     // eslint-disable-next-line react-hooks/set-state-in-effect

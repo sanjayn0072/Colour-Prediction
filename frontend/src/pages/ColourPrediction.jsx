@@ -79,7 +79,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   const getBetAmount = (b) => {
     if (!b) return 0;
     const amt = b.betAmount !== undefined ? b.betAmount : (b.bet_amount !== undefined ? b.bet_amount : (b.amount !== undefined ? b.amount : 0));
-    return parseFloat(amt) || 0;
+    return Math.round(parseFloat(amt) || 0);
   };
   
   // Lobby modal state
@@ -259,9 +259,9 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   }, [betsPlaced, gameId]);
 
   const getBetAmountOnTarget = (type, val) => {
-    return betsPlaced
+    return Math.round(betsPlaced
       .filter((bet) => bet.betType === type && String(bet.betValue).toLowerCase() === String(val).toLowerCase())
-      .reduce((sum, bet) => sum + bet.betAmount, 0)
+      .reduce((sum, bet) => sum + parseFloat(bet.betAmount || 0), 0))
   }
 
   const activeSessionRef = useRef(activeSession)

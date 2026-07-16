@@ -1303,7 +1303,12 @@ export const triggerSpin = async (req, res) => {
     );
     const todaySpinsUsed = parseInt(spinsUsedResult[0].todaySpinsUsed || 0, 10);
 
-    const totalSpinsEarned = Math.floor(todayDeposits / 200);
+    let totalSpinsEarned = 0;
+    if (todayDeposits >= 200) totalSpinsEarned += 1;
+    if (todayDeposits >= 1000) totalSpinsEarned += 1;
+    if (todayDeposits >= 1300) totalSpinsEarned += 1;
+    if (todayDeposits >= 2000) totalSpinsEarned += 1;
+
     const spinsLeft = totalSpinsEarned - todaySpinsUsed;
 
     if (spinsLeft <= 0) {
@@ -1420,22 +1425,25 @@ export const triggerSpin = async (req, res) => {
         ? 'LUCKY10'
         : (selectedPrize.prize_name === 'Voucher 5%' ? 'LUCKY5' : 'LUCKY15');
       
-      const [coupons] = await connection.query('SELECT id FROM coupons WHERE code = ? LIMIT 1', [voucherCode]);
+      const [coupons] = await connection.query('SELECT id, validity_days FROM coupons WHERE code = ? LIMIT 1', [voucherCode]);
       let couponId;
+      let validityDays = 2; // Default spin coupons validity = 2 days
       if (coupons && coupons.length > 0) {
         couponId = coupons[0].id;
+        validityDays = coupons[0].validity_days || 2;
       } else {
         const minDep = voucherCode === 'LUCKY5' ? 100 : (voucherCode === 'LUCKY10' ? 200 : 300);
         const [insertRes] = await connection.query(
-          'INSERT INTO coupons (code, type, reward_amount, min_deposit_required, validity_days) VALUES (?, "LOYALTY", 0.0000, ?, 3)',
+          'INSERT INTO coupons (code, type, reward_amount, min_deposit_required, validity_days) VALUES (?, "LOYALTY", 0.0000, ?, 2)',
           [voucherCode, minDep]
         );
         couponId = insertRes.insertId;
+        validityDays = 2;
       }
 
       await connection.query(
-        'INSERT INTO user_coupons (user_id, coupon_id, status, expires_at) VALUES (?, ?, "AVAILABLE", DATE_ADD(NOW(), INTERVAL 3 DAY))',
-        [req.user.id, couponId]
+        'INSERT INTO user_coupons (user_id, coupon_id, status, expires_at) VALUES (?, ?, "AVAILABLE", DATE_ADD(NOW(), INTERVAL ? DAY))',
+        [req.user.id, couponId, validityDays]
       );
     }
 

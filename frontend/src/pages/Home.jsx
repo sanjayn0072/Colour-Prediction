@@ -7,14 +7,14 @@ import {
 } from 'lucide-react'
 
 // Import tech product images
-import earbudsImg from '../assets/earbuds.png'
-import earbudsAltImg from '../assets/earbuds_alt.png'
-import smartwatchImg from '../assets/smartwatch.png'
-import smartwatchAltImg from '../assets/smartwatch_alt.png'
-import keyboardImg from '../assets/keyboard.png'
-import keyboardAltImg from '../assets/keyboard_alt.png'
-import mouseImg from '../assets/mouse.png'
-import mouseAltImg from '../assets/mouse_alt.png'
+import earbudsImg from '../assets/earbuds.webp'
+import earbudsAltImg from '../assets/earbuds_alt.webp'
+import smartwatchImg from '../assets/smartwatch.webp'
+import smartwatchAltImg from '../assets/smartwatch_alt.webp'
+import keyboardImg from '../assets/keyboard.webp'
+import keyboardAltImg from '../assets/keyboard_alt.webp'
+import mouseImg from '../assets/mouse.webp'
+import mouseAltImg from '../assets/mouse_alt.webp'
 
 /* ─── Mock Data ───────────────────────────────────────────── */
 const BANNERS = [

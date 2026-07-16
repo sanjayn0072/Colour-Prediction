@@ -20,31 +20,26 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false, // Rely on manual registration in main.jsx
       manifest: {
-        short_name: "ColourPlay",
-        name: "ColourPlay Prediction & Tech Store Platform",
-        description: "Premium mobile-first tech accessory shop and prediction gaming platform.",
+        short_name: "playnixclub",
+        name: "playnixclub",
+        description: "Premium playnixclub prediction gaming platform and online casino.",
         icons: [
           {
-            src: "favicon.svg",
-            sizes: "any",
-            type: "image/svg+xml"
-          },
-          {
-            src: "favicon.svg",
+            src: "logo-192.png",
             sizes: "192x192",
-            type: "image/svg+xml",
+            type: "image/png",
             purpose: "any"
           },
           {
-            src: "favicon.svg",
+            src: "logo-512.png",
             sizes: "512x512",
-            type: "image/svg+xml",
+            type: "image/png",
             purpose: "maskable"
           }
         ],
         start_url: "/",
-        background_color: "#ffffff",
-        theme_color: "#4f46e5",
+        background_color: "#000000",
+        theme_color: "#000000",
         display: "standalone",
         orientation: "portrait"
       },

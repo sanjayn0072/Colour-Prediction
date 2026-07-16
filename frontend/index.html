@@ -4,14 +4,26 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/jpeg" href="/logo.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="description" content="RRClub — Play color prediction games and win real rewards." />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="description" content="Playnixclub — Play color prediction games and win real rewards." />
+    <meta name="theme-color" content="#000000" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <title>RRClub</title>
+    <title>Playnixclub</title>
+    <style>
+      /* Hide splash screen in desktop/tablet viewport sizes OR in standard browser environments */
+      @media (min-width: 768px), (display-mode: browser) {
+        #splash-screen {
+          display: none !important;
+        }
+      }
+    </style>
   </head>
   <body>
+    <!-- Premium PWA Startup Splash Screen -->
+    <div id="splash-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease-in-out; opacity: 1;">
+      <img src="/splash.jpg" style="width: 100%; height: 100%; object-fit: cover;" alt="playnixclub" />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
+import { encryptConfigValue } from '../utils/configEncryption.js';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -266,6 +267,18 @@ const seedSystemData = async () => {
       }
       logger.info('Products and images seeded successfully.');
     }
+
+    // 5. Seed Default Gateway Configurations
+    const seedConfig = async (key, val) => {
+      const [exists] = await pool.query('SELECT config_key FROM system_configs WHERE config_key = ? LIMIT 1', [key]);
+      if (exists.length === 0) {
+        const encrypted = encryptConfigValue(val);
+        await pool.query('INSERT INTO system_configs (config_key, config_value) VALUES (?, ?)', [key, encrypted]);
+        logger.info(`Seeded system config: ${key}`);
+      }
+    };
+    await seedConfig('RENFLAIR_SMS_API_KEY', '8b23ea8ee75e4b89dbc70bddd1f32f4c');
+    await seedConfig('PAY0_USER_TOKEN', 'e7d3b644cef8f32dec1b8ce4cd5802e3');
   } catch (err) {
     logger.error(err, 'Failed to seed system data');
   }
@@ -312,9 +325,79 @@ const connectDB = async () => {
 
     // 3. Seed data
     await seedSystemData();
+
+    // 4. Run database self-healing for legacy admin constraints
+    await healLegacyForeignKeys();
   } catch (error) {
     logger.error(error, `MySQL Connection Pool initialization failed: ${error.message}`);
     process.exit(1);
+  }
+};
+
+const healLegacyForeignKeys = async () => {
+  try {
+    const dbName = process.env.MYSQL_DATABASE || "colourplay";
+    
+    // Fetch foreign keys referencing the 'admins' table
+    const [constraints] = await pool.query(`
+      SELECT 
+        TABLE_NAME, 
+        CONSTRAINT_NAME, 
+        COLUMN_NAME 
+      FROM 
+        INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+      WHERE 
+        REFERENCED_TABLE_NAME = 'admins' 
+        AND TABLE_SCHEMA = ?
+    `, [dbName]);
+
+    if (constraints.length > 0) {
+      logger.info(`[Database Self-Healing]: Found ${constraints.length} legacy constraints referencing 'admins' table. Migrating to 'users'...`);
+      for (const c of constraints) {
+        logger.info(`[Database Self-Healing]: Dropping constraint ${c.CONSTRAINT_NAME} from table ${c.TABLE_NAME}...`);
+        try {
+          await pool.query(`ALTER TABLE ${c.TABLE_NAME} DROP FOREIGN KEY ${c.CONSTRAINT_NAME}`);
+        } catch (dropErr) {
+          logger.warn(`[Database Self-Healing]: Failed to drop constraint ${c.CONSTRAINT_NAME}: ${dropErr.message}`);
+        }
+      }
+
+      // Add new constraints referencing 'users' table
+      const newConstraints = [
+        {
+          table: 'deposits',
+          column: 'processed_by',
+          sql: 'ALTER TABLE deposits ADD CONSTRAINT fk_deposits_processed_by FOREIGN KEY (processed_by) REFERENCES users(id) ON DELETE RESTRICT'
+        },
+        {
+          table: 'withdrawals',
+          column: 'processed_by_admin_id',
+          sql: 'ALTER TABLE withdrawals ADD CONSTRAINT fk_withdrawals_processed_by FOREIGN KEY (processed_by_admin_id) REFERENCES users(id) ON DELETE SET NULL'
+        },
+        {
+          table: 'complaints',
+          column: 'assigned_admin',
+          sql: 'ALTER TABLE complaints ADD CONSTRAINT fk_complaints_assigned_admin FOREIGN KEY (assigned_admin) REFERENCES users(id) ON DELETE SET NULL'
+        },
+        {
+          table: 'audit_logs',
+          column: 'admin_id',
+          sql: 'ALTER TABLE audit_logs ADD CONSTRAINT fk_audit_logs_admin_id FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE RESTRICT'
+        }
+      ];
+
+      for (const nc of newConstraints) {
+        logger.info(`[Database Self-Healing]: Adding foreign key constraint for ${nc.table}.${nc.column} referencing users(id)...`);
+        try {
+          await pool.query(nc.sql);
+        } catch (addErr) {
+          logger.warn(`[Database Self-Healing]: Failed to add constraint for ${nc.table}: ${addErr.message}`);
+        }
+      }
+      logger.info('[Database Self-Healing]: Legacy foreign keys migration completed successfully.');
+    }
+  } catch (err) {
+    logger.error(err, '[Database Self-Healing]: Failed to check or migrate legacy foreign keys');
   }
 };
 

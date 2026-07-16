@@ -247,7 +247,7 @@ export default function TransactionRecords({ onBack }) {
           ) : (
             depositRecords.map((rec) => {
               const showAppealForm = appealingId === rec.id
-              const isAppealable = !rec.isAdjustment && rec.status.toLowerCase() === 'pending' && (Date.now() - rec.timestamp <= 7 * 24 * 60 * 60 * 1000)
+              const isAppealable = !rec.isAdjustment && rec.status.toLowerCase() === 'pending' && !rec.appealStatus && !rec.appealId && (Date.now() - rec.timestamp <= 7 * 24 * 60 * 60 * 1000)
 
               return (
                 <div key={rec.id} className={`bg-white border rounded-2xl p-3.5 shadow-sm transition-all ${
@@ -255,7 +255,11 @@ export default function TransactionRecords({ onBack }) {
                 }`}>
                   <div className="flex items-center gap-3.5">
                     {/* Left Icon Badge */}
-                    <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${
+                      rec.method === 'Refund'
+                        ? 'bg-blue-50 text-blue-600 border-blue-100'
+                        : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                    }`}>
                       <ArrowDownRight size={18} />
                     </div>
 
@@ -263,7 +267,9 @@ export default function TransactionRecords({ onBack }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-bold text-slate-800">
-                          {rec.isAdjustment ? 'Game Rebate Reward' : `Deposit via ${rec.method || 'UPI'}`}
+                          {rec.isAdjustment 
+                            ? (rec.method === 'Refund' ? 'Order Refund' : 'Game Rebate Reward') 
+                            : `Deposit via ${rec.method || 'UPI'}`}
                         </span>
                         {rec.voucher && (
                           <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider shrink-0 border border-indigo-100">Voucher</span>

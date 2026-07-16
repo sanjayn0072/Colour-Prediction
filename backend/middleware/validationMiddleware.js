@@ -188,15 +188,15 @@ export const verifyPay0DepositStatusSchema = z.object({
 export const updateSuperAdminConfigSchema = z.object({
   body: z.object({
     totpCode: z.string().trim().length(6, 'TOTP code must be exactly 6 digits').regex(/^\d{6}$/, 'TOTP code must contain digits only'),
-    RESEND_API_KEY: z.string().trim().max(500).optional(),
-    SMTP_FROM_EMAIL: z.string().trim().email('Invalid sender email').max(200).optional(),
-    GEMINI_AI_API_KEY: z.string().trim().max(500).optional(),
-    TELEGRAM_BOT_TOKEN: z.string().trim().max(500).optional(),
-    TELEGRAM_CHAT_ID: z.string().trim().max(100).optional(),
-    PAY0_USER_TOKEN: z.string().trim().max(500).optional(),
-    PAY0_WEBHOOK_URL: z.string().trim().max(500).optional(),
-    PAY0_REDIRECT_URL: z.string().trim().max(500).optional(),
-    RENFLAIR_SMS_API_KEY: z.string().trim().max(500).optional()
+    RESEND_API_KEY: z.string().trim().max(500).optional().nullable().or(z.literal('')),
+    SMTP_FROM_EMAIL: z.string().trim().max(200).optional().nullable().or(z.literal('')),
+    GEMINI_AI_API_KEY: z.string().trim().max(500).optional().nullable().or(z.literal('')),
+    TELEGRAM_BOT_TOKEN: z.string().trim().max(500).optional().nullable().or(z.literal('')),
+    TELEGRAM_CHAT_ID: z.string().trim().max(100).optional().nullable().or(z.literal('')),
+    PAY0_USER_TOKEN: z.string().trim().max(500).optional().nullable().or(z.literal('')),
+    PAY0_WEBHOOK_URL: z.string().trim().max(500).optional().nullable().or(z.literal('')),
+    PAY0_REDIRECT_URL: z.string().trim().max(500).optional().nullable().or(z.literal('')),
+    RENFLAIR_SMS_API_KEY: z.string().trim().max(500).optional().nullable().or(z.literal(''))
   })
 });
 
@@ -255,9 +255,26 @@ export const updateComplaintStatusSchema = z.object({
 
 export const createCouponSchema = z.object({
   body: z.object({
-    code: z.string().trim().min(3, 'Coupon code must be at least 3 characters').max(30, 'Coupon code is too long'),
-    reward_amount: z.number().positive('Reward amount must be a positive number'),
-    max_uses: z.number().int().positive('Max uses must be a positive integer')
+    code: z.string().trim().min(3, 'Coupon code must be at least 3 characters').max(50, 'Coupon code is too long').optional(),
+    coupon_code: z.string().trim().min(3, 'Coupon code must be at least 3 characters').max(50, 'Coupon code is too long').optional(),
+    discount_type: z.enum(['flat', 'percentage']).optional(),
+    discountType: z.enum(['flat', 'percentage']).optional(),
+    value: z.number().nonnegative('Value must be non-negative').optional(),
+    discount_value: z.number().nonnegative('Discount value must be non-negative').optional(),
+    reward_amount: z.number().nonnegative('Reward amount must be non-negative').optional(),
+    minDeposit: z.number().nonnegative('Minimum deposit must be non-negative').optional(),
+    min_deposit_amount: z.number().nonnegative('Minimum deposit must be non-negative').optional(),
+    maxUses: z.number().int().positive('Max uses must be positive').optional(),
+    usage_limit: z.number().int().positive('Usage limit must be positive').optional(),
+    max_uses: z.number().int().positive('Max uses must be positive').optional(),
+    monthly_limit: z.number().int().positive('Monthly limit must be positive').optional(),
+    expiresAt: z.string().nullable().optional(),
+    expire_date: z.string().nullable().optional()
+  }).refine(data => {
+    return (data.code || data.coupon_code) &&
+           (data.value !== undefined || data.discount_value !== undefined || data.reward_amount !== undefined);
+  }, {
+    message: "Promo code and discount value are required."
   })
 });
 

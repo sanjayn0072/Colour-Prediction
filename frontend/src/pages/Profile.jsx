@@ -241,7 +241,7 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
           </div>
           <div className="flex-1">
             <h1 className="text-xl font-bold text-slate-800">{user?.name || 'Demo User'}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{user?.email || 'demo@rrclub.com'}</p>
+            <p className="text-sm text-slate-500 mt-0.5">{user?.email || 'demo@playnixclub.com'}</p>
             <p className="text-[10px] text-slate-450 mt-1 font-mono font-bold flex items-center gap-1">
               UID: {user?.uid || '102948'}
               <button 
@@ -697,7 +697,7 @@ function AccountDetails({ onSelectAvatarClick }) {
 
   const defaultAvatar = '/avatars/Avatar_1.jpg'
   const name = user?.name || 'Demo User'
-  const email = user?.email || 'demo@rrclub.com'
+  const email = user?.email || 'demo@playnixclub.com'
   const phone = user?.phone || '+91 99999 99999'
 
   const handleSaveProfile = async () => {
@@ -1296,8 +1296,8 @@ function ReferEarn() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'RRClub Referral',
-          text: 'Join RRClub and play prediction games to win real cash!',
+          title: 'Playnixclub Referral',
+          text: 'Join Playnixclub and play prediction games to win real cash!',
           url: referralLink,
         })
       } catch {
@@ -1313,9 +1313,9 @@ function ReferEarn() {
   const handleSocialShare = (platform) => {
     let url = ''
     if (platform === 'whatsapp') {
-      url = `https://api.whatsapp.com/send?text=${encodeURIComponent('Join RRClub and play prediction games to win real cash!\n' + referralLink)}`
+      url = `https://api.whatsapp.com/send?text=${encodeURIComponent('Join Playnixclub and play prediction games to win real cash!\n' + referralLink)}`
     } else if (platform === 'telegram') {
-      url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join RRClub and play prediction games to win real cash!')}`
+      url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join Playnixclub and play prediction games to win real cash!')}`
     } else if (platform === 'facebook') {
       url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`
     }
@@ -2097,10 +2097,10 @@ function PolicyTextModal({ type, onClose }) {
   }
 
   const contentMap = {
-    about: 'RRClub is India\'s most trusted gaming and colour prediction platform. We offer a state-of-the-art gaming experience with real-time analytics, instant payouts, and premium rewards. Our platform operates with top-tier encryption to ensure maximum safety and security for all players.',
+    about: 'Playnixclub is India\'s most trusted gaming and colour prediction platform. We offer a state-of-the-art gaming experience with real-time analytics, instant payouts, and premium rewards. Our platform operates with top-tier encryption to ensure maximum safety and security for all players.',
     responsible: 'Gaming is an enjoyable form of entertainment. To prevent gaming addiction and promote responsible behaviors: 1. Set a personal budget for deposits. 2. Never chase losses. 3. Take regular breaks. 4. If you need self-exclusion, contact support to lock your account temporarily.',
     fairplay: 'All predictions are determined using secure random number generation (RNG) servers. The game outcomes are mathematically validated to be 100% transparent and provably fair. Neither players nor administrators can manipulate active rounds.',
-    terms: 'By registering on RRClub, you agree to: 1. Be at least 18 years of age. 2. Use a single account. 3. Refrain from abusive or cooperative play. 4. Comply with standard verification requests. Violating these terms may result in account termination.',
+    terms: 'By registering on Playnixclub, you agree to: 1. Be at least 18 years of age. 2. Use a single account. 3. Refrain from abusive or cooperative play. 4. Comply with standard verification requests. Violating these terms may result in account termination.',
     privacy: 'Your privacy is paramount. We store your data securely and use it only to facilitate deposits, withdrawals, and gameplay. We do not sell or share your personal details with third-party advertising companies. Standard SSL encryption is active.'
   }
 
@@ -2163,7 +2163,7 @@ function HelpSupport() {
           <MessageCircle size={18} className="text-emerald-500" /><span className="text-sm font-semibold text-slate-800">Live Chat</span><span className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Online</span>
         </button>
         <button className="w-full p-4 flex items-center gap-3 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer">
-          <Mail size={18} className="text-blue-500" /><span className="text-sm font-semibold text-slate-800">Email Support</span><span className="ml-auto text-xs text-slate-400">support@rrclub.com</span>
+          <Mail size={18} className="text-blue-500" /><span className="text-sm font-semibold text-slate-800">Email Support</span><span className="ml-auto text-xs text-slate-400">support@playnixclub.com</span>
         </button>
         <button className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer">
           <Phone size={18} className="text-orange-500" /><span className="text-sm font-semibold text-slate-800">Call Us</span><span className="ml-auto text-xs text-slate-400">+91 1800-XXX-XXXX</span>

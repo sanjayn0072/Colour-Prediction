@@ -25,7 +25,7 @@ export default function Support({ onNavigate }) {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello! I am your RRClub Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to RRClub!*`,
+      text: `Hello! I am your Playnixclub Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to Playnixclub!*`,
       timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
     }
   ])
@@ -91,7 +91,7 @@ export default function Support({ onNavigate }) {
         {
           id: 'welcome',
           sender: 'assistant',
-          text: `Hello! I am your RRClub Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to RRClub!*`,
+          text: `Hello! I am your Playnixclub Support Assistant. 🤖\n\nI can help you with questions about deposits, withdrawals, VIP club tiers, game rules, and tech shop purchases.\n\n*Note: I will only answer questions related to Playnixclub!*`,
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }
       ])

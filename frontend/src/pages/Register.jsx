@@ -204,7 +204,7 @@ export default function Register({ onNavigate }) {
             {step === 1 ? 'Create Account' : 'Verify Phone'}
           </h1>
           <p className="text-sm text-white/75 mt-1">
-            {step === 1 ? 'Join RRClub today' : `Enter the code sent to +91 ${form.phone}`}
+            {step === 1 ? 'Join Playnixclub today' : `Enter the code sent to +91 ${form.phone}`}
           </p>
         </div>
       </div>

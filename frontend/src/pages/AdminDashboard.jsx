@@ -143,9 +143,7 @@ export default function AdminDashboard({ onNavigate, onBack }) {
       
       if (!res.ok) throw new Error(data.error || 'Verification failed');
       
-      // Verification successful, we got an elevated admin token
-      localStorage.setItem('adminToken', data.token);
-      localStorage.setItem('token', data.token);
+      // Verification successful, we got an elevated admin token set via HttpOnly cookies
       setAdminToken(data.token);
       setAuthStatus('verified');
       

@@ -676,9 +676,9 @@ export const updateOrderStatus = async (req, res) => {
       // Credit amount back to target user's primary cash wallet balance
       await connection.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [refundAmount, order.user_id]);
 
-      // Record transaction ledger
+       // Record transaction ledger
       await connection.query(
-        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) VALUES (?, ?, ?, "deposit", "product_orders", ?, ?, ?, ?)',
+        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) VALUES (?, ?, ?, "Refund", "product_orders", ?, ?, ?, ?)',
         [
           order.user_id,
           wallet.id,
@@ -686,7 +686,7 @@ export const updateOrderStatus = async (req, res) => {
           id,
           balanceBefore,
           balanceAfter,
-          `Refund for rejected order #${id}`
+          `Refund for Rejected Order #${id} - Credited by Admin`
         ]
       );
     }

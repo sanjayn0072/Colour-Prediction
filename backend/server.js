@@ -65,6 +65,7 @@ import * as withdrawalController from './controllers/withdrawalController.js';
 import * as adminAuthController from './controllers/adminAuthController.js';
 import depositRoutes from './routes/depositRoutes.js';
 import * as depositController from './controllers/depositController.js';
+import * as couponController from './controllers/couponController.js';
 import { startBehavioralRewardsWorker } from './utils/rewardsWorker.js';
 import { logSuspiciousNameChange } from './utils/riskEngine.js';
 import { sendSuspiciousNameChangeAlert } from './utils/telegram.js';
@@ -112,6 +113,39 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// Recursive XSS sanitation helper
+const sanitizeInput = (val) => {
+  if (typeof val === 'string') {
+    return val
+      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
+      .replace(/<\/?[^>]+(>|$)/g, '')
+      .replace(/javascript:/gi, '')
+      .trim();
+  }
+  if (Array.isArray(val)) {
+    return val.map(sanitizeInput);
+  }
+  if (typeof val === 'object' && val !== null) {
+    const clean = {};
+    for (const key in val) {
+      if (Object.prototype.hasOwnProperty.call(val, key)) {
+        clean[key] = sanitizeInput(val[key]);
+      }
+    }
+    return clean;
+  }
+  return val;
+};
+
+const xssSanitizer = (req, res, next) => {
+  if (req.body) req.body = sanitizeInput(req.body);
+  if (req.query) req.query = sanitizeInput(req.query);
+  if (req.params) req.params = sanitizeInput(req.params);
+  next();
+};
+
+app.use(xssSanitizer);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Import configurable rate limiters from rateLimitMiddleware
@@ -132,6 +166,7 @@ app.post('/api/auth/verify-email', authRateLimiter, validate(verifyEmailSchema),
 app.post('/api/auth/forgot-password', authRateLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 app.post('/api/auth/reset-password', authRateLimiter, validate(resetPasswordSchema), authController.resetPassword);
 app.post('/api/auth/login', authRateLimiter, validate(loginSchema), authController.login);
+app.post('/api/auth/logout', authController.logout);
 app.get('/api/auth/referrals', protect, authenticatedActionLimiter, authController.getReferralSignups);
 app.post('/api/auth/firebase-login', authRateLimiter, validate(firebaseLoginSchema), authController.firebaseLogin);
 app.get('/api/auth/profile', protect, authenticatedActionLimiter, authController.getProfile);
@@ -257,9 +292,10 @@ app.get('/api/admin/orders', protect, authenticatedActionLimiter, checkRole(['su
 app.put('/api/admin/orders/:id/status', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateOrderStatusSchema), adminController.updateOrderStatus);
 app.get('/api/admin/complaints', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getAdminComplaints);
 app.put('/api/admin/complaints/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateComplaintStatusSchema), adminController.updateComplaintStatus);
-app.get('/api/admin/coupons', protect, authenticatedActionLimiter, checkRole(['super_admin']), adminController.getCoupons);
-app.post('/api/admin/coupons', protect, authenticatedActionLimiter, checkRole(['super_admin']), validate(createCouponSchema), adminController.createCoupon);
-app.delete('/api/admin/coupons/:id', protect, authenticatedActionLimiter, checkRole(['super_admin']), adminController.deleteCoupon);
+app.get('/api/admin/coupons', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), couponController.getCoupons);
+app.post('/api/admin/coupons', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(createCouponSchema), couponController.createCoupon);
+app.put('/api/admin/coupons/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(createCouponSchema), couponController.updateCoupon);
+app.delete('/api/admin/coupons/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), couponController.deleteCoupon);
 app.get('/api/admin/spin-configs', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getSpinConfigs);
 app.put('/api/admin/spin-configs/:id', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), validate(updateSpinConfigSchema), adminController.updateSpinConfig);
 app.get('/api/admin/games', protect, authenticatedActionLimiter, checkRole(['super_admin', 'admin']), adminController.getGames);
@@ -283,8 +319,24 @@ gameController.initializeGameLoop(io);
 
 // Socket.io JWT Authentication Middleware
 io.use(async (socket, next) => {
-  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
-  if (!token) {
+  let cookieToken = null;
+  const cookieHeader = socket.handshake.headers.cookie;
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+      const parts = cookie.split('=');
+      const key = parts[0]?.trim();
+      const value = parts.slice(1).join('=')?.trim();
+      if (key) acc[key] = decodeURIComponent(value);
+      return acc;
+    }, {});
+    cookieToken = cookies.token;
+  }
+
+  const token = socket.handshake.auth?.token || 
+                cookieToken || 
+                socket.handshake.headers?.authorization?.split(' ')[1];
+
+  if (!token || token === 'null' || token === 'undefined') {
     return next(new Error('Authentication error: Token missing'));
   }
   try {

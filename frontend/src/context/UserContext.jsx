@@ -1,14 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react'
 import { getVipLevel, VIP_TIERS } from '../utils/vipTiers'
-import earbudsImg from '../assets/earbuds.png'
-import earbudsAltImg from '../assets/earbuds_alt.png'
-import smartwatchImg from '../assets/smartwatch.png'
-import smartwatchAltImg from '../assets/smartwatch_alt.png'
-import keyboardImg from '../assets/keyboard.png'
-import keyboardAltImg from '../assets/keyboard_alt.png'
-import mouseImg from '../assets/mouse.png'
-import mouseAltImg from '../assets/mouse_alt.png'
+import earbudsImg from '../assets/earbuds.webp'
+import earbudsAltImg from '../assets/earbuds_alt.webp'
+import smartwatchImg from '../assets/smartwatch.webp'
+import smartwatchAltImg from '../assets/smartwatch_alt.webp'
+import keyboardImg from '../assets/keyboard.webp'
+import keyboardAltImg from '../assets/keyboard_alt.webp'
+import mouseImg from '../assets/mouse.webp'
+import mouseAltImg from '../assets/mouse_alt.webp'
 
 const UserContext = createContext(null)
 
@@ -249,17 +249,29 @@ const imageMap = {
   'mouse': mouseImg,
   'mouseAlt': mouseAltImg,
   '/src/assets/earbuds.png': earbudsImg,
+  '/src/assets/earbuds.webp': earbudsImg,
   '/src/assets/earbuds_alt.png': earbudsAltImg,
+  '/src/assets/earbuds_alt.webp': earbudsAltImg,
   '/src/assets/smartwatch.png': smartwatchImg,
+  '/src/assets/smartwatch.webp': smartwatchImg,
   '/src/assets/smartwatch_alt.png': smartwatchAltImg,
+  '/src/assets/smartwatch_alt.webp': smartwatchAltImg,
   '/src/assets/keyboard.png': keyboardImg,
+  '/src/assets/keyboard.webp': keyboardImg,
   '/src/assets/keyboard_alt.png': keyboardAltImg,
+  '/src/assets/keyboard_alt.webp': keyboardAltImg,
   '/src/assets/mouse.png': mouseImg,
+  '/src/assets/mouse.webp': mouseImg,
   '/src/assets/mouse_alt.png': mouseAltImg,
+  '/src/assets/mouse_alt.webp': mouseAltImg,
   '/src/assets/aurapods.png': earbudsImg,
+  '/src/assets/aurapods.webp': earbudsImg,
   '/src/assets/chronos.png': smartwatchImg,
+  '/src/assets/chronos.webp': smartwatchImg,
   '/src/assets/apex.png': keyboardImg,
+  '/src/assets/apex.webp': keyboardImg,
   '/src/assets/viper.png': mouseImg,
+  '/src/assets/viper.webp': mouseImg,
 };
 
 export const resolveImg = (imgStr) => {
@@ -276,6 +288,8 @@ const mapProduct = (p) => {
   return {
     ...p,
     id: p._id || p.id,
+    price: Math.round(parseFloat(p.price) || 0),
+    original: p.original ? Math.round(parseFloat(p.original)) : p.original,
     image: resolveImg(p.image),
     images: p.images ? p.images.map(resolveImg) : [resolveImg(p.image)]
   };
@@ -323,14 +337,12 @@ export function UserProvider({ children }) {
 
   const addBanner = async (b) => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const res = await fetch(`${API_BASE}/api/banners`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(b)
       })
       if (res.ok) {
@@ -344,14 +356,12 @@ export function UserProvider({ children }) {
 
   const updateBanner = async (id, updatedFields) => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const res = await fetch(`${API_BASE}/api/banners/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(updatedFields)
       })
       if (res.ok) {
@@ -365,13 +375,12 @@ export function UserProvider({ children }) {
 
   const deleteBanner = async (id) => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const res = await fetch(`${API_BASE}/api/banners/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers
       })
       if (res.ok) {
         setBanners(prev => prev.filter(b => b.id !== id))
@@ -383,9 +392,10 @@ export function UserProvider({ children }) {
 
   const addProduct = async (p) => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
-      const imagesList = ['/src/assets/earbuds.png', '/src/assets/smartwatch.png', '/src/assets/keyboard.png', '/src/assets/mouse.png']
+      const imagesList = ['/src/assets/earbuds.webp', '/src/assets/smartwatch.webp', '/src/assets/keyboard.webp', '/src/assets/mouse.webp']
       const randomImg = imagesList[Math.floor(Math.random() * imagesList.length)]
       const productPayload = {
         ...p,
@@ -397,10 +407,7 @@ export function UserProvider({ children }) {
       }
       const res = await fetch(`${API_BASE}/api/products`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(productPayload)
       })
       if (res.ok) {
@@ -414,14 +421,12 @@ export function UserProvider({ children }) {
 
   const updateProduct = async (id, updatedFields) => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const res = await fetch(`${API_BASE}/api/products/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(updatedFields)
       })
       if (res.ok) {
@@ -435,13 +440,12 @@ export function UserProvider({ children }) {
 
   const deleteProduct = async (id) => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const res = await fetch(`${API_BASE}/api/admin/products/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers
       })
       if (res.ok) {
         setProducts(prev => prev.filter(p => p.id !== id))
@@ -460,27 +464,18 @@ export function UserProvider({ children }) {
 
   const fetchUserHistory = async () => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    const headers = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
     try {
       const [profileRes, txRes, betsRes, withdrawRes, depositRes, couponRes] = await Promise.all([
-        fetch(`${API_BASE}/api/auth/profile`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/api/wallet/transactions`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/api/games/my-bets`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/api/withdraw/history`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/api/payment/history`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/api/wallet/my-coupons`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }).catch(err => {
+        fetch(`${API_BASE}/api/auth/profile`, { headers }),
+        fetch(`${API_BASE}/api/wallet/transactions`, { headers }),
+        fetch(`${API_BASE}/api/games/my-bets`, { headers }),
+        fetch(`${API_BASE}/api/withdraw/history`, { headers }),
+        fetch(`${API_BASE}/api/payment/history`, { headers }),
+        fetch(`${API_BASE}/api/wallet/my-coupons`, { headers }).catch(err => {
           console.warn('[Coupons Fetch Network Error]:', err);
           return { ok: false, json: async () => [] };
         })
@@ -559,10 +554,12 @@ export function UserProvider({ children }) {
       }
       
       let adjustments = []
+      let refunds = []
       if (txRes.ok) {
         const txData = await txRes.json()
         setWalletTransactions(txData || [])
         adjustments = (txData || []).filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:')))
+        refunds = (txData || []).filter(t => t.type === 'Refund' || t.type === 'Order_Rejection')
       }
 
       if (depositRes.ok) {
@@ -604,6 +601,26 @@ export function UserProvider({ children }) {
               timestamp: new Date(t.createdAt).getTime()
             })
           }
+        })
+
+        // Append refunds as deposits with Refund method
+        refunds.forEach(t => {
+          const amt = parseFloat(t.amount)
+          deposits.push({
+            id: `RFD-${t.id}`,
+            dbId: t.id,
+            amount: amt,
+            bonus: 0,
+            status: 'Completed',
+            appealStatus: null,
+            appealAdminNote: null,
+            date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+            method: 'Refund',
+            voucher: null,
+            isAdjustment: true,
+            adminNotes: t.description || 'Order Refund',
+            timestamp: new Date(t.createdAt).getTime()
+          })
         })
 
         deposits.sort((a, b) => b.timestamp - a.timestamp)
@@ -801,11 +818,13 @@ export function UserProvider({ children }) {
   }
 
   const fetchWinLossStats = async () => {
+    if (!user) return null
     const token = localStorage.getItem('token')
-    if (!token) return null
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const response = await fetch(`${API_BASE}/api/games/win-loss-stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers
       })
       if (!response.ok) throw new Error('Failed to fetch win loss stats')
       return await response.json()
@@ -845,6 +864,9 @@ export function UserProvider({ children }) {
   }
 
   const logout = () => {
+    fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' }).catch(err => {
+      console.error('Logout request failed:', err)
+    })
     setUser(null)
     localStorage.removeItem('token')
     setRealBalance(0)
@@ -858,12 +880,7 @@ export function UserProvider({ children }) {
   }
 
   useEffect(() => {
-    const checkTokenAndFetch = async () => {
-      const token = localStorage.getItem('token')
-      if (!token) return
-      await fetchUserHistory()
-    }
-    checkTokenAndFetch()
+    fetchUserHistory()
   }, [])
 
   // Compute total balance
@@ -1116,15 +1133,14 @@ export function UserProvider({ children }) {
   }
 
   const claimFreeVoucher = async (code) => {
+    if (!user) return { success: false, error: 'Unauthorized' }
     const token = localStorage.getItem('token')
-    if (!token) return { success: false, error: 'Unauthorized' }
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     try {
       const res = await fetch(`${API_BASE}/api/payment/coupons/claim`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify({ couponCode: code })
       })
       const data = await res.json()

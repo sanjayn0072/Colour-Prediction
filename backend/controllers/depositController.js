@@ -62,6 +62,25 @@ export const getCouponSplit = (code, rewardAmount, depositAmount = 0) => {
   };
 };
 
+export const releaseCouponForDeposit = async (db, depositId) => {
+  const [mapping] = await db.query(
+    'SELECT user_coupon_id FROM deposit_coupons WHERE deposit_id = ? AND status = "LOCKED" FOR UPDATE',
+    [depositId]
+  );
+  if (mapping && mapping.length > 0) {
+    const userCouponId = mapping[0].user_coupon_id;
+    await db.query(
+      'UPDATE deposit_coupons SET status = "RELEASED" WHERE deposit_id = ?',
+      [depositId]
+    );
+    await db.query(
+      'UPDATE user_coupons SET status = "AVAILABLE" WHERE id = ?',
+      [userCouponId]
+    );
+    logger.info(`[Coupon Lifecycle]: Released coupon ID ${userCouponId} for deposit ID ${depositId}`);
+  }
+};
+
 /**
  * Phase 1 & Phase 3: Outbound Deposit Execution Engine with Unique Decimals
  * POST /api/payment/create
@@ -83,6 +102,8 @@ export const createDeposit = async (req, res) => {
   let userToken;
   let webhookUrl;
   let redirectUrl;
+  let depositId = null;
+  let userCouponId = null;
 
   const connection = await pool.getConnection();
   try {
@@ -132,13 +153,15 @@ export const createDeposit = async (req, res) => {
         'UPDATE deposits SET status = "failed" WHERE id = ? AND status = "pending"',
         [existing.id]
       );
+      // Release coupon associated with this failed orphaned deposit
+      await releaseCouponForDeposit(connection, existing.id);
       // Fall through to create a brand new deposit order below
     }
 
     // 2. Validate coupon code if applied
     if (couponCode) {
       const [validCoupons] = await connection.query(
-        'SELECT uc.id, c.min_deposit_required ' +
+        'SELECT uc.id, c.id as couponId, c.min_deposit_required, c.monthly_limit ' +
         'FROM user_coupons uc ' +
         'JOIN coupons c ON uc.coupon_id = c.id ' +
         'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() LIMIT 1 FOR UPDATE',
@@ -149,10 +172,28 @@ export const createDeposit = async (req, res) => {
         return res.status(400).json({ error: 'This coupon code is invalid, expired, or already used.' });
       }
       const coupon = validCoupons[0];
+
+      // Enforce monthly claims limit in current calendar month
+      const [usageCheck] = await connection.query(
+        'SELECT COUNT(*) as monthlyClaims FROM user_coupons WHERE coupon_id = ? AND status = "USED" AND MONTH(allocated_at) = MONTH(NOW()) AND YEAR(allocated_at) = YEAR(NOW())',
+        [coupon.couponId]
+      );
+      const monthlyClaims = usageCheck[0]?.monthlyClaims || 0;
+      if (monthlyClaims >= coupon.monthly_limit) {
+        await connection.rollback();
+        return res.status(400).json({ error: 'This coupon has reached its monthly claim limit.' });
+      }
+
       if (baseAmount < parseFloat(coupon.min_deposit_required)) {
         await connection.rollback();
         return res.status(400).json({ error: `This coupon requires a minimum deposit of ₹${coupon.min_deposit_required}.` });
       }
+      userCouponId = coupon.id;
+      // Lock the user coupon immediately
+      await connection.query(
+        'UPDATE user_coupons SET status = "LOCKED" WHERE id = ?',
+        [userCouponId]
+      );
     }
 
     // 3. Fetch Pay0 user token from database
@@ -195,10 +236,18 @@ export const createDeposit = async (req, res) => {
     );
     const paymentMethodId = paymentMethods[0]?.id || null;
 
-    await connection.query(
+    const [insertResult] = await connection.query(
       'INSERT INTO deposits (user_id, payment_method_id, amount, transaction_id, status, coupon_code) VALUES (?, ?, ?, ?, "pending", ?)',
       [req.user.id, paymentMethodId, uniqueAmount, orderId, couponCode ? couponCode.trim().toUpperCase() : null]
     );
+    depositId = insertResult.insertId;
+
+    if (couponCode && userCouponId) {
+      await connection.query(
+        'INSERT INTO deposit_coupons (deposit_id, user_coupon_id, status) VALUES (?, ?, "LOCKED")',
+        [depositId, userCouponId]
+      );
+    }
 
     // 6. Fetch webhook config URLs
     const [webhookConfigs] = await connection.query(
@@ -224,7 +273,7 @@ export const createDeposit = async (req, res) => {
   try {
     const formData = new URLSearchParams();
     formData.append('customer_mobile', req.user.phone || '9999999999');
-    formData.append('customer_name', req.user.name || 'RRClub Player');
+    formData.append('customer_name', req.user.name || 'Playnixclub Player');
     formData.append('user_token', userToken);
     formData.append('amount', String(uniqueAmount));
     formData.append('order_id', orderId);
@@ -257,14 +306,20 @@ export const createDeposit = async (req, res) => {
       }
     }
 
-    // If order creation returned status false, mark deposit as failed
+    // If order creation returned status false, mark deposit as failed and release coupon
     logger.error(`[Pay0 Gateway Error]: ${JSON.stringify(response.data)}`);
     await pool.query('UPDATE deposits SET status = "failed" WHERE transaction_id = ?', [orderId]);
+    if (depositId) {
+      await releaseCouponForDeposit(pool, depositId);
+    }
     return res.status(400).json({ error: response.data?.message || 'Failed to create payment order from gateway.' });
 
   } catch (err) {
     logger.error(err, 'Failed to connect to Pay0 Gateway');
     await pool.query('UPDATE deposits SET status = "failed" WHERE transaction_id = ?', [orderId]);
+    if (depositId) {
+      await releaseCouponForDeposit(pool, depositId);
+    }
     return res.status(500).json({ error: 'Failed to initialize deposit order due to gateway connection issues.' });
   }
 };
@@ -376,9 +431,10 @@ export const pay0Webhook = async (req, res) => {
           'SELECT uc.id, c.reward_amount, c.min_deposit_required ' +
           'FROM user_coupons uc ' +
           'JOIN coupons c ON uc.coupon_id = c.id ' +
-          'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+          'JOIN deposit_coupons dc ON dc.user_coupon_id = uc.id ' +
+          'WHERE dc.deposit_id = ? AND uc.user_id = ? AND c.code = ? AND dc.status = "LOCKED" ' +
           'LIMIT 1 FOR UPDATE',
-          [userId, deposit.coupon_code]
+          [deposit.id, userId, deposit.coupon_code]
         );
 
         if (userCoupons && userCoupons.length > 0) {
@@ -410,11 +466,15 @@ export const pay0Webhook = async (req, res) => {
         [deposit.id]
       );
 
-      // Mark user coupon as USED if successfully verified
+      // Mark user coupon as USED and deposit_coupon as CONSUMED if successfully verified
       if (userCouponId) {
         await connection.query(
           'UPDATE user_coupons SET status = "USED" WHERE id = ?',
           [userCouponId]
+        );
+        await connection.query(
+          'UPDATE deposit_coupons SET status = "CONSUMED" WHERE deposit_id = ? AND user_coupon_id = ?',
+          [deposit.id, userCouponId]
         );
       }
 
@@ -513,14 +573,23 @@ export const pay0Webhook = async (req, res) => {
 export const getDepositHistory = async (req, res) => {
   try {
     // 1. Automatic 3-Day (72h) pending deposit expiry query hook
-    await query(
-      'UPDATE deposits d ' +
+    const expiredPending = await query(
+      'SELECT d.id FROM deposits d ' +
       'LEFT JOIN deposit_appeals a ON d.id = a.deposit_id ' +
-      'SET d.status = "failed" ' +
       'WHERE d.status = "pending" ' +
       'AND d.created_at < DATE_SUB(NOW(), INTERVAL 72 HOUR) ' +
       'AND a.id IS NULL'
     );
+    if (expiredPending && expiredPending.length > 0) {
+      const expiredIds = expiredPending.map(d => d.id);
+      await query(
+        'UPDATE deposits SET status = "failed" WHERE id IN (?)',
+        [expiredIds]
+      );
+      for (const depositId of expiredIds) {
+        await releaseCouponForDeposit(pool, depositId);
+      }
+    }
 
     // 2. Query deposits joined with the deposit appeals
     const rows = await query(
@@ -553,30 +622,64 @@ export const submitAppeal = async (req, res) => {
     return res.status(400).json({ error: 'Payment screenshot file upload is required.' });
   }
 
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+
+    if (depositId) {
+      const parsedDepId = parseInt(depositId, 10);
+      
+      // 1. Lock associated deposit row to prevent race conditions
+      const [deposits] = await connection.query(
+        'SELECT id FROM deposits WHERE id = ? FOR UPDATE',
+        [parsedDepId]
+      );
+      
+      if (!deposits || deposits.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'Associated deposit record not found.' });
+      }
+
+      // 2. Lock check if appeal already exists for this depositId (any status)
+      const [existingAppealForDeposit] = await connection.query(
+        'SELECT id FROM deposit_appeals WHERE deposit_id = ? LIMIT 1 FOR UPDATE',
+        [parsedDepId]
+      );
+      
+      if (existingAppealForDeposit && existingAppealForDeposit.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: "An appeal has already been processed or is pending for this deposit." });
+      }
+    }
+
     // Check if UTR is already registered under appeals
-    const [existingAppeal] = await pool.query(
-      'SELECT id FROM deposit_appeals WHERE utr_number = ? LIMIT 1',
+    const [existingAppeal] = await connection.query(
+      'SELECT id FROM deposit_appeals WHERE utr_number = ? LIMIT 1 FOR UPDATE',
       [utr]
     );
 
     if (existingAppeal && existingAppeal.length > 0) {
+      await connection.rollback();
       return res.status(400).json({ error: 'This UTR number has already been submitted for review.' });
     }
 
     const screenshotUrl = `/uploads/screenshots/${req.file.filename}`;
 
-    await pool.query(
+    await connection.query(
       'INSERT INTO deposit_appeals (user_id, deposit_id, utr_number, screenshot_url, whatsapp_number, status) VALUES (?, ?, ?, ?, ?, "pending")',
       [req.user.id, depositId ? parseInt(depositId, 10) : null, utr.trim(), screenshotUrl, whatsapp.trim()]
     );
 
+    await connection.commit();
     logger.info(`[Deposit Appeal]: Submitted by User ${req.user.id} for UTR ${utr}`);
     return res.json({ success: true, message: 'Appeal submitted successfully. Our billing team will verify it shortly.' });
 
   } catch (err) {
+    if (connection) await connection.rollback();
     logger.error(err, 'Failed to submit payment appeal');
     return res.status(500).json({ error: 'Failed to record payment appeal due to database errors.' });
+  } finally {
+    connection.release();
   }
 };
 
@@ -685,9 +788,10 @@ export const resolveAppeal = async (req, res) => {
           'SELECT uc.id, c.reward_amount, c.min_deposit_required ' +
           'FROM user_coupons uc ' +
           'JOIN coupons c ON uc.coupon_id = c.id ' +
-          'WHERE uc.user_id = ? AND c.code = ? AND uc.status = "AVAILABLE" AND uc.expires_at > NOW() ' +
+          'JOIN deposit_coupons dc ON dc.user_coupon_id = uc.id ' +
+          'WHERE dc.deposit_id = ? AND uc.user_id = ? AND c.code = ? AND dc.status = "LOCKED" ' +
           'LIMIT 1 FOR UPDATE',
-          [userId, deposit.coupon_code]
+          [depositId, userId, deposit.coupon_code]
         );
 
         if (userCoupons && userCoupons.length > 0) {
@@ -719,11 +823,15 @@ export const resolveAppeal = async (req, res) => {
         [req.user.id, deposit.id]
       );
 
-      // Mark user coupon as USED if successfully verified
+      // Mark user coupon as USED and deposit_coupon as CONSUMED if successfully verified
       if (userCouponId) {
         await connection.query(
           'UPDATE user_coupons SET status = "USED" WHERE id = ?',
           [userCouponId]
+        );
+        await connection.query(
+          'UPDATE deposit_coupons SET status = "CONSUMED" WHERE deposit_id = ? AND user_coupon_id = ?',
+          [depositId, userCouponId]
         );
       }
 
@@ -777,6 +885,8 @@ export const resolveAppeal = async (req, res) => {
             'UPDATE deposits SET status = "failed", processed_by = ?, processed_at = NOW() WHERE id = ?',
             [req.user.id, depositId]
           );
+          // Release coupon back to user inventory
+          await releaseCouponForDeposit(connection, depositId);
         }
       }
     }
