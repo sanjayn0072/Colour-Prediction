@@ -22,9 +22,17 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
   // ── Create Pay0 Order on Mount ──
 
   useEffect(() => {
-
     const abortController = new AbortController()
     let active = true
+
+    const timeoutId = setTimeout(() => {
+      if (active) {
+        abortController.abort()
+        setError("Gateway response delayed. Please retry your deposit.")
+        setLoading(false)
+      }
+    }, 5000)
+
     const createOrder = async () => {
       setLoading(true)
       setError(null)
@@ -43,6 +51,7 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
             couponCode: voucher ? voucher.id : null
           })
         })
+        clearTimeout(timeoutId)
         if (!active) return
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
@@ -65,6 +74,7 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
           throw new Error(data.error || data.message || 'Failed to create payment order')
         }
       } catch (err) {
+        clearTimeout(timeoutId)
         if (err.name === 'AbortError') return
         if (active) {
           setError(translateError(err.message))
@@ -75,6 +85,7 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
     createOrder()
     return () => { 
       active = false 
+      clearTimeout(timeoutId)
       abortController.abort()
     }
   }, [amount, retryCount])
@@ -209,7 +220,7 @@ export default function DepositGateway({ depositData, onBack, onNavigate }) {
               transition: 'all 0.2s'
             }}
           >
-            Retry
+            Retry Payment
           </button>
         </div>
       </div>

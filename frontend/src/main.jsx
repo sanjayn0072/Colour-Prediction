@@ -22,12 +22,18 @@ createRoot(document.getElementById('root')).render(
 
 // Fade out and remove startup splash loading screen
 const removeSplash = () => {
+  const splash = document.getElementById('splash-screen');
+  if (!splash) return;
+
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (!isStandalone) {
+    splash.remove();
+    return;
+  }
+
   setTimeout(() => {
-    const splash = document.getElementById('splash-screen');
-    if (splash) {
-      splash.style.opacity = '0';
-      setTimeout(() => splash.remove(), 500);
-    }
+    splash.style.opacity = '0';
+    setTimeout(() => splash.remove(), 500);
   }, 1500);
 };
 

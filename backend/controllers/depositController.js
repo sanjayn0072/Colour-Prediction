@@ -86,6 +86,7 @@ export const releaseCouponForDeposit = async (db, depositId) => {
  * POST /api/payment/create
  */
 export const createDeposit = async (req, res) => {
+  const startTime = Date.now();
   const { amount: targetBaseAmount, couponCode } = req.body;
 
   if (!targetBaseAmount || isNaN(targetBaseAmount)) {
@@ -280,7 +281,9 @@ export const createDeposit = async (req, res) => {
     formData.append('redirect_url', redirectUrl);
     formData.append('webhook_url', webhookUrl);
 
-    logger.info(`[Pay0 Outbound]: Sending request to create order ${orderId} for ₹${uniqueAmount}`);
+    const elapsed = Date.now() - startTime;
+    const remainingTimeout = Math.max(1000, 5000 - elapsed);
+    logger.info(`[Pay0 Outbound]: Sending request to create order ${orderId} for ₹${uniqueAmount} (remaining timeout: ${remainingTimeout}ms)`);
 
     const response = await axios.post('https://pay0.shop/api/create-order', formData, {
       headers: {
@@ -289,7 +292,7 @@ export const createDeposit = async (req, res) => {
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9'
       },
-      timeout: 10000
+      timeout: remainingTimeout
     });
 
     if (response.data && response.data.status === true) {
@@ -315,12 +318,17 @@ export const createDeposit = async (req, res) => {
     return res.status(400).json({ error: response.data?.message || 'Failed to create payment order from gateway.' });
 
   } catch (err) {
-    logger.error(err, 'Failed to connect to Pay0 Gateway');
+    const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout') || (Date.now() - startTime >= 5000);
+    if (isTimeout) {
+      logger.error(`[Pay0 Gateway Timeout]: Outbound creation timed out after 5s threshold for order ${orderId}`);
+    } else {
+      logger.error(err, 'Failed to connect to Pay0 Gateway');
+    }
     await pool.query('UPDATE deposits SET status = "failed" WHERE transaction_id = ?', [orderId]);
     if (depositId) {
       await releaseCouponForDeposit(pool, depositId);
     }
-    return res.status(500).json({ error: 'Failed to initialize deposit order due to gateway connection issues.' });
+    return res.status(504).json({ error: 'Gateway response delayed. Please retry your deposit.' });
   }
 };
 

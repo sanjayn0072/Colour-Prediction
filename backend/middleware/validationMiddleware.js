@@ -398,11 +398,10 @@ export const arcadeBetSchema = z.object({
 
 export const profileUpdateSchema = z.object({
   body: z.object({
-    name: z.undefined({
-      invalid_type_error: "Full Name is immutable and cannot be updated."
-    }),
-    avatar: z.string().trim().optional(),
-    email: z.string().trim().email('Invalid email address format').optional().nullable().or(z.literal('')),
-    location: z.string().trim().optional().nullable()
-  })
-});
+    name: z.union([z.string().trim().min(1, 'Name cannot be empty').max(100), z.undefined()]).optional(),
+    avatar: z.union([z.string().trim(), z.undefined()]).optional(),
+    email: z.union([z.string().trim().email('Invalid email address format'), z.literal(''), z.null(), z.undefined()]).optional(),
+    location: z.union([z.string().trim(), z.null(), z.undefined()]).optional()
+  }).passthrough()
+}).passthrough();
+

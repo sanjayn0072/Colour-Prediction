@@ -58,14 +58,26 @@ export const sendOtp = async (req, res) => {
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
+    // Clean up any existing registration OTPs for this phone to prevent index conflicts or accumulation
+    await query(
+      'DELETE FROM otp_tokens WHERE email = ? AND type = "REGISTER"',
+      [cleanPhone]
+    );
+
     // CRITICAL: Ensure the database write finishes cleanly BEFORE SMS dispatch fires
     await query(
       'INSERT INTO otp_tokens (email, otp_hash, type, expires_at) VALUES (?, ?, "REGISTER", DATE_ADD(NOW(), INTERVAL 10 MINUTE))',
       [cleanPhone, otpHash]
     );
 
-    // Call dynamic smsService
-    const smsResult = await sendSMSVerification(cleanPhone, otp);
+    // Call dynamic smsService in isolated try-catch block to prevent thread hang or crash
+    let smsResult;
+    try {
+      smsResult = await sendSMSVerification(cleanPhone, otp);
+    } catch (smsErr) {
+      logger.error(smsErr, `[SMS] Isolated gateway execution failure for ${cleanPhone}`);
+      smsResult = { success: false, error: smsErr.message || 'SMS Gateway Error' };
+    }
 
     // If SMS gateway fails, return 502 — fail loudly in production
     if (!smsResult.success) {
@@ -428,7 +440,7 @@ export const getProfile = async (req, res) => {
         resetTime,
         ordersCount: parseInt(stats.orders_count || 0, 10),
         gamesPlayed: parseInt(stats.games_played || 0, 10),
-        totalWinnings: parseFloat(stats.total_winnings_won || 0)
+        totalWinnings: parseFloat(stats.total_winnings_won) || 0
       }
     });
   } catch (err) {
@@ -470,13 +482,26 @@ export const forgotPassword = async (req, res) => {
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
+    // Clean up any existing reset OTPs for this phone/email to prevent index conflicts or accumulation
+    await query(
+      'DELETE FROM otp_tokens WHERE email = ? AND type = "RESET_PASSWORD"',
+      [phone]
+    );
+
     // CRITICAL: Ensure the database write finishes cleanly BEFORE SMS dispatch fires
     await query(
       'INSERT INTO otp_tokens (email, otp_hash, type, expires_at) VALUES (?, ?, "RESET_PASSWORD", DATE_ADD(NOW(), INTERVAL 10 MINUTE))',
       [phone, otpHash]
     );
 
-    const smsResult = await sendSMSVerification(phone, otp);
+    // Call dynamic smsService in isolated try-catch block to prevent thread hang or crash
+    let smsResult;
+    try {
+      smsResult = await sendSMSVerification(phone, otp);
+    } catch (smsErr) {
+      logger.error(smsErr, `[SMS] Isolated gateway execution failure for ${phone} in forgotPassword`);
+      smsResult = { success: false, error: smsErr.message || 'SMS Gateway Error' };
+    }
 
     // If SMS gateway fails, return 502 — fail loudly in production
     if (!smsResult.success) {

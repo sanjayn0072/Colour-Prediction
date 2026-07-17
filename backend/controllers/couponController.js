@@ -6,12 +6,16 @@ import { createNotification } from '../utils/notifier.js';
 export const getCoupons = async (req, res) => {
   try {
     const coupons = await query(
-      'SELECT id, code, discount_type as discountType, ' +
-      'COALESCE(NULLIF(value, 0), reward_amount) as value, ' +
-      'COALESCE(NULLIF(min_deposit, 0), min_deposit_required) as minDeposit, ' +
-      'max_uses as maxUses, used_count as usedCount, monthly_limit as monthlyLimit, ' +
-      'validity_days as validityDays, ' +
-      'expires_at as expiresAt, created_at as createdAt FROM coupons ORDER BY created_at DESC'
+      'SELECT id, code, ' +
+      'discount_type as discountType, discount_type as discount_type, ' +
+      'COALESCE(NULLIF(value, 0), reward_amount) as value, COALESCE(NULLIF(value, 0), reward_amount) as discount_value, ' +
+      'COALESCE(NULLIF(min_deposit, 0), min_deposit_required) as minDeposit, COALESCE(NULLIF(min_deposit, 0), min_deposit_required) as min_deposit_amount, ' +
+      'max_uses as maxUses, max_uses as usage_limit, ' +
+      'used_count as usedCount, used_count as used_count, ' +
+      'monthly_limit as monthlyLimit, monthly_limit as monthly_limit, ' +
+      'validity_days as validityDays, validity_days as validity_days, ' +
+      'expires_at as expiresAt, expires_at as expire_date, ' +
+      'created_at as createdAt, created_at as created_at FROM coupons ORDER BY created_at DESC'
     );
     return res.json(coupons);
   } catch (err) {

@@ -29,6 +29,7 @@ export default function Login({ onLogin, onNavigate }) {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           phoneOrEmail: sanitizedEmail,
           password: password

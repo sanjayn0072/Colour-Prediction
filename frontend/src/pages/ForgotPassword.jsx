@@ -72,6 +72,7 @@ export default function ForgotPassword({ onNavigate }) {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           phoneOrEmail: cleanPhone
         })
@@ -165,6 +166,7 @@ export default function ForgotPassword({ onNavigate }) {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           email: cleanPhone,
           otp: code,

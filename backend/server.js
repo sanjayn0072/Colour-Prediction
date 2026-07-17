@@ -173,14 +173,21 @@ app.post('/api/auth/firebase-login', authRateLimiter, validate(firebaseLoginSche
 app.get('/api/auth/profile', protect, authenticatedActionLimiter, authController.getProfile);
 app.put('/api/auth/profile', protect, authenticatedActionLimiter, validate(profileUpdateSchema), async (req, res) => {
   const { name, avatar, email } = req.body;
+  let updatedName = req.user.name;
   try {
     // Double validation / Audit layer: intercept name bypass attempts
     if (name !== undefined && name !== null) {
       const attemptedName = String(name).trim();
       if (attemptedName !== req.user.name) {
-        await logSuspiciousNameChange(req.user.id, req.user.name, attemptedName);
-        await sendSuspiciousNameChangeAlert(req.user.id, req.user.name, req.user.phone, req.user.name, attemptedName);
-        return res.status(400).json({ error: 'Validation failed: Name is immutable.' });
+        if (req.user.role !== 'super_admin') {
+          await logSuspiciousNameChange(req.user.id, req.user.name, attemptedName);
+          await sendSuspiciousNameChangeAlert(req.user.id, req.user.name, req.user.phone, req.user.name, attemptedName);
+          return res.status(400).json({ error: 'Validation failed: Name is immutable.' });
+        } else {
+          await query('UPDATE users SET name = ? WHERE id = ?', [attemptedName, req.user.id]);
+          updatedName = attemptedName;
+          logger.info(`[Super Admin Name Update]: User ID ${req.user.id} updated name from "${req.user.name}" to "${attemptedName}"`);
+        }
       }
     }
 
@@ -203,7 +210,7 @@ app.put('/api/auth/profile', protect, authenticatedActionLimiter, validate(profi
         await query('UPDATE users SET email = ? WHERE id = ?', [placeholderEmail, req.user.id]);
       }
     }
-    return res.json({ success: true, avatar, email: email?.trim() });
+    return res.json({ success: true, name: updatedName, avatar, email: email?.trim() });
   } catch (err) {
     logger.error(err, 'Failed to update user profile');
     return res.status(500).json({ error: 'Failed to update profile' });

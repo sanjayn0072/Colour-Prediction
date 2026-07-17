@@ -156,8 +156,16 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
   const totalDeposit = user?.totalDeposits || 0
   
   const vipLevel = getVipLevel(totalDeposit)
-  const totalWinnings = Math.max(parseFloat(user?.totalWinnings || 0), betRecords.filter(r => r.amount > 0 && r.game !== 'VIP Reward' && r.game !== 'Referral Reward').reduce((acc, curr) => acc + curr.amount, 0))
-  const gamesPlayed = Math.max(parseInt(user?.gamesPlayed || 0, 10), betRecords.filter(r => r.amount < 0).length)
+  const totalWinningsRaw = Number(user?.totalWinnings || 0)
+  const totalWinnings = Math.max(
+    isNaN(totalWinningsRaw) ? 0 : totalWinningsRaw,
+    (betRecords || []).filter(r => r && r.amount > 0 && r.game !== 'VIP Reward' && r.game !== 'Referral Reward').reduce((acc, curr) => acc + (Number(curr?.amount) || 0), 0) || 0
+  ) || 0
+  const gamesPlayedRaw = parseInt(user?.gamesPlayed || 0, 10)
+  const gamesPlayed = Math.max(
+    isNaN(gamesPlayedRaw) ? 0 : gamesPlayedRaw,
+    (betRecords || []).filter(r => r && r.amount < 0).length
+  ) || 0
 
   const menuItems = [
     { id: 'vip', label: 'VIP Club & Privileges', icon: Award, color: 'text-amber-500 bg-amber-50' },
@@ -675,7 +683,7 @@ function SubPageContent({ page, orders, onNavigate, onSelectAvatarClick }) {
 }
 /* ── Account Details ── */
 function AccountDetails({ onSelectAvatarClick }) {
-  const { user, fetchUserHistory } = useUser()
+  const { user, setUser, fetchUserHistory } = useUser()
   const [toast, setToast] = useState(null)
   const [emailVal, setEmailVal] = useState(user?.email || '')
   const [nameVal, setNameVal] = useState(user?.name || '')
@@ -724,12 +732,19 @@ function AccountDetails({ onSelectAvatarClick }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
+          ...(user?.role === 'super_admin' ? { name: nameVal.trim() } : {}),
           email: emailVal.trim()
         })
       })
       const data = await response.json()
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update profile.')
+      }
+
+      // Immediately apply name update to React state so UI reflects change
+      if (data.name && user?.role === 'super_admin') {
+        setUser(prev => prev ? { ...prev, name: data.name } : prev)
+        setNameVal(data.name)
       }
 
       await fetchUserHistory()
@@ -796,10 +811,15 @@ function AccountDetails({ onSelectAvatarClick }) {
             <input
               type="text"
               value={nameVal}
-              disabled
-              readOnly
+              onChange={user?.role === 'super_admin' ? (e) => setNameVal(e.target.value) : undefined}
+              disabled={user?.role !== 'super_admin'}
+              readOnly={user?.role !== 'super_admin'}
               placeholder="Enter your full name"
-              className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed select-none focus:outline-none"
+              className={`w-full px-4 py-3 border rounded-xl text-xs font-semibold focus:outline-none transition-all ${
+                user?.role === 'super_admin'
+                  ? 'bg-slate-50 border-slate-200 text-slate-700 focus:ring-1 focus:ring-primary focus:border-primary'
+                  : 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed select-none'
+              }`}
             />
           </div>
 

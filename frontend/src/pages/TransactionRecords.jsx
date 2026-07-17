@@ -24,8 +24,21 @@ function copyToClipboard(text) {
   }
 }
 
+const safeDate = (val) => {
+  if (!val) return 'N/A';
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? 'N/A' : d.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
 export default function TransactionRecords({ onBack }) {
-  const { depositRecords, withdrawRecords, betRecords, walletTransactions = [], fetchUserHistory } = useUser()
+  const { depositRecords = [], withdrawRecords = [], betRecords = [], walletTransactions = [], fetchUserHistory } = useUser() || {}
   const [activeTab, setActiveTab] = useState('deposit')
   const [copiedId, setCopiedId] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
@@ -238,14 +251,14 @@ export default function TransactionRecords({ onBack }) {
       {/* List Content */}
       <div className="flex-1 px-4 py-4 space-y-3 bg-slate-50">
         {activeTab === 'deposit' ? (
-          depositRecords.length === 0 ? (
+          (depositRecords || []).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <svg className="w-12 h-12 mb-3 stroke-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
               <p className="text-xs font-bold text-slate-500">No deposit records found</p>
               <p className="text-[10px] text-slate-400 mt-1">Make a deposit to see your records here.</p>
             </div>
           ) : (
-            depositRecords.map((rec) => {
+            (depositRecords || []).map((rec) => {
               const showAppealForm = appealingId === rec.id
               const isAppealable = !rec.isAdjustment && rec.status.toLowerCase() === 'pending' && !rec.appealStatus && !rec.appealId && (Date.now() - rec.timestamp <= 7 * 24 * 60 * 60 * 1000)
 
@@ -469,14 +482,14 @@ export default function TransactionRecords({ onBack }) {
               )
             })
           )) : activeTab === 'withdraw' ? (
-          withdrawRecords.length === 0 ? (
+          (withdrawRecords || []).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <svg className="w-12 h-12 mb-3 stroke-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
               <p className="text-xs font-bold text-slate-500">No withdrawal records found</p>
               <p className="text-[10px] text-slate-400 mt-1">Your initiated withdrawals will appear here.</p>
             </div>
           ) : (
-            withdrawRecords.map((rec) => {
+            (withdrawRecords || []).map((rec) => {
               const isExpanded = expandedId === rec.id
               return (
                 <div 
@@ -639,10 +652,10 @@ export default function TransactionRecords({ onBack }) {
                                   Payment dispatched with verified UTR transaction registry entry.
                                 </p>
                                 {rec.paidAt && (
-                                  <p className="text-[9px] text-slate-400 font-medium font-sans mt-0.5">
-                                    Paid Timestamp: {new Date(rec.paidAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
-                                  </p>
-                                )}
+                                   <p className="text-[9px] text-slate-400 font-medium font-sans mt-0.5">
+                                     Paid Timestamp: {safeDate(rec.paidAt)}
+                                   </p>
+                                 )}
                               </div>
                             </div>
                           )}
@@ -655,14 +668,14 @@ export default function TransactionRecords({ onBack }) {
             })
           )
         ) : (
-          betRecords.length === 0 ? (
+          (betRecords || []).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <svg className="w-12 h-12 mb-3 stroke-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
               <p className="text-xs font-bold text-slate-550">No game wagers found</p>
               <p className="text-[10px] text-slate-400 mt-1">Place bets on Colour or Dice games to see records here.</p>
             </div>
           ) : (
-            betRecords.map((rec) => (
+            (betRecords || []).map((rec) => (
               <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm flex items-center gap-3.5 hover:border-slate-300 transition-colors">
                 {/* Left Icon Badge */}
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${

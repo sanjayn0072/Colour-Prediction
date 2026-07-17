@@ -674,11 +674,11 @@ export const updateOrderStatus = async (req, res) => {
       const balanceAfter = balanceBefore + refundAmount;
 
       // Credit amount back to target user's primary cash wallet balance
-      await connection.query('UPDATE wallets SET balance = balance + ? WHERE user_id = ?', [refundAmount, order.user_id]);
+      await connection.query('UPDATE wallets SET balance = ? WHERE user_id = ?', [balanceAfter, order.user_id]);
 
        // Record transaction ledger
       await connection.query(
-        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) VALUES (?, ?, ?, "Refund", "product_orders", ?, ?, ?, ?)',
+        'INSERT INTO wallet_transactions (user_id, wallet_id, amount, type, reference_table, reference_id, balance_before, balance_after, description) VALUES (?, ?, ?, "product_purchase", "product_orders", ?, ?, ?, ?)',
         [
           order.user_id,
           wallet.id,

@@ -87,6 +87,7 @@ export default function Register({ onNavigate }) {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           name: form.name,
           phone: cleanPhone,
@@ -135,6 +136,7 @@ export default function Register({ onNavigate }) {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           name: form.name,
           phone: cleanPhone,

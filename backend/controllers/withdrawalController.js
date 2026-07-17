@@ -297,8 +297,8 @@ export const getWithdrawalHistory = async (req, res) => {
 export const getAdminWithdrawals = async (req, res) => {
   const { status, search, page = 1, limit = 20 } = req.query;
 
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 20;
   const offset = (pageNum - 1) * limitNum;
 
   try {

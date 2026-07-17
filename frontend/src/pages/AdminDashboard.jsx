@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser } from '../context/UserContext';
 const LegacyAdminDashboard = React.lazy(() => import('./LegacyAdminDashboard'));
-import { Shield, Lock, ArrowRight, ArrowLeft, Key, ShieldAlert } from 'lucide-react';
+import { Shield, Lock, ArrowRight, ArrowLeft, Key, ShieldAlert, Clipboard } from 'lucide-react';
 
 export default function AdminDashboard({ onNavigate, onBack }) {
   const { user } = useUser();
@@ -107,7 +107,6 @@ export default function AdminDashboard({ onNavigate, onBack }) {
   };
 
   const handlePaste = (e) => {
-    e.preventDefault();
     const pasteData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     const newDigits = [...codeDigits];
     for (let i = 0; i < 6; i++) {
@@ -118,6 +117,24 @@ export default function AdminDashboard({ onNavigate, onBack }) {
     // Focus last filled or next empty
     const focusIndex = Math.min(pasteData.length, 5);
     digitRefs.current[focusIndex]?.focus();
+  };
+
+  const handleClipboardPaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const pasteData = text.replace(/\D/g, '').slice(0, 6);
+      if (!pasteData) return;
+      const newDigits = [...codeDigits];
+      for (let i = 0; i < 6; i++) {
+        newDigits[i] = pasteData[i] || '';
+      }
+      setCodeDigits(newDigits);
+      setTwoFaCode(newDigits.join(''));
+      const focusIndex = Math.min(pasteData.length, 5);
+      digitRefs.current[focusIndex]?.focus();
+    } catch (err) {
+      console.error('Failed to read clipboard text: ', err);
+    }
   };
 
   const handleVerify = async (e) => {
@@ -189,7 +206,7 @@ export default function AdminDashboard({ onNavigate, onBack }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#070b13] text-slate-100 p-6 relative overflow-hidden font-sans select-none">
+    <div className="flex flex-col min-h-screen bg-[#070b13] text-slate-100 p-6 relative overflow-hidden font-sans">
       {/* Background decoration glows */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-violet-500/10 blur-[100px] pointer-events-none" />
@@ -255,10 +272,23 @@ export default function AdminDashboard({ onNavigate, onBack }) {
                     ref={(el) => (digitRefs.current[idx] = el)}
                     onChange={(e) => handleDigitChange(e.target.value, idx)}
                     onKeyDown={(e) => handleKeyDown(e, idx)}
+                    style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                     className="w-12 h-14 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-center text-2xl font-extrabold text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono shadow-inner"
                     required
                   />
                 ))}
+              </div>
+              
+              {/* Paste Code Button */}
+              <div className="flex justify-center mt-4">
+                <button
+                  type="button"
+                  onClick={handleClipboardPaste}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-[#0d121f] border border-slate-800/80 hover:bg-[#141b2e] hover:border-slate-700/80 text-[#5f69f8] hover:text-[#737dfa] rounded-xl text-[11px] font-bold tracking-wide transition-all shadow-[0_2px_8px_rgba(0,0,0,0.5)] cursor-pointer outline-none active:scale-[0.97]"
+                >
+                  <Clipboard size={13} className="shrink-0 text-[#5f69f8]" />
+                  Paste Code
+                </button>
               </div>
             </div>
 

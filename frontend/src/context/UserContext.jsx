@@ -462,6 +462,25 @@ export function UserProvider({ children }) {
   const [betsList, setBetsList] = useState([])
   const [walletTransactions, setWalletTransactions] = useState([])
 
+  const safeDate = (val) => {
+    if (!val) return 'N/A';
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? 'N/A' : d.toLocaleString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const safeTimestamp = (val) => {
+    if (!val) return Date.now();
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? Date.now() : d.getTime();
+  };
+
   const fetchUserHistory = async () => {
     const token = localStorage.getItem('token')
     const headers = {}
@@ -574,10 +593,10 @@ export function UserProvider({ children }) {
           status: d.status,
           appealStatus: d.appealStatus || null,
           appealAdminNote: d.appealAdminNote || null,
-          date: new Date(d.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+          date: safeDate(d.createdAt),
           method: 'UPI',
           voucher: d.coupon_code || null,
-          timestamp: new Date(d.createdAt).getTime()
+          timestamp: safeTimestamp(d.createdAt)
         }))
 
         // Append positive manual adjustments as deposits
@@ -593,12 +612,12 @@ export function UserProvider({ children }) {
               status: 'Completed',
               appealStatus: null,
               appealAdminNote: null,
-              date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+              date: safeDate(t.createdAt),
               method: 'Adjustment',
               voucher: null,
               isAdjustment: true,
               adminNotes: adminNotes,
-              timestamp: new Date(t.createdAt).getTime()
+              timestamp: safeTimestamp(t.createdAt)
             })
           }
         })
@@ -614,12 +633,12 @@ export function UserProvider({ children }) {
             status: 'Completed',
             appealStatus: null,
             appealAdminNote: null,
-            date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+            date: safeDate(t.createdAt),
             method: 'Refund',
             voucher: null,
             isAdjustment: true,
             adminNotes: t.description || 'Order Refund',
-            timestamp: new Date(t.createdAt).getTime()
+            timestamp: safeTimestamp(t.createdAt)
           })
         })
 
@@ -645,7 +664,7 @@ export function UserProvider({ children }) {
             fee,
             netAmount,
             status: w.status, // PENDING, APPROVED, REJECTED, PAID
-            date: new Date(w.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+            date: safeDate(w.createdAt),
             method: w.paymentMethod, // UPI or BANK
             upiId: w.upiId,
             accountHolderName: w.accountHolderName,
@@ -654,7 +673,7 @@ export function UserProvider({ children }) {
             utrNumber: w.utrNumber,
             adminNote: w.adminNote,
             paidAt: w.paidAt,
-            timestamp: new Date(w.createdAt).getTime()
+            timestamp: safeTimestamp(w.createdAt)
           }
         })
         // Append negative manual adjustments as withdrawals
@@ -670,7 +689,7 @@ export function UserProvider({ children }) {
               fee: 0,
               netAmount: absoluteAmt,
               status: 'PAID', // mark as completed / PAID
-              date: new Date(t.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+              date: safeDate(t.createdAt),
               method: 'Adjustment',
               upiId: '',
               accountHolderName: '',
@@ -680,7 +699,7 @@ export function UserProvider({ children }) {
               adminNote: adminNotes,
               paidAt: t.createdAt,
               isAdjustment: true,
-              timestamp: new Date(t.createdAt).getTime()
+              timestamp: safeTimestamp(t.createdAt)
             })
           }
         })
@@ -702,14 +721,7 @@ export function UserProvider({ children }) {
             ? `Colour Prediction ${b.session || '1m'}`
             : `Dice Pro`
           
-          const formattedDate = new Date(b.createdAt).toLocaleString('en-US', {
-            month: 'short',
-            day: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          })
+          const formattedDate = safeDate(b.createdAt)
 
           // Wager record (negative amount)
           mappedBetRecords.push({
@@ -719,7 +731,7 @@ export function UserProvider({ children }) {
             status: b.status === 'pending' ? 'Pending' : 'Completed',
             date: formattedDate,
             game: gameName,
-            timestamp: new Date(b.createdAt).getTime()
+            timestamp: safeTimestamp(b.createdAt)
           })
 
           // If won, payout record (positive amount)
@@ -731,7 +743,7 @@ export function UserProvider({ children }) {
               status: 'Completed',
               date: formattedDate,
               game: gameName,
-              timestamp: new Date(b.updatedAt || b.createdAt).getTime()
+              timestamp: safeTimestamp(b.updatedAt || b.createdAt)
             })
           }
         })
