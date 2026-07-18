@@ -489,12 +489,12 @@ export function UserProvider({ children }) {
     }
     try {
       const [profileRes, txRes, betsRes, withdrawRes, depositRes, couponRes] = await Promise.all([
-        fetch(`${API_BASE}/api/auth/profile`, { headers }),
-        fetch(`${API_BASE}/api/wallet/transactions`, { headers }),
-        fetch(`${API_BASE}/api/games/my-bets`, { headers }),
-        fetch(`${API_BASE}/api/withdraw/history`, { headers }),
-        fetch(`${API_BASE}/api/payment/history`, { headers }),
-        fetch(`${API_BASE}/api/wallet/my-coupons`, { headers }).catch(err => {
+        fetch(`${API_BASE}/api/auth/profile`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/api/wallet/transactions`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/api/games/my-bets`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/api/withdraw/history`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/api/payment/history`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/api/wallet/my-coupons`, { headers, credentials: 'include' }).catch(err => {
           console.warn('[Coupons Fetch Network Error]:', err);
           return { ok: false, json: async () => [] };
         })

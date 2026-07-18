@@ -396,6 +396,7 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        credentials: 'include',
         body: JSON.stringify({
           productId: product.id,
           address: {

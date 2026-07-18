@@ -87,6 +87,7 @@ export default function DiceGame({ onNavigate }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        credentials: 'include',
         body: JSON.stringify({
           gameType: 'dice',
           roundId: diceRoundId,

@@ -206,6 +206,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        credentials: 'include',
         body: JSON.stringify({
           gameType: 'colour',
           session: activeSession,
@@ -507,6 +508,7 @@ export default function ColourPrediction({ onNavigate, routeData }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
+          credentials: 'include',
           body: JSON.stringify({
             gameType: 'colour',
             betType: t.type,

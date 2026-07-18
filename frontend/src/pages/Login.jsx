@@ -41,7 +41,10 @@ export default function Login({ onLogin, onNavigate }) {
         throw new Error(data.error || 'Invalid credentials.')
       }
 
-      // Token is securely handled via HttpOnly cookies
+      // Save token in localStorage for fallback/headers authorization
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+      }
       onLogin(data.user)
     } catch (err) {
       setError(translateError(err.message))
