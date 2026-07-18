@@ -257,8 +257,14 @@ export const createDeposit = async (req, res) => {
     const configMap = {};
     webhookConfigs.forEach(row => { configMap[row.config_key] = decryptConfigValue(row.config_value); });
 
-    webhookUrl = configMap['PAY0_WEBHOOK_URL'] || `${req.protocol}://${req.get('host')}/api/payment/webhook`;
-    redirectUrl = configMap['PAY0_REDIRECT_URL'] || `${req.protocol}://${req.get('host')}/#/wallet?tab=deposit`;
+    // Statically resolve the Railway backend URL for webhook target to prevent vercel-to-vercel loopbacks
+    webhookUrl = configMap['PAY0_WEBHOOK_URL'];
+    if (!webhookUrl || webhookUrl.includes('vercel.app')) {
+      webhookUrl = 'https://colour-prediction-production.up.railway.app/api/payment/webhook';
+    }
+
+    // Redirect target resolves back to the React client UI on Vercel
+    redirectUrl = configMap['PAY0_REDIRECT_URL'] || 'https://colour-prediction-blush.vercel.app/#/wallet?tab=deposit';
 
     // Commit transaction immediately to release locks before calling outbound payment gateway
     await connection.commit();

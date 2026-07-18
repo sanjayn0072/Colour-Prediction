@@ -1588,7 +1588,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         headers: {
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        withCredentials: true
       })
 
       if (response.status === 201) {
@@ -1672,7 +1673,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         headers: {
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        withCredentials: true
       })
 
       if (response.status === 200) {
