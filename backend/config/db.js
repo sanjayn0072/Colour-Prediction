@@ -347,6 +347,36 @@ const connectDB = async () => {
       logger.error(otpTblErr, '[Database Self-Healing]: Failed to check/create otp_tokens table');
     }
 
+    // 2.7 Ensure coupons table has all new promotional columns (Self-healing schema guard)
+    try {
+      const [couponColumns] = await pool.query("SHOW COLUMNS FROM coupons");
+      const colNames = couponColumns.map(col => col.Field);
+
+      if (!colNames.includes('type')) {
+        logger.warn('[Database Self-Healing]: coupons.type column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN type ENUM('FIRST_DEPOSIT', 'RETENTION_REWARD', 'GAMEPLAY_FREEBIE', 'FEE_WAIVER', 'REACTIVATION', 'LOYALTY') NOT NULL DEFAULT 'RETENTION_REWARD'");
+      }
+      if (!colNames.includes('reward_amount')) {
+        logger.warn('[Database Self-Healing]: coupons.reward_amount column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN reward_amount DECIMAL(15, 4) NOT NULL DEFAULT 0.0000");
+      }
+      if (!colNames.includes('min_deposit_required')) {
+        logger.warn('[Database Self-Healing]: coupons.min_deposit_required column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN min_deposit_required DECIMAL(15, 4) NOT NULL DEFAULT 0.0000");
+      }
+      if (!colNames.includes('validity_days')) {
+        logger.warn('[Database Self-Healing]: coupons.validity_days column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN validity_days INT NOT NULL DEFAULT 7");
+      }
+      if (!colNames.includes('monthly_limit')) {
+        logger.warn('[Database Self-Healing]: coupons.monthly_limit column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN monthly_limit INT NOT NULL DEFAULT 1000");
+      }
+      logger.info('[Database Self-Healing]: Checked coupons table columns.');
+    } catch (couponColErr) {
+      logger.error(couponColErr, '[Database Self-Healing]: Failed to check/alter coupons table columns');
+    }
+
     // 3. Seed data
     await seedSystemData();
 
