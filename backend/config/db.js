@@ -377,6 +377,65 @@ const connectDB = async () => {
       logger.error(couponColErr, '[Database Self-Healing]: Failed to check/alter coupons table columns');
     }
 
+    // 2.8 Ensure withdrawals table has all necessary custom columns (Self-healing schema guard)
+    try {
+      const [withdrawColumns] = await pool.query("SHOW COLUMNS FROM withdrawals");
+      const colNames = withdrawColumns.map(col => col.Field);
+
+      if (!colNames.includes('withdrawal_id')) {
+        logger.warn('[Database Self-Healing]: withdrawals.withdrawal_id column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN withdrawal_id VARCHAR(50) NULL AFTER id");
+      }
+      if (!colNames.includes('processed_by_admin_id')) {
+        logger.warn('[Database Self-Healing]: withdrawals.processed_by_admin_id column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN processed_by_admin_id BIGINT UNSIGNED NULL AFTER user_id");
+      }
+      if (!colNames.includes('payment_method')) {
+        logger.warn('[Database Self-Healing]: withdrawals.payment_method column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN payment_method VARCHAR(50) NULL AFTER processed_by_admin_id");
+      }
+      if (!colNames.includes('upi_id')) {
+        logger.warn('[Database Self-Healing]: withdrawals.upi_id column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN upi_id VARCHAR(50) NULL AFTER payment_method");
+      }
+      if (!colNames.includes('account_holder_name')) {
+        logger.warn('[Database Self-Healing]: withdrawals.account_holder_name column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN account_holder_name VARCHAR(100) NULL AFTER upi_id");
+      }
+      if (!colNames.includes('account_number')) {
+        logger.warn('[Database Self-Healing]: withdrawals.account_number column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN account_number VARCHAR(50) NULL AFTER account_holder_name");
+      }
+      if (!colNames.includes('ifsc_code')) {
+        logger.warn('[Database Self-Healing]: withdrawals.ifsc_code column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN ifsc_code VARCHAR(50) NULL AFTER account_number");
+      }
+      if (!colNames.includes('utr_number')) {
+        logger.warn('[Database Self-Healing]: withdrawals.utr_number column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN utr_number VARCHAR(100) NULL AFTER status");
+      }
+      if (!colNames.includes('rejection_reason')) {
+        logger.warn('[Database Self-Healing]: withdrawals.rejection_reason column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN rejection_reason TEXT NULL AFTER utr_number");
+      }
+      if (!colNames.includes('admin_note')) {
+        logger.warn('[Database Self-Healing]: withdrawals.admin_note column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN admin_note TEXT NULL AFTER rejection_reason");
+      }
+      if (!colNames.includes('paid_at')) {
+        logger.warn('[Database Self-Healing]: withdrawals.paid_at column not found. Adding column...');
+        await pool.query("ALTER TABLE withdrawals ADD COLUMN paid_at TIMESTAMP NULL AFTER created_at");
+      }
+
+      // Modify status column type to ENUM('PENDING', 'PROCESSING', 'APPROVED', 'REJECTED', 'PAID') if not already
+      logger.info('[Database Self-Healing]: Modifying status enum column on withdrawals to include uppercase/PROCESSING...');
+      await pool.query("ALTER TABLE withdrawals MODIFY COLUMN status ENUM('PENDING', 'PROCESSING', 'APPROVED', 'REJECTED', 'PAID') NOT NULL DEFAULT 'PENDING'");
+      
+      logger.info('[Database Self-Healing]: Checked withdrawals table columns.');
+    } catch (withdrawColErr) {
+      logger.error(withdrawColErr, '[Database Self-Healing]: Failed to check/alter withdrawals table columns');
+    }
+
     // 3. Seed data
     await seedSystemData();
 
