@@ -85,7 +85,7 @@ app.use(cookieParser());
 const server = http.createServer(app);
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'https://colourplay.pages.dev'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'https://colourplay.pages.dev', "https://playnixclub.bet", "https://www.playnixclub.bet"];
 
 const io = new Server(server, {
   cors: {
@@ -160,7 +160,9 @@ import {
 import { protect } from './middleware/authMiddleware.js';
 import { checkRole } from './middleware/roleMiddleware.js';
 import { uploadProductImage, uploadProductImages, verifyUploadMagicBytes, handleScreenshotUpload } from './utils/uploadService.js';
-
+app.get("/health-api", (req, res) => {
+  res.status(200).json({ success: true })
+})
 // ─── AUTHENTICATION ENDPOINTS ───
 app.post('/api/auth/send-otp', authRateLimiter, validate(sendOtpSchema), authController.sendOtp);
 app.post('/api/auth/verify-email', authRateLimiter, validate(verifyEmailSchema), authController.verifyOtpRegister);
@@ -340,9 +342,9 @@ io.use(async (socket, next) => {
     cookieToken = cookies.token;
   }
 
-  const token = socket.handshake.auth?.token || 
-                cookieToken || 
-                socket.handshake.headers?.authorization?.split(' ')[1];
+  const token = socket.handshake.auth?.token ||
+    cookieToken ||
+    socket.handshake.headers?.authorization?.split(' ')[1];
 
   if (!token || token === 'null' || token === 'undefined') {
     return next(new Error('Authentication error: Token missing'));
