@@ -160,7 +160,7 @@ import {
 import { protect } from './middleware/authMiddleware.js';
 import { checkRole } from './middleware/roleMiddleware.js';
 import { uploadProductImage, uploadProductImages, verifyUploadMagicBytes, handleScreenshotUpload } from './utils/uploadService.js';
-app.get("/health-api", (req, res) => {
+app.get("/api/health-api", (req, res) => {
   res.status(200).json({ success: true })
 })
 // ─── AUTHENTICATION ENDPOINTS ───
