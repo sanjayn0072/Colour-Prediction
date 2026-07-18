@@ -483,9 +483,9 @@ export function UserProvider({ children }) {
 
   const fetchUserHistory = async () => {
     const token = localStorage.getItem('token')
-    const headers = {}
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+    if (!token) return
+    const headers = {
+      'Authorization': `Bearer ${token}`
     }
     try {
       const [profileRes, txRes, betsRes, withdrawRes, depositRes, couponRes] = await Promise.all([

@@ -310,7 +310,7 @@ export const getAdminWithdrawals = async (req, res) => {
              u.name as userName, u.phone as userPhone, u.role as userRole, w.user_id as userId,
              w.processed_by_admin_id as processedByAdminId, a.name as processedByAdminName
       FROM withdrawals w
-      JOIN users u ON w.user_id = u.id
+      LEFT JOIN users u ON w.user_id = u.id
       LEFT JOIN users a ON w.processed_by_admin_id = a.id
     `;
     const params = [];
@@ -389,7 +389,7 @@ export const getAdminWithdrawals = async (req, res) => {
     let countSql = `
       SELECT COUNT(*) as total 
       FROM withdrawals w 
-      JOIN users u ON w.user_id = u.id 
+      LEFT JOIN users u ON w.user_id = u.id 
     `;
     const countParams = [];
 
@@ -414,7 +414,7 @@ export const getAdminWithdrawals = async (req, res) => {
     const totalRes = await query(countSql, countParams);
     const total = totalRes[0]?.total || 0;
 
-    return res.json(recordsWithStats);
+    return res.json({ records: recordsWithStats, pagination: { total, pages: Math.ceil(total / limitNum), page: pageNum, limit: limitNum } });
 
   } catch (error) {
     logger.error(error, 'Error fetching administrative withdrawals list');

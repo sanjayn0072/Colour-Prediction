@@ -540,3 +540,17 @@ CREATE TABLE user_game_stats (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_user_game_stats_user ON user_game_stats(user_id);
+
+-- ────────────────────────────────────────────────────────
+-- 31. OTP & PASSWORDS RESET TOKENS
+-- ────────────────────────────────────────────────────────
+CREATE TABLE otp_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_hash VARCHAR(255) NOT NULL,
+    type ENUM('REGISTER', 'RESET_PASSWORD') NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_otp_tokens_lookup ON otp_tokens(email, otp_hash, type);

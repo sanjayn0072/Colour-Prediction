@@ -877,14 +877,22 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
       const response = await fetch(
         `${API_BASE}/api/admin/withdrawals?status=${withdrawFilter}&search=${withdrawSearch}&page=${withdrawPage}`,
         {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include'
         }
       )
       if (response.ok) {
         const data = await response.json()
-        setWithdrawals(Array.isArray(data) ? data : (data.records || []))
-        setWithdrawTotalPages(data.pagination?.pages || 1)
-        setWithdrawTotalCount(data.pagination?.total || 0)
+        // Support both flat array (legacy) and paginated object responses
+        if (Array.isArray(data)) {
+          setWithdrawals(data)
+          setWithdrawTotalPages(1)
+          setWithdrawTotalCount(data.length)
+        } else {
+          setWithdrawals(Array.isArray(data.records) ? data.records : [])
+          setWithdrawTotalPages(data.pagination?.pages || 1)
+          setWithdrawTotalCount(data.pagination?.total || 0)
+        }
       }
     } catch (err) {
       console.error('Failed to load admin withdrawals:', err)
@@ -1149,7 +1157,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
       const response = await fetch(
         `${API_BASE}/api/admin/coupons`,
         {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include'
         }
       )
       if (response.ok) {
@@ -1180,6 +1189,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
+          credentials: 'include',
           body: JSON.stringify({
             coupon_code: newCouponCode,
             discount_type: newCouponDiscountType,
@@ -1253,7 +1263,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
             `${API_BASE}/api/admin/coupons/${couponId}`,
             {
               method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: { 'Authorization': `Bearer ${token}` },
+              credentials: 'include'
             }
           )
           if (response.ok) {
@@ -1428,7 +1439,8 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        credentials: 'include'
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to approve request')
@@ -1454,6 +1466,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        credentials: 'include',
         body: JSON.stringify({ 
           rejectionReason: rejectNote,
           predefinedReason: predefinedReason
@@ -1516,6 +1529,7 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        credentials: 'include',
         body: JSON.stringify({ utrNumber: payUtr, adminNote: payNote })
       })
       const data = await res.json()

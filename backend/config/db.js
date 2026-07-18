@@ -323,6 +323,30 @@ const connectDB = async () => {
       logger.error(tblErr, 'Failed to check or initialize database tables');
     }
 
+    // 2.5 Ensure otp_tokens table exists (Self-healing schema guard)
+    try {
+      const [otpTables] = await pool.query("SHOW TABLES LIKE 'otp_tokens'");
+      if (otpTables.length === 0) {
+        logger.warn('[Database Self-Healing]: otp_tokens table not found. Creating table...');
+        await pool.query(`
+          CREATE TABLE otp_tokens (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            otp_hash VARCHAR(255) NOT NULL,
+            type ENUM('REGISTER', 'RESET_PASSWORD') NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB
+        `);
+        await pool.query(`
+          CREATE INDEX idx_otp_tokens_lookup ON otp_tokens(email, otp_hash, type)
+        `);
+        logger.info('[Database Self-Healing]: otp_tokens table and indices created successfully.');
+      }
+    } catch (otpTblErr) {
+      logger.error(otpTblErr, '[Database Self-Healing]: Failed to check/create otp_tokens table');
+    }
+
     // 3. Seed data
     await seedSystemData();
 

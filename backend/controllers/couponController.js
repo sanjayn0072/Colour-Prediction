@@ -8,8 +8,10 @@ export const getCoupons = async (req, res) => {
     const coupons = await query(
       'SELECT id, code, ' +
       'discount_type as discountType, discount_type as discount_type, ' +
-      'COALESCE(NULLIF(value, 0), reward_amount) as value, COALESCE(NULLIF(value, 0), reward_amount) as discount_value, ' +
-      'COALESCE(NULLIF(min_deposit, 0), min_deposit_required) as minDeposit, COALESCE(NULLIF(min_deposit, 0), min_deposit_required) as min_deposit_amount, ' +
+      'CASE WHEN value > 0 THEN value ELSE reward_amount END as value, ' +
+      'CASE WHEN value > 0 THEN value ELSE reward_amount END as discount_value, ' +
+      'CASE WHEN min_deposit > 0 THEN min_deposit ELSE min_deposit_required END as minDeposit, ' +
+      'CASE WHEN min_deposit > 0 THEN min_deposit ELSE min_deposit_required END as min_deposit_amount, ' +
       'max_uses as maxUses, max_uses as usage_limit, ' +
       'used_count as usedCount, used_count as used_count, ' +
       'monthly_limit as monthlyLimit, monthly_limit as monthly_limit, ' +
