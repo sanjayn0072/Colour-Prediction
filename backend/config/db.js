@@ -436,6 +436,23 @@ const connectDB = async () => {
       logger.error(withdrawColErr, '[Database Self-Healing]: Failed to check/alter withdrawals table columns');
     }
 
+    // 2.9 Ensure notifications table has all necessary custom columns (Self-healing schema guard)
+    try {
+      const [notifColumns] = await pool.query("SHOW COLUMNS FROM notifications");
+      const colNames = notifColumns.map(col => col.Field);
+
+      if (colNames.includes('notifications_type') && !colNames.includes('type')) {
+        logger.warn('[Database Self-Healing]: Renaming notifications.notifications_type to type...');
+        await pool.query("ALTER TABLE notifications CHANGE COLUMN notifications_type type VARCHAR(50) NULL DEFAULT NULL");
+      } else if (!colNames.includes('type')) {
+        logger.warn('[Database Self-Healing]: notifications.type column not found. Adding column...');
+        await pool.query("ALTER TABLE notifications ADD COLUMN type VARCHAR(50) NULL DEFAULT NULL AFTER message");
+      }
+      logger.info('[Database Self-Healing]: Checked notifications table columns.');
+    } catch (notifColErr) {
+      logger.error(notifColErr, '[Database Self-Healing]: Failed to check/alter notifications table columns');
+    }
+
     // 3. Seed data
     await seedSystemData();
 
