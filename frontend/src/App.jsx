@@ -208,6 +208,15 @@ function AppContent() {
     }
   }, [location])
 
+  // Detect register path or invitecode query param to load Register view automatically
+  useEffect(() => {
+    const path = location.pathname
+    const searchParams = new URLSearchParams(location.search)
+    if ((path === '/register' || path === '/signup' || searchParams.has('invitecode')) && !user) {
+      setAuthPage('register')
+    }
+  }, [location, user])
+
   /* ── Auth Handlers ──────────── */
   const handleLogin = (userData) => {
     login(userData)
