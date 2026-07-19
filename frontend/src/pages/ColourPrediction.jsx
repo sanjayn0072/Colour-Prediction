@@ -494,10 +494,13 @@ export default function ColourPrediction({ onNavigate, routeData }) {
   }
 
   const handleConfirmBet = async () => {
-    if (selectedTargets.length === 0 || parsedBetAmount < 1 || parsedBetAmount > 1000 || totalBetAmount > balance || isLocked) return
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    const parsedBetAmount = parseInt(betAmount, 10)
+    if (selectedTargets.length === 0 || parsedBetAmount < 1 || parsedBetAmount > 1000000 || totalBetAmount > balance || isLocked) return
     
     setLoading(true)
-    const token = localStorage.getItem('token') || ''
     const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`
 
     try {
@@ -1065,13 +1068,13 @@ export default function ColourPrediction({ onNavigate, routeData }) {
                   onChange={(e) => {
                     const cleaned = e.target.value.replace(/[^0-9]/g, '')
                     let val = cleaned === '' ? '' : parseInt(cleaned)
-                    if (val !== '' && val > 1000) val = 1000
+                    if (val !== '' && val > 1000000) val = 1000000
                     setBetAmount(val)
                   }}
                   onBlur={() => {
                     if (betAmount === '' || parseInt(betAmount) < 1) setBetAmount(1)
                   }}
-                  placeholder="1 - 1000"
+                  placeholder="1 - 1000000"
                   className="w-full pl-6 pr-2 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-slate-400 placeholder:font-normal font-mono"
                 />
               </div>
