@@ -74,19 +74,22 @@ export const translateError = (errorString) => {
     return "The payment gateway is temporarily offline for maintenance. Please try again shortly or reach out to support.";
   }
 
+  if (errLower.includes('internal server error') || 
+      errLower.includes('database query failed') || 
+      errLower.includes('database transaction failure') ||
+      errLower.includes('unhandled express error') ||
+      errLower.includes('core game engine')) {
+    return "The server encountered an unexpected error. Please try again shortly or contact support if the issue persists.";
+  }
+
   if (errLower.includes('network error') || 
       errLower.includes('failed to fetch') || 
       errLower.includes('server connection issues') || 
       errLower.includes('connection error') || 
       errLower.includes('gateway error') || 
-      errLower.includes('internal server error') || 
-      errLower.includes('database query failed') || 
       errLower.includes('failed to retrieve') || 
-      errLower.includes('failed to verify') ||
-      errLower.includes('database transaction failure') ||
-      errLower.includes('unhandled express error') ||
-      errLower.includes('core game engine')) {
-    return "We're having trouble connecting to our services. Please check your network connection and try again.";
+      errLower.includes('failed to verify')) {
+    return "We are having trouble communicating with our servers. Please check your internet connection and try again.";
   }
 
   if (errLower.includes('too many attempts') || 

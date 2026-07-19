@@ -532,7 +532,6 @@ export const resetPassword = async (req, res) => {
 
     // Backend Sanitization Gate
     if (otpStr.length !== 6 || !/^\d+$/.test(otpStr)) {
-      connection.release();
       return res.status(400).json({ error: 'Please enter the complete 6-digit verification code.' });
     }
 
@@ -541,7 +540,6 @@ export const resetPassword = async (req, res) => {
       [cleanLookup, email]
     );
     if (!users[0] || users[0].length === 0) {
-      connection.release();
       return res.status(404).json({ error: "We couldn't find an account matching these details." });
     }
 
@@ -555,7 +553,6 @@ export const resetPassword = async (req, res) => {
     );
     
     if (!tokens[0] || tokens[0].length === 0) {
-      connection.release();
       return res.status(400).json({ error: 'The verification code you entered is invalid or has expired. Please request a new code.' });
     }
 
