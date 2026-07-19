@@ -126,15 +126,15 @@ export const createWithdrawal = async (req, res) => {
     }
 
     const [withdrawRows] = await connection.query(
-      'SELECT SUM(amount) as total FROM withdrawals WHERE user_id = ? AND status IN ("completed", "approved")',
+      'SELECT SUM(amount) as total FROM withdrawals WHERE user_id = ? AND status IN ("PAID", "APPROVED")',
       [req.user.id]
     );
     const cumulativeWithdrawals = withdrawRows[0].total ? parseFloat(withdrawRows[0].total) : 0;
 
     if (vipLevel === 0) {
-      if (cumulativeWithdrawals + withdrawalAmount > 2000) {
+      if (cumulativeWithdrawals + withdrawalAmount > 3000) {
         await connection.rollback();
-        return res.status(400).json({ success: false, message: 'VIP 0 users can only withdraw up to ₹2,000 total. Please upgrade your VIP tier.' });
+        return res.status(400).json({ success: false, message: 'VIP 0 users can only withdraw up to ₹3,000 total. Please upgrade your VIP tier.' });
       }
     } else {
       const vipReqs = {
