@@ -251,11 +251,11 @@ export default function Profile({ onLogout, initialSubPage, onNavigate }) {
             <h1 className="text-xl font-bold text-slate-800">{user?.name || 'Demo User'}</h1>
             <p className="text-sm text-slate-500 mt-0.5">{user?.email || 'demo@playnixclub.com'}</p>
             <p className="text-[10px] text-slate-450 mt-1 font-mono font-bold flex items-center gap-1">
-              UID: {user?.id || '102948'}
+              UID: {user?.uid || '102948'}
               <button 
                 onClick={(e) => {
                   e.stopPropagation()
-                  copyToClipboard(user?.id || '102948')
+                  copyToClipboard(user?.uid || '102948')
                   setToast('UID copied to clipboard!')
                 }}
                 className="p-0.5 rounded hover:bg-slate-100 transition-colors text-slate-450 hover:text-slate-650 cursor-pointer"
@@ -1282,7 +1282,7 @@ function ReferEarn() {
   const [copied, setCopied] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const referralLink = `${window.location.origin}/register?invitecode=${user?.id || ''}`
+  const referralLink = `${window.location.origin}/register?invitecode=${user?.uid || ''}`
 
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink)

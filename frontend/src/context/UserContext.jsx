@@ -524,7 +524,7 @@ export function UserProvider({ children }) {
           setUser(prev => ({
             ...prev,
             ...profileData.user,
-            uid: profileData.user.id || profileData.user.uid || (prev ? prev.uid : String(Math.floor(100000 + Math.random() * 900000))),
+            uid: profileData.user.uid || profileData.user.id || (prev ? prev.uid : String(Math.floor(100000 + Math.random() * 900000))),
             role: profileData.user.role || 'user'
           }))
           if (profileData.user.walletBalance !== undefined) {

@@ -411,6 +411,7 @@ export const getProfile = async (req, res) => {
       user: {
         id: String(req.user.id),
         _id: String(req.user.id),
+        uid: req.user.uid,
         name: req.user.name,
         phone: req.user.phone,
         email: req.user.email,

@@ -24,7 +24,7 @@ export const protect = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const users = await query(
-      'SELECT u.id, u.name, u.phone, u.email, u.role, u.status, u.profile_pic, w.balance as available_balance, w.locked_balance ' +
+      'SELECT u.id, u.uid, u.name, u.phone, u.email, u.role, u.status, u.profile_pic, w.balance as available_balance, w.locked_balance ' +
       'FROM users u ' +
       'JOIN wallets w ON u.id = w.user_id ' +
       'WHERE u.id = ?',
