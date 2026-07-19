@@ -577,6 +577,24 @@ export function UserProvider({ children }) {
       if (txRes.ok) {
         const txData = await txRes.json()
         setWalletTransactions(txData || [])
+        
+        let directReward = 0
+        let betComm = 0
+        ;(txData || []).forEach(t => {
+          const amt = parseFloat(t.amount || 0)
+          if (t.type === 'commission') {
+            if (t.description && t.description.toLowerCase().includes('referral commission')) {
+              directReward += amt
+            } else {
+              betComm += amt
+            }
+          } else if (t.type === 'referral_bonus') {
+            directReward += amt
+          }
+        })
+        setDirectReferralReward(directReward)
+        setBetCommissionReward(betComm)
+        
         adjustments = (txData || []).filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:')))
         refunds = (txData || []).filter(t => t.type === 'Refund' || t.type === 'Order_Rejection')
       }

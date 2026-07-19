@@ -315,7 +315,7 @@ export const deposit = async (req, res) => {
     );
 
     // Process referral commission reward for the referrer if applicable
-    await processReferralReward(connection, req.user.id);
+    await processReferralReward(connection, req.user.id, depositAmount);
 
     // Dynamic Wallet Notification inside the active transaction
     await createNotification(

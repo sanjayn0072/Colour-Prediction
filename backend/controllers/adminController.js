@@ -1455,7 +1455,7 @@ export const verifyPay0DepositStatus = async (req, res) => {
         );
 
         // Process referral commission reward for the referrer if applicable
-        await processReferralReward(connection, userId);
+        await processReferralReward(connection, userId, depositAmount);
 
         // Send app notification
         const notificationMsg = rewardAmount > 0

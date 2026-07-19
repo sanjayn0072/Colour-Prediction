@@ -515,7 +515,7 @@ export const pay0Webhook = async (req, res) => {
       );
 
       // Process referral commission reward for the referrer if applicable
-      await processReferralReward(connection, userId);
+      await processReferralReward(connection, userId, depositAmount);
 
       // Send app notification
       const notificationMsg = rewardAmount > 0
@@ -872,7 +872,7 @@ export const resolveAppeal = async (req, res) => {
       );
 
       // Process referral commission reward for the referrer if applicable
-      await processReferralReward(connection, userId);
+      await processReferralReward(connection, userId, depositAmount);
 
       // Send app notification
       const notificationMsg = rewardAmount > 0
@@ -1088,8 +1088,14 @@ export const claimNoDepositCoupon = async (req, res) => {
   }
 };
 
-export const processReferralReward = async (connection, referredUserId) => {
+export const processReferralReward = async (connection, referredUserId, depositAmount) => {
   try {
+    // Only reward if deposit amount is >= 100
+    if (!depositAmount || parseFloat(depositAmount) < 100.00) {
+      logger.info(`[Referral Reward Skip]: Referred user ${referredUserId} deposited ₹${depositAmount || 0} which is less than the minimum ₹100 requirement.`);
+      return;
+    }
+
     // 1. Check if this user was referred by someone
     const [referrals] = await connection.query(
       'SELECT id, referrer_id, status FROM referrals WHERE referred_id = ? LIMIT 1 FOR UPDATE',
