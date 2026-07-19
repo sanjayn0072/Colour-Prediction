@@ -352,6 +352,14 @@ const connectDB = async () => {
       const [couponColumns] = await pool.query("SHOW COLUMNS FROM coupons");
       const colNames = couponColumns.map(col => col.Field);
 
+      if (!colNames.includes('value')) {
+        logger.warn('[Database Self-Healing]: coupons.value column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN value DECIMAL(15, 4) NOT NULL DEFAULT 0.0000 AFTER code");
+      }
+      if (!colNames.includes('min_deposit')) {
+        logger.warn('[Database Self-Healing]: coupons.min_deposit column not found. Adding column...');
+        await pool.query("ALTER TABLE coupons ADD COLUMN min_deposit DECIMAL(15, 4) NOT NULL DEFAULT 0.0000 AFTER value");
+      }
       if (!colNames.includes('type')) {
         logger.warn('[Database Self-Healing]: coupons.type column not found. Adding column...');
         await pool.query("ALTER TABLE coupons ADD COLUMN type ENUM('FIRST_DEPOSIT', 'RETENTION_REWARD', 'GAMEPLAY_FREEBIE', 'FEE_WAIVER', 'REACTIVATION', 'LOYALTY') NOT NULL DEFAULT 'RETENTION_REWARD'");

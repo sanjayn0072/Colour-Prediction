@@ -334,8 +334,7 @@ export const getAdminWithdrawals = async (req, res) => {
       params.push(searchWild, searchWild, searchWild);
     }
 
-    sql += ' ORDER BY w.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limitNum, offset);
+    sql += ` ORDER BY w.created_at DESC LIMIT ${limitNum} OFFSET ${offset}`;
 
     const dbRecords = await query(sql, params);
     const records = Array.isArray(dbRecords) ? dbRecords : [];
