@@ -212,7 +212,8 @@ function AppContent() {
   useEffect(() => {
     const path = location.pathname
     const searchParams = new URLSearchParams(location.search)
-    if ((path === '/register' || path === '/signup' || searchParams.has('invitecode')) && !user) {
+    const hasInvite = searchParams.has('invitecode') || searchParams.has('inviteCode') || searchParams.has('ref')
+    if ((path === '/register' || path === '/signup' || hasInvite) && !user) {
       setAuthPage('register')
     }
   }, [location, user])

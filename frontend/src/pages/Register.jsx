@@ -5,7 +5,7 @@ import { translateError } from '../utils/errorTranslator'
 
 export default function Register({ onNavigate }) {
   const [searchParams] = useSearchParams()
-  const rawInviteCode = searchParams.get('invitecode') || ''
+  const rawInviteCode = searchParams.get('invitecode') || searchParams.get('inviteCode') || searchParams.get('ref') || ''
   const inviteCode = rawInviteCode.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)
   
   const [step, setStep] = useState(1)
