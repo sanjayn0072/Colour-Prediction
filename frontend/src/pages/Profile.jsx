@@ -106,8 +106,12 @@ const createReferralRewardTx = (amount) => {
 }
 
 export default function Profile({ onLogout, initialSubPage, onNavigate }) {
-  const { user, setUser, orders, depositRecords, betRecords, fetchWinLossStats } = useUser()
+  const { user, setUser, orders, depositRecords, betRecords, fetchWinLossStats, fetchUserProfile } = useUser()
   const [subPage, setSubPage] = useState(initialSubPage || null)
+
+  useEffect(() => {
+    fetchUserProfile()
+  }, [])
   const [prevInitialSubPage, setPrevInitialSubPage] = useState(initialSubPage)
   const [showWinLossModal, setShowWinLossModal] = useState(false)
   const [winLossStats, setWinLossStats] = useState(null)

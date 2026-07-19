@@ -38,11 +38,12 @@ const NUMBER_COLOR_MAP = {
 }
 
 export default function ColourPrediction({ onNavigate, routeData }) {
-  const { user, balance, setRealBalance, betsList, fetchUserHistory } = useUser()
+  const { user, balance, setRealBalance, betsList, fetchUserHistory, fetchUserProfile } = useUser()
   const [multipliers, setMultipliers] = useState({ green: 1.9, violet: 4.5, red: 1.9 });
   const [gameActiveStates, setGameActiveStates] = useState({});
 
   useEffect(() => {
+    fetchUserProfile();
     const fetchMultipliers = async () => {
       try {
         const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;

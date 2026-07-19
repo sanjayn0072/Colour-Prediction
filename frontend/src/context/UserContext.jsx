@@ -847,6 +847,397 @@ export function UserProvider({ children }) {
     }
   }
 
+  const fetchUserProfile = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const headers = { 'Authorization': `Bearer ${token}` }
+    try {
+      const profileRes = await fetch(`${API_BASE}/api/auth/profile`, { headers, credentials: 'include' })
+      if (profileRes.status === 401 || profileRes.status === 403) {
+        localStorage.removeItem('token')
+        setUser(null)
+        setRealBalance(0)
+        setAvailableBalance(0)
+        setLockedBalance(0)
+        setBonusBalance(0)
+        setSavedBanks([])
+        setSavedUpis([])
+        return
+      }
+      if (profileRes.ok) {
+        const profileData = await profileRes.json()
+        if (profileData.user) {
+          setUser(prev => ({
+            ...prev,
+            ...profileData.user,
+            uid: profileData.user.uid || profileData.user.id || (prev ? prev.uid : String(Math.floor(100000 + Math.random() * 900000))),
+            role: profileData.user.role || 'user'
+          }))
+          if (profileData.user.walletBalance !== undefined) setRealBalance(profileData.user.walletBalance)
+          if (profileData.user.availableBalance !== undefined) setAvailableBalance(profileData.user.availableBalance)
+          if (profileData.user.lockedBalance !== undefined) setLockedBalance(profileData.user.lockedBalance)
+          if (profileData.user.bonusBalance !== undefined) setBonusBalance(profileData.user.bonusBalance)
+          if (profileData.user.requiredWager !== undefined) setRequiredWager(profileData.user.requiredWager)
+          if (profileData.user.requiredBonusWager !== undefined) setRequiredBonusWager(profileData.user.requiredBonusWager)
+          if (profileData.user.claimedVipRewards !== undefined) setClaimedVipRewards(profileData.user.claimedVipRewards)
+
+          if (profileData.user.bankDetails) {
+            setSavedBanks([{
+              accountNumber: profileData.user.bankDetails.accountNumber,
+              ifsc: profileData.user.bankDetails.ifscCode,
+              holderName: profileData.user.bankDetails.holderName,
+              bankName: profileData.user.bankDetails.bankName
+            }])
+          } else {
+            setSavedBanks([])
+          }
+
+          if (profileData.user.upiDetails) {
+            setSavedUpis([{
+              upiId: profileData.user.upiDetails.upiId,
+              holderName: profileData.user.name
+            }])
+          } else {
+            setSavedUpis([])
+          }
+        }
+      }
+    } catch (err) {
+      if (!err.message?.includes('401') && !err.message?.includes('Unauthorized')) {
+        console.error('Failed to load profile:', err)
+      }
+    }
+  }
+
+  const fetchWalletTransactions = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const headers = { 'Authorization': `Bearer ${token}` }
+    try {
+      const txRes = await fetch(`${API_BASE}/api/wallet/transactions`, { headers, credentials: 'include' })
+      if (txRes.ok) {
+        const txData = await txRes.json()
+        setWalletTransactions(txData || [])
+        
+        let directReward = 0
+        let betComm = 0
+        ;(txData || []).forEach(t => {
+          const amt = parseFloat(t.amount || 0)
+          if (t.type === 'commission') {
+            if (t.description && t.description.toLowerCase().includes('referral commission')) {
+              directReward += amt
+            } else {
+              betComm += amt
+            }
+          } else if (t.type === 'referral_bonus') {
+            directReward += amt
+          }
+        })
+        setDirectReferralReward(directReward)
+        setBetCommissionReward(betComm)
+      }
+    } catch (err) {
+      console.error('Failed to load transactions:', err)
+    }
+  }
+
+  const fetchMyBets = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const headers = { 'Authorization': `Bearer ${token}` }
+    try {
+      const betsRes = await fetch(`${API_BASE}/api/games/my-bets`, { headers, credentials: 'include' })
+      if (betsRes.ok) {
+        const betsData = await betsRes.json()
+        setBetsList(betsData)
+
+        const mappedBetRecords = []
+        betsData.forEach(b => {
+          const isColour = b.gameType === 'colour'
+          const gameName = isColour ? `Colour Prediction ${b.session || '1m'}` : `Dice Pro`
+          const formattedDate = safeDate(b.createdAt)
+
+          mappedBetRecords.push({
+            id: b.id ? `BET-${b.id}` : (b._id ? `BET-${b._id}` : `BET-${Math.floor(10000 + Math.random() * 90000)}`),
+            title: `Bet placed on ${gameName}`,
+            amount: -b.betAmount,
+            status: b.status === 'pending' ? 'Pending' : 'Completed',
+            date: formattedDate,
+            game: gameName,
+            timestamp: safeTimestamp(b.createdAt)
+          })
+
+          if (b.status === 'won' && b.payout > 0) {
+            mappedBetRecords.push({
+              id: b.id ? `PAY-${b.id}` : (b._id ? `PAY-${b._id}` : `PAY-${Math.floor(10000 + Math.random() * 90000)}`),
+              title: `Winnings from ${gameName}`,
+              amount: b.payout,
+              status: 'Completed',
+              date: formattedDate,
+              game: gameName,
+              timestamp: safeTimestamp(b.updatedAt || b.createdAt)
+            })
+          }
+        })
+
+        setBetRecords(prev => {
+          const simulatedClaims = prev.filter(r => r.game === 'VIP Reward' || r.game === 'Referral Reward')
+          return [...mappedBetRecords, ...simulatedClaims].sort((a, b) => b.timestamp - a.timestamp)
+        })
+      }
+    } catch (err) {
+      console.error('Failed to load bets:', err)
+    }
+  }
+
+  const fetchWithdrawHistory = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const headers = { 'Authorization': `Bearer ${token}` }
+    try {
+      const withdrawRes = await fetch(`${API_BASE}/api/withdraw/history`, { headers, credentials: 'include' })
+      if (withdrawRes.ok) {
+        const wData = await withdrawRes.json()
+        
+        let adjustments = []
+        try {
+          const txRes = await fetch(`${API_BASE}/api/wallet/transactions`, { headers, credentials: 'include' })
+          if (txRes.ok) {
+            const txData = await txRes.json()
+            adjustments = (txData || []).filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:')))
+          }
+        } catch (e) {
+          console.warn('[Withdrawal fetch adjustments warn]:', e)
+        }
+
+        const withdrawals = wData.map(w => {
+          let fee = 0;
+          const amt = parseFloat(w.amount);
+          if (amt === 100) fee = 9;
+          else if (amt > 100 && amt <= 1000) fee = 9 + (amt - 100) * 0.03;
+          else if (amt > 1000) fee = amt * 0.03;
+          fee = parseFloat(fee.toFixed(2));
+          const netAmount = parseFloat((amt - fee).toFixed(2));
+
+          return {
+            id: w.withdrawalId || `WDR-${w.id}`,
+            dbId: w.id,
+            amount: amt,
+            fee,
+            netAmount,
+            status: w.status,
+            date: safeDate(w.createdAt),
+            method: w.paymentMethod,
+            upiId: w.upiId,
+            accountHolderName: w.accountHolderName,
+            accountNumber: w.accountNumber,
+            ifscCode: w.ifscCode,
+            utrNumber: w.utrNumber,
+            adminNote: w.adminNote,
+            paidAt: w.paidAt,
+            timestamp: safeTimestamp(w.createdAt)
+          }
+        })
+
+        adjustments.forEach(t => {
+          const amt = parseFloat(t.amount)
+          if (amt < 0) {
+            const adminNotes = t.description ? t.description.replace('Admin adjustment: ', '') : 'Wallet Adjustment';
+            const absoluteAmt = Math.abs(amt)
+            withdrawals.push({
+              id: `ADJ-${t.id}`,
+              dbId: t.id,
+              amount: absoluteAmt,
+              fee: 0,
+              netAmount: absoluteAmt,
+              status: 'PAID',
+              date: safeDate(t.createdAt),
+              method: 'Adjustment',
+              upiId: '',
+              accountHolderName: '',
+              accountNumber: '',
+              ifscCode: '',
+              utrNumber: '',
+              adminNote: adminNotes,
+              paidAt: t.createdAt,
+              isAdjustment: true,
+              timestamp: safeTimestamp(t.createdAt)
+            })
+          }
+        })
+
+        withdrawals.sort((a, b) => b.timestamp - a.timestamp)
+        setWithdrawRecords(withdrawals)
+      }
+    } catch (err) {
+      console.error('Failed to load withdrawals:', err)
+    }
+  }
+
+  const fetchPaymentHistory = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const headers = { 'Authorization': `Bearer ${token}` }
+    try {
+      const depositRes = await fetch(`${API_BASE}/api/payment/history`, { headers, credentials: 'include' })
+      if (depositRes.ok) {
+        const depositData = await depositRes.json()
+        
+        let adjustments = []
+        let refunds = []
+        try {
+          const txRes = await fetch(`${API_BASE}/api/wallet/transactions`, { headers, credentials: 'include' })
+          if (txRes.ok) {
+            const txData = await txRes.json()
+            adjustments = (txData || []).filter(t => t.referenceTable === 'wallets' || (t.description && t.description.startsWith('Admin adjustment:')))
+            refunds = (txData || []).filter(t => t.type === 'Refund' || t.type === 'Order_Rejection')
+          }
+        } catch (e) {
+          console.warn('[Deposit fetch adjustments warn]:', e)
+        }
+
+        const deposits = depositData.map(d => ({
+          id: d.transactionId || `DEP-${d.id}`,
+          dbId: d.id,
+          amount: parseFloat(d.amount),
+          bonus: 0,
+          status: d.status,
+          appealStatus: d.appealStatus || null,
+          appealAdminNote: d.appealAdminNote || null,
+          date: safeDate(d.createdAt),
+          method: 'UPI',
+          voucher: d.coupon_code || null,
+          timestamp: safeTimestamp(d.createdAt)
+        }))
+
+        adjustments.forEach(t => {
+          const amt = parseFloat(t.amount)
+          if (amt >= 0) {
+            const adminNotes = t.description ? t.description.replace('Admin adjustment: ', '') : 'Game Rebate Reward';
+            deposits.push({
+              id: `ADJ-${t.id}`,
+              dbId: t.id,
+              amount: amt,
+              bonus: 0,
+              status: 'Completed',
+              appealStatus: null,
+              appealAdminNote: null,
+              date: safeDate(t.createdAt),
+              method: 'Adjustment',
+              voucher: null,
+              isAdjustment: true,
+              adminNotes: adminNotes,
+              timestamp: safeTimestamp(t.createdAt)
+            })
+          }
+        })
+
+        refunds.forEach(t => {
+          const amt = parseFloat(t.amount)
+          deposits.push({
+            id: `RFD-${t.id}`,
+            dbId: t.id,
+            amount: amt,
+            bonus: 0,
+            status: 'Completed',
+            appealStatus: null,
+            appealAdminNote: null,
+            date: safeDate(t.createdAt),
+            method: 'Refund',
+            voucher: null,
+            isAdjustment: true,
+            adminNotes: t.description || 'Order Refund',
+            timestamp: safeTimestamp(t.createdAt)
+          })
+        })
+
+        deposits.sort((a, b) => b.timestamp - a.timestamp)
+        setDepositRecords(deposits)
+      }
+    } catch (err) {
+      console.error('Failed to load deposits:', err)
+    }
+  }
+
+  const fetchMyCoupons = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const headers = { 'Authorization': `Bearer ${token}` }
+    try {
+      const couponRes = await fetch(`${API_BASE}/api/wallet/my-coupons`, { headers, credentials: 'include' })
+      if (couponRes.ok) {
+        const couponData = await couponRes.json()
+        const mappedVouchers = couponData.map(uc => {
+          const expiryDate = new Date(uc.expiresAt);
+          const diffMs = expiryDate.getTime() - Date.now();
+          const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+          const hrs = Math.floor(diffSecs / 3600);
+          const mins = Math.floor((diffSecs % 3600) / 60);
+          const secs = diffSecs % 60;
+          const countdown = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          
+          return {
+            id: uc.code,
+            title: uc.type === 'FIRST_DEPOSIT' ? 'Welcome Offer' : 
+                   uc.type === 'GAMEPLAY_FREEBIE' ? 'Gameplay Freebie' : 
+                   uc.type === 'FEE_WAIVER' ? 'Withdraw Fee Waiver' : 
+                   uc.type === 'REACTIVATION' ? 'Reactivation Reward' : 
+                   uc.type === 'LOYALTY' ? 'Loyalty Reward' : 'Retention Reward',
+            type: uc.type,
+            percent: 0,
+            rewardAmount: parseFloat(uc.rewardAmount),
+            minDeposit: parseFloat(uc.minDepositRequired),
+            maxReward: parseFloat(uc.rewardAmount),
+            rules: uc.type === 'GAMEPLAY_FREEBIE' ? [
+              `Directly Claimable!`,
+              `Reward: ₹${uc.rewardAmount} Free Bet Cash`,
+              `No deposit required!`
+            ] : uc.type === 'FEE_WAIVER' ? [
+              `Waives withdrawal fee!`,
+              `Triggers on next withdrawal`
+            ] : uc.code === 'WELCOME150' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹150.00 Real Cash`
+            ] : uc.code === 'HIGHROLLER500' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹300.00 Real Cash + ₹200.00 Bonus`
+            ] : uc.code === 'CASHBACK200' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹140.00 Real Cash + ₹60.00 Bonus`
+            ] : uc.code === 'SURVIVAL100' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹25.00 Real Cash + ₹25.00 Bonus`
+            ] : uc.code === 'COMEBACK200' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹120.00 Real Cash + ₹80.00 Bonus`
+            ] : uc.code === 'ACTIVEPLAY50' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹45.00 Real Cash + ₹5.00 Bonus`
+            ] : uc.code === 'LOYALTY250' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹162.50 Real Cash + ₹87.50 Bonus`
+            ] : uc.code === 'WEEKEND50' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹37.50 Real Cash + ₹12.50 Bonus`
+            ] : uc.code === 'RELOAD999' ? [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹549.45 Real Cash + ₹449.55 Bonus`
+            ] : [
+              `Min Deposit: ₹${uc.minDepositRequired}`,
+              `Get Extra ₹${uc.rewardAmount} Bonus`
+            ],
+            expiry: `Expire At ${expiryDate.toLocaleDateString()} ${expiryDate.toLocaleTimeString()}`,
+            countdownText: countdown
+          };
+        });
+        setVouchers(mappedVouchers);
+      }
+    } catch (err) {
+      console.error('Failed to load vouchers:', err)
+    }
+  }
+
+
   const fetchWinLossStats = async () => {
     if (!user) return null
     const token = localStorage.getItem('token')
@@ -889,7 +1280,7 @@ export function UserProvider({ children }) {
       setClaimedVipRewards(userData.claimedVipRewards)
     }
     setTimeout(() => {
-      fetchUserHistory()
+      fetchUserProfile()
     }, 50)
   }
 
@@ -909,9 +1300,7 @@ export function UserProvider({ children }) {
     localStorage.removeItem('cp_saved_upis')
   }
 
-  useEffect(() => {
-    fetchUserHistory()
-  }, [])
+  // Monolithic auto-fetch removed. Lifecycles are isolated.
 
   // Compute total balance
   const balance = parseFloat((realBalance + bonusBalance).toFixed(2))
@@ -1207,6 +1596,12 @@ export function UserProvider({ children }) {
       betRecords, setBetRecords,
       betsList, setBetsList,
       fetchUserHistory,
+      fetchUserProfile,
+      fetchWalletTransactions,
+      fetchMyBets,
+      fetchWithdrawHistory,
+      fetchPaymentHistory,
+      fetchMyCoupons,
       walletTransactions,
       fetchWinLossStats,
       claimedVipRewards, setClaimedVipRewards,

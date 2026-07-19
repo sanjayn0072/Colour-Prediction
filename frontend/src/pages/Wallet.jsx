@@ -35,8 +35,15 @@ export default function Wallet({ onNavigate, initialTab }) {
     balance, 
     realBalance,
     bonusBalance,
-    lockedBalance
+    lockedBalance,
+    fetchUserProfile,
+    fetchMyCoupons
   } = useUser()
+
+  useEffect(() => {
+    fetchUserProfile()
+    fetchMyCoupons()
+  }, [])
   const [activeTab, setActiveTab] = useState(initialTab || 'deposit')
   const [prevInitialTab, setPrevInitialTab] = useState(initialTab)
 

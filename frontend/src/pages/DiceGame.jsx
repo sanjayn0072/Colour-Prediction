@@ -6,12 +6,13 @@ import { ArrowLeft, HelpCircle, Trophy, Sparkles, Check, X, Gamepad2, Clock, Loc
 import GameLobbyModal from '../components/GameLobbyModal'
 
 export default function DiceGame({ onNavigate }) {
-  const { user, balance, setRealBalance, betsList, fetchUserHistory } = useUser()
+  const { user, balance, setRealBalance, betsList, fetchUserHistory, fetchUserProfile } = useUser()
   const [loading, setLoading] = useState(false)
   const [diceHouseFee, setDiceHouseFee] = useState(2.0)
   const [isGameActive, setIsGameActive] = useState(true)
 
   useEffect(() => {
+    fetchUserProfile()
     const fetchMultipliers = async () => {
       try {
         const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`

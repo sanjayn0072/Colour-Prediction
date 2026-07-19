@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useUser } from '../context/UserContext'
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Info, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Upload, X, Loader2, AlertCircle } from 'lucide-react'
 
@@ -38,9 +38,27 @@ const safeDate = (val) => {
 };
 
 export default function TransactionRecords({ onBack }) {
-  const { depositRecords = [], withdrawRecords = [], betRecords = [], walletTransactions = [], fetchUserHistory } = useUser() || {}
+  const { 
+    depositRecords = [], 
+    withdrawRecords = [], 
+    betRecords = [], 
+    walletTransactions = [], 
+    fetchUserHistory,
+    fetchWalletTransactions,
+    fetchPaymentHistory,
+    fetchWithdrawHistory,
+    fetchMyBets
+  } = useUser() || {}
+  
   const [activeTab, setActiveTab] = useState('deposit')
   const [copiedId, setCopiedId] = useState(null)
+
+  useEffect(() => {
+    fetchWalletTransactions?.()
+    fetchPaymentHistory?.()
+    fetchWithdrawHistory?.()
+    fetchMyBets?.()
+  }, [])
   const [expandedId, setExpandedId] = useState(null)
 
   // Appeal dispute form and toast states

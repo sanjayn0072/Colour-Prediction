@@ -201,10 +201,14 @@ const VIP_FRAMES = [
 ];
 
 export default function GameLobby({ onNavigate, routeData }) {
-  const { user, setUser, balance, logout } = useUser();
+  const { user, setUser, balance, logout, fetchUserProfile } = useUser();
   const { socket } = useGame();
   const [currentGameId, setCurrentGameId] = useState(null);
   const [onlineAdminsCount, setOnlineAdminsCount] = useState(0);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
 
   useEffect(() => {
     if (!socket || user?.role !== 'super_admin') return;
@@ -443,7 +447,10 @@ export default function GameLobby({ onNavigate, routeData }) {
                   key={game.id}
                   onClick={() => {
                     if (!isComingSoon) {
-                      setCurrentGameId(game.id);
+                      if (game.id === 'colour-prediction') onNavigate('game/colour')
+                      else if (game.id === 'dice-game') onNavigate('game/dice')
+                      else if (game.id === 'spin-wheel') onNavigate('game/spin')
+                      else setCurrentGameId(game.id);
                     }
                   }}
                   className={`group relative aspect-square overflow-hidden rounded-2xl border transition-all duration-300 flex flex-col bg-white cursor-pointer ${

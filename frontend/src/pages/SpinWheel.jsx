@@ -43,7 +43,7 @@ const SEGMENT_ANGLE = 45
 const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 
 export default function SpinWheel({ onNavigate }) {
-  const { user, fetchUserHistory, addVoucher, wagerMultipliers } = useUser()
+  const { user, fetchUserHistory, fetchUserProfile, addVoucher, wagerMultipliers } = useUser()
   const [showLobby, setShowLobby] = useState(false)
   const [toast, setToast] = useState(null)
   const showToast = (msg, type = 'success') => {
@@ -59,7 +59,7 @@ export default function SpinWheel({ onNavigate }) {
   
   // Sync latest user details from server on mount
   useEffect(() => {
-    fetchUserHistory()
+    fetchUserProfile()
   }, [])
 
   const totalDeposit = user?.todayDeposits !== undefined ? user.todayDeposits : 0

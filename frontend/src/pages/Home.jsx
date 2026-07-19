@@ -301,11 +301,15 @@ const PRODUCTS = [
 
 /* ─── Home Page ───────────────────────────────────────────── */
 export default function Home({ onNavigate, unreadNotificationsCount }) {
-  const { user, balance, setRealBalance, fetchUserHistory, setOrders, banners: contextBanners, products: contextProducts } = useUser()
+  const { user, balance, setRealBalance, fetchUserHistory, fetchUserProfile, setOrders, banners: contextBanners, products: contextProducts } = useUser()
   const activeBanners = contextBanners || BANNERS
   const activeProducts = contextProducts || PRODUCTS
   const [bannerIdx, setBannerIdx] = useState(0)
   const scrollRef = useRef(null)
+
+  useEffect(() => {
+    fetchUserProfile()
+  }, [])
   
   // Modals & Triggers
   const [toast, setToast] = useState(null)

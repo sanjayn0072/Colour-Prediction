@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useLocation, useNavigate, Routes, Route } from 'react-router-dom'
+import { useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom'
 import { Home as HomeIcon, Gamepad2, Wallet, User as UserIcon } from 'lucide-react'
 import { UserProvider, useUser } from './context/UserContext'
 import { GameProvider, useGame } from './context/GameContext'
@@ -17,6 +17,9 @@ import Support from './pages/Support'
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 const LegacyAdminDashboard = React.lazy(() => import('./pages/LegacyAdminDashboard'));
 const ProductsPage = React.lazy(() => import('./pages/ProductsPage'));
+const ColourPrediction = React.lazy(() => import('./pages/ColourPrediction'));
+const DiceGame = React.lazy(() => import('./pages/DiceGame'));
+const SpinWheel = React.lazy(() => import('./pages/SpinWheel'));
 
 const AdminLayoutSkeleton = () => (
   <div className="min-h-screen bg-[#070b13] p-6 space-y-4 animate-pulse font-sans">
@@ -110,9 +113,6 @@ function AppContent() {
   const navigate = useNavigate()
   const { user, login, logout } = useUser()
   const { socket } = useGame()
-  const [authPage, setAuthPage] = useState('login')
-  const [activePage, setActivePage] = useState('home')
-  const [routeData, setRouteData] = useState(null)
   const [profileResetTrigger, setProfileResetTrigger] = useState(0)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
@@ -158,150 +158,80 @@ function AppContent() {
   }, [socket])
 
   const handleNavigate = (page, data = null) => {
-    if (page === 'profile' && activePage === 'profile') {
+    if (page === 'profile') {
       setProfileResetTrigger(prev => prev + 1)
+      navigate('/account', { state: data })
+    } else if (page === 'home') {
+      navigate('/')
+    } else if (page === 'transactionRecords') {
+      navigate('/wallet/records')
+    } else if (page === 'depositGateway') {
+      navigate('/wallet/gateway', { state: data })
+    } else {
+      navigate(`/${page}`, { state: data })
     }
-    setRouteData(data)
-    setActivePage(page)
   }
 
   // URL path/hash listener for administrative layout path redirection
   useEffect(() => {
     const checkAdminRedirection = () => {
-      const path = window.location.pathname
+      const path = location.pathname
       const hash = window.location.hash
       const isAdminPath = path.includes('/admin') || hash.includes('admin')
       
       if (isAdminPath) {
         if (!user) {
-          setAuthPage('login')
+          navigate('/login')
         } else if (user.role !== 'admin' && user.role !== 'super_admin') {
-          // Standard user trying to access admin layout: redirect to Home
-          handleNavigate('home')
-          // Clean the browser history so they don't see "/admin" or "#admin"
-          window.history.replaceState(null, '', '/')
-        } else {
-          // Authorized user: route to admin dashboard
-          handleNavigate('admin')
+          navigate('/')
         }
       }
     }
-
     checkAdminRedirection()
-    window.addEventListener('hashchange', checkAdminRedirection)
-    window.addEventListener('popstate', checkAdminRedirection)
-    return () => {
-      window.removeEventListener('hashchange', checkAdminRedirection)
-      window.removeEventListener('popstate', checkAdminRedirection)
-    }
-  }, [user])
+  }, [user, location.pathname])
 
-  // Sync pathname with activePage state
-  useEffect(() => {
-    const path = location.pathname
-    if (path === '/products') {
-      setActivePage('products')
-    } else if (path === '/admin') {
-      setActivePage('admin')
-    } else if (path === '/' && activePage === 'products') {
-      setActivePage('home')
-    }
-  }, [location])
-
-  // Detect register path or invitecode query param to load Register view automatically
+  // Sync pathname with login redirect when not authenticated
   useEffect(() => {
     const path = location.pathname
     const searchParams = new URLSearchParams(location.search)
     const hasInvite = searchParams.has('invitecode') || searchParams.has('inviteCode') || searchParams.has('ref')
-    if ((path === '/register' || path === '/signup' || hasInvite) && !user) {
-      setAuthPage('register')
+    if (!user) {
+      if (path !== '/login' && path !== '/register' && path !== '/forgot' && !hasInvite) {
+        navigate('/login', { replace: true })
+      }
     }
-  }, [location, user])
+  }, [location.pathname, user])
 
   /* ── Auth Handlers ──────────── */
   const handleLogin = (userData) => {
     login(userData)
-    handleNavigate('home')
+    navigate('/')
   }
 
   const handleLogout = () => {
     logout()
-    setAuthPage('login')
-  }
-
-  const handleAuthNavigate = (page) => {
-    setAuthPage(page)
-  }
-
-  /* ── Not Authenticated ──────── */
-  if (!user) {
-    if (authPage === 'register') {
-      return <Register onNavigate={handleAuthNavigate} />
-    }
-    if (authPage === 'forgot') {
-      return <ForgotPassword onNavigate={handleAuthNavigate} />
-    }
-    return <Login onLogin={handleLogin} onNavigate={handleAuthNavigate} />
-  }
-
-  /* ── Authenticated App ─────── */
-  const renderPage = () => {
-    switch (activePage) {
-      case 'home':
-        return <Home onNavigate={handleNavigate} unreadNotificationsCount={unreadNotificationsCount} />
-      case 'products':
-        return (
-          <React.Suspense fallback={<div className="min-h-screen bg-[#070b13] flex items-center justify-center text-slate-400 font-sans">Loading Marketplace...</div>}>
-            <ProductsPage onBack={() => { navigate('/'); setActivePage('home'); }} />
-          </React.Suspense>
-        )
-      case 'game':
-        return <GameLobby onNavigate={handleNavigate} routeData={routeData} />
-      case 'spinWheel':
-        setTimeout(() => handleNavigate('game', { gameId: 'spin-wheel' }), 0)
-        return null
-      case 'diceGame':
-        setTimeout(() => handleNavigate('game', { gameId: 'dice-game' }), 0)
-        return null
-      case 'notifications':
-        return <Notifications onBack={() => handleNavigate('home')} onRefreshUnread={fetchUnreadNotificationsCount} />
-      case 'wallet':
-        return <WalletPage onNavigate={handleNavigate} initialTab={routeData?.tab} />
-      case 'transactionRecords':
-        return <TransactionRecordsPage onBack={() => handleNavigate('wallet')} />
-      case 'depositGateway':
-        return <DepositGateway depositData={routeData} onBack={() => handleNavigate('wallet')} onNavigate={handleNavigate} />
-
-      case 'support':
-        return <Support onNavigate={handleNavigate} />
-      case 'profile':
-        return (
-          <Profile 
-            key={`profile-${profileResetTrigger}`}
-            user={user} 
-            onLogout={handleLogout} 
-            initialSubPage={routeData?.subPage} 
-            onNavigate={handleNavigate} 
-          />
-        )
-      case 'admin':
-        if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-          setTimeout(() => handleNavigate('home'), 0)
-          return null
-        }
-        return (
-          <React.Suspense fallback={<AdminLayoutSkeleton />}>
-            <AdminDashboard onNavigate={handleNavigate} onBack={() => handleNavigate('profile')} />
-          </React.Suspense>
-        )
-      default:
-        return <Home onNavigate={handleNavigate} />
-    }
+    navigate('/login')
   }
 
   // Hide nav bar on certain pages
-  const hideNav = ['depositGateway', 'transactionRecords', 'admin'].includes(activePage)
-  const isAdminLayout = activePage === 'admin'
+  const path = location.pathname
+  const hideNav = path.startsWith('/admin') ||
+                  path.startsWith('/wallet/gateway') ||
+                  path.startsWith('/wallet/records') ||
+                  path.startsWith('/login') ||
+                  path.startsWith('/register') ||
+                  path.startsWith('/forgot')
+  
+  const isAdminLayout = path.startsWith('/admin')
+
+  const getActiveNavItem = () => {
+    if (path === '/' || path === '/home') return 'home'
+    if (path.startsWith('/game')) return 'game'
+    if (path.startsWith('/wallet')) return 'wallet'
+    if (path.startsWith('/account') || path.startsWith('/support')) return 'profile'
+    return ''
+  }
+  const activeNavItem = getActiveNavItem()
 
   return (
     <div className={
@@ -311,7 +241,69 @@ function AppContent() {
     }>
       {/* Page Content */}
       <main className={`flex-1 overflow-y-auto ${!hideNav ? 'pb-20' : ''}`}>
-        {renderPage()}
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={!user ? <Login onLogin={handleLogin} onNavigate={(p) => navigate(p === 'forgot' ? '/forgot' : p === 'register' ? '/register' : '/login')} /> : <Navigate to="/" replace />} />
+          <Route path="/register" element={!user ? <Register onNavigate={(p) => navigate(p === 'forgot' ? '/forgot' : p === 'register' ? '/register' : '/login')} /> : <Navigate to="/" replace />} />
+          <Route path="/forgot" element={!user ? <ForgotPassword onNavigate={(p) => navigate(p === 'forgot' ? '/forgot' : p === 'register' ? '/register' : '/login')} /> : <Navigate to="/" replace />} />
+
+          {/* Protected User Routes */}
+          <Route path="/" element={user ? <Home onNavigate={handleNavigate} unreadNotificationsCount={unreadNotificationsCount} /> : <Navigate to="/login" replace />} />
+          <Route path="/game" element={user ? <GameLobby onNavigate={handleNavigate} /> : <Navigate to="/login" replace />} />
+          <Route path="/game/colour" element={
+            user ? (
+              <React.Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-400">Loading Game...</div>}>
+                <ColourPrediction />
+              </React.Suspense>
+            ) : <Navigate to="/login" replace />
+          } />
+          <Route path="/game/dice" element={
+            user ? (
+              <React.Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-400">Loading Game...</div>}>
+                <DiceGame />
+              </React.Suspense>
+            ) : <Navigate to="/login" replace />
+          } />
+          <Route path="/game/spin" element={
+            user ? (
+              <React.Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-400">Loading Game...</div>}>
+                <SpinWheel />
+              </React.Suspense>
+            ) : <Navigate to="/login" replace />
+          } />
+          <Route path="/wallet" element={user ? <WalletPage onNavigate={handleNavigate} /> : <Navigate to="/login" replace />} />
+          <Route path="/wallet/records" element={user ? <TransactionRecordsPage onBack={() => navigate('/wallet')} /> : <Navigate to="/login" replace />} />
+          <Route path="/wallet/gateway" element={user ? <DepositGateway onBack={() => navigate('/wallet')} onNavigate={handleNavigate} /> : <Navigate to="/login" replace />} />
+          <Route path="/account" element={
+            user ? (
+              <Profile 
+                key={`profile-${profileResetTrigger}`}
+                user={user} 
+                onLogout={handleLogout} 
+                onNavigate={handleNavigate} 
+              />
+            ) : <Navigate to="/login" replace />
+          } />
+          <Route path="/notifications" element={user ? <Notifications onBack={() => navigate('/')} onRefreshUnread={fetchUnreadNotificationsCount} /> : <Navigate to="/login" replace />} />
+          <Route path="/support" element={user ? <Support onNavigate={handleNavigate} /> : <Navigate to="/login" replace />} />
+          <Route path="/products" element={
+            user ? (
+              <React.Suspense fallback={<div className="min-h-screen bg-[#070b13] flex items-center justify-center text-slate-400 font-sans">Loading Marketplace...</div>}>
+                <ProductsPage onBack={() => navigate('/')} />
+              </React.Suspense>
+            ) : <Navigate to="/login" replace />
+          } />
+
+          {/* Protected Admin Routes */}
+          <Route path="/admin/*" element={
+            (user && (user.role === 'admin' || user.role === 'super_admin')) ? (
+              <React.Suspense fallback={<AdminLayoutSkeleton />}>
+                <AdminDashboard onNavigate={handleNavigate} onBack={() => navigate('/account')} />
+              </React.Suspense>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
 
       {/* Bottom Navigation Bar */}
@@ -320,10 +312,7 @@ function AppContent() {
           <div className="flex items-center justify-around py-2">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon
-              const isActive = activePage === item.id 
-                || (activePage === 'depositGateway' && item.id === 'wallet')
-                || (['diceGame', 'spinWheel'].includes(activePage) && item.id === 'game')
-                || (activePage === 'support' && item.id === 'profile')
+              const isActive = activeNavItem === item.id
               return (
                 <button
                   key={item.id}
