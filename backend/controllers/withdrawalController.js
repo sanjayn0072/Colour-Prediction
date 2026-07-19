@@ -126,7 +126,7 @@ export const createWithdrawal = async (req, res) => {
     }
 
     const [withdrawRows] = await connection.query(
-      'SELECT SUM(amount) as total FROM withdrawals WHERE user_id = ? AND status IN ("PAID", "APPROVED")',
+      'SELECT SUM(amount) as total FROM withdrawals WHERE user_id = ? AND status != "REJECTED"',
       [req.user.id]
     );
     const cumulativeWithdrawals = withdrawRows[0].total ? parseFloat(withdrawRows[0].total) : 0;
