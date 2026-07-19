@@ -163,8 +163,8 @@ export const verifyOtpRegister = async (req, res) => {
     if (inviteCode && inviteCode.trim() !== '') {
       const cleanInvite = String(inviteCode).trim().replace(/[^a-zA-Z0-9]/g, '');
       const referrers = await connection.query(
-        'SELECT id FROM users WHERE uid = ? LIMIT 1',
-        [cleanInvite]
+        'SELECT id FROM users WHERE id = ? OR uid = ? LIMIT 1',
+        [cleanInvite, cleanInvite]
       );
       if (referrers[0] && referrers[0].length > 0) {
         referrerId = referrers[0][0].id;
