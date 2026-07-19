@@ -138,13 +138,14 @@ export const createDepositOrderSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string().trim().email('Invalid email address')
+    phoneOrEmail: z.string().trim().min(1, 'Please enter your phone number or email to proceed.')
   })
 });
 
 export const resetPasswordSchema = z.object({
   body: z.object({
-    token: z.string().trim().min(1, 'Token is required'),
+    email: z.string().trim().min(1, 'Email or phone number is required'),
+    otp: z.union([z.string().trim().length(6), z.number()]),
     newPassword: z.string().min(6, 'Password must be at least 6 characters')
   })
 });
