@@ -290,7 +290,7 @@ export const login = async (req, res) => {
     );
 
     if (!users || users.length === 0) {
-      return res.status(401).json({ error: "The phone number or password you entered doesn't match our records. Please double-check and try again." });
+      return res.status(401).json({ error: 'Invalid email/phone number or password.' });
     }
 
     const user = users[0];
@@ -298,7 +298,7 @@ export const login = async (req, res) => {
     // Password verification using bcrypt
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
-      return res.status(401).json({ error: "The phone number or password you entered doesn't match our records. Please double-check and try again." });
+      return res.status(401).json({ error: 'Invalid email/phone number or password.' });
     }
 
     // Fetch claimed VIP rewards
