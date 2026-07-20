@@ -350,15 +350,36 @@ export const updateUserStatus = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const [userRows] = await connection.query('SELECT name, phone FROM users WHERE id = ?', [id]);
+    const [userRows] = await connection.query('SELECT id, name, phone, role FROM users WHERE id = ? FOR UPDATE', [id]);
     if (userRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({ error: 'User not found.' });
     }
 
+    const targetUser = userRows[0];
+
+    // Restrict locking of administrative roles
+    if (status === 'locked') {
+      const initiatorRole = req.user.role;
+
+      if (initiatorRole === 'admin') {
+        if (targetUser.role === 'admin' || targetUser.role === 'super_admin') {
+          await connection.rollback();
+          return res.status(403).json({ error: 'Unauthorized action: Admins cannot lock administrative or super admin accounts.' });
+        }
+      }
+
+      if (initiatorRole === 'super_admin') {
+        if (targetUser.role === 'super_admin') {
+          await connection.rollback();
+          return res.status(403).json({ error: 'Unauthorized action: Super Admins cannot lock super admin accounts.' });
+        }
+      }
+    }
+
     await connection.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
 
-    await logAdminAction(connection, req.user.id, `LOCK_USER_${status.toUpperCase()}`, `Updated status of user ${userRows[0].name} (${userRows[0].phone}) to ${status}`);
+    await logAdminAction(connection, req.user.id, `LOCK_USER_${status.toUpperCase()}`, `Updated status of user ${targetUser.name} (${targetUser.phone}) to ${status}`);
 
     await connection.commit();
     return res.json({ message: `User status updated to ${status} successfully.` });
