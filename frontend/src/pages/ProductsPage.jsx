@@ -117,12 +117,12 @@ export default function ProductsPage({ onBack }) {
                   key={product.id} 
                   className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden hover:border-indigo-500/30 transition-all duration-200 group flex flex-col"
                 >
-                  <div className="h-32 bg-slate-950 flex items-center justify-center relative p-4 border-b border-slate-800">
+                  <div className="h-32 bg-slate-950 flex items-center justify-center relative border-b border-slate-800 overflow-hidden">
                     <img 
                       src={product.image_url ? `${API_BASE_URL}${product.image_url}` : (product.image ? product.image : '/uploads/placeholder.png')} 
                       onError={(e) => { e.target.src = '/uploads/placeholder.png'; }}
                       alt={product.title} 
-                      className="h-24 w-24 object-contain group-hover:scale-105 transition-transform duration-300" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
                     />
                     {product.badge && (
                       <span className="absolute top-2 right-2 bg-rose-600 text-[9px] font-bold text-white px-1.5 py-0.5 rounded-md shadow-sm">

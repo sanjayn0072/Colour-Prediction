@@ -960,8 +960,8 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
         <div className="grid grid-cols-2 gap-3">
           {visibleProducts.map((product) => (
             <div key={product.id} onClick={() => handleOpenProduct(product)} className="bg-white rounded-2xl overflow-hidden border border-slate-100 hover:border-primary/30 transition-all duration-200 group shadow-sm hover:shadow-md cursor-pointer flex flex-col">
-              <div className="h-32 bg-slate-50 flex items-center justify-center relative p-4 border-b border-slate-100">
-                <img src={product.image} alt={product.title} className="h-24 w-24 object-contain group-hover:scale-105 transition-transform duration-300" />
+              <div className="h-32 bg-slate-50 flex items-center justify-center relative border-b border-slate-100 overflow-hidden">
+                <img src={product.image} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 {product.badge && <span className="absolute top-2 right-2 bg-destructive text-[9px] font-bold text-white px-1.5 py-0.5 rounded-md shadow-sm">{product.badge}</span>}
               </div>
               <div className="p-3 flex-1 flex flex-col justify-between">
