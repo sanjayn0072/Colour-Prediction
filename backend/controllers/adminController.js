@@ -350,54 +350,15 @@ export const updateUserStatus = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const [userRows] = await connection.query('SELECT id, name, phone, role FROM users WHERE id = ? FOR UPDATE', [id]);
+    const [userRows] = await connection.query('SELECT name, phone FROM users WHERE id = ?', [id]);
     if (userRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    const targetUser = userRows[0];
-
-    // Hierarchical locking logic guardrails
-    if (status === 'locked') {
-      const initiatorId = req.user.id;
-      const initiatorRole = req.user.role;
-
-      // Super Admin Immutability: super_admin status can never be locked under any circumstances by any tier
-      if (targetUser.role === 'super_admin') {
-        if (initiatorRole === 'super_admin' && String(initiatorId) === String(targetUser.id)) {
-          await logAdminAction(connection, initiatorId, 'BLOCKED_LOCK_SELF', `Super Admin ID ${initiatorId} blocked from locking their own account.`);
-          await connection.commit();
-          return res.status(403).json({ error: 'Operation restricted: Super Admins cannot lock their own accounts.' });
-        } else {
-          await logAdminAction(connection, initiatorId, 'BLOCKED_LOCK_SUPER_ADMIN', `User ID ${initiatorId} (${initiatorRole}) blocked from locking Super Admin user ID ${targetUser.id}.`);
-          await connection.commit();
-          return res.status(403).json({ error: 'Unauthorized action: Super Admin accounts cannot be locked.' });
-        }
-      }
-
-      // Condition A (Standard Admin Restrictions)
-      if (initiatorRole === 'admin') {
-        if (String(initiatorId) === String(targetUser.id) || targetUser.role === 'admin') {
-          await logAdminAction(connection, initiatorId, 'BLOCKED_LOCK_ADMIN_VIOLATION', `Admin ID ${initiatorId} blocked from locking user ID ${targetUser.id} (role: ${targetUser.role}, self-lock or administrative role violation).`);
-          await connection.commit();
-          return res.status(403).json({ error: 'Unauthorized action: Admins cannot lock their own account or other administrative roles.' });
-        }
-      }
-
-      // Condition B (Super Admin Self-lock Restriction)
-      if (initiatorRole === 'super_admin') {
-        if (String(initiatorId) === String(targetUser.id)) {
-          await logAdminAction(connection, initiatorId, 'BLOCKED_LOCK_SELF', `Super Admin ID ${initiatorId} blocked from locking their own account.`);
-          await connection.commit();
-          return res.status(403).json({ error: 'Operation restricted: Super Admins cannot lock their own accounts.' });
-        }
-      }
-    }
-
     await connection.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
 
-    await logAdminAction(connection, req.user.id, `LOCK_USER_${status.toUpperCase()}`, `Updated status of user ${targetUser.name} (${targetUser.phone}) to ${status}`);
+    await logAdminAction(connection, req.user.id, `LOCK_USER_${status.toUpperCase()}`, `Updated status of user ${userRows[0].name} (${userRows[0].phone}) to ${status}`);
 
     await connection.commit();
     return res.json({ message: `User status updated to ${status} successfully.` });
