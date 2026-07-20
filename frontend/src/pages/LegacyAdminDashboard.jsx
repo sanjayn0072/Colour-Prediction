@@ -2611,16 +2611,18 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                               >
                                 <Wallet size={11} /> Adjust
                               </button>
-                              <button
-                                onClick={() => handleUserStatusToggle(u.id, u.status)}
-                                className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer border border-0 flex items-center gap-1 ${
-                                  u.status === 'active'
-                                    ? 'bg-red-950/30 hover:bg-red-900/40 text-red-400'
-                                    : 'bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-400'
-                                }`}
-                              >
-                                <Lock size={11} /> {u.status === 'active' ? 'Lock' : 'Unlock'}
-                              </button>
+                              {((isSuperAdmin && u.role !== 'super_admin') || (isAdmin && u.role !== 'admin' && u.role !== 'super_admin')) && (
+                                 <button
+                                   onClick={() => handleUserStatusToggle(u.id, u.status)}
+                                   className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer border border-0 flex items-center gap-1 ${
+                                     u.status === 'active'
+                                       ? 'bg-red-950/30 hover:bg-red-900/40 text-red-400'
+                                       : 'bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-400'
+                                   }`}
+                                 >
+                                   <Lock size={11} /> {u.status === 'active' ? 'Lock' : 'Unlock'}
+                                 </button>
+                               )}
                             </div>
                           </td>
                         </tr>
@@ -2690,16 +2692,18 @@ export default function LegacyAdminDashboard({ onBack, adminToken, on2FARequired
                         >
                           <Wallet size={11} /> Adjust
                         </button>
-                        <button
-                          onClick={() => handleUserStatusToggle(u.id, u.status)}
-                          className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer border border-0 flex items-center gap-1 ${
-                            u.status === 'active'
-                              ? 'bg-red-950/30 hover:bg-red-900/40 text-red-400'
-                              : 'bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-400'
-                          }`}
-                        >
-                          <Lock size={11} /> {u.status === 'active' ? 'Lock' : 'Unlock'}
-                        </button>
+                        {((isSuperAdmin && u.role !== 'super_admin') || (isAdmin && u.role !== 'admin' && u.role !== 'super_admin')) && (
+                          <button
+                            onClick={() => handleUserStatusToggle(u.id, u.status)}
+                            className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer border border-0 flex items-center gap-1 ${
+                              u.status === 'active'
+                                ? 'bg-red-950/30 hover:bg-red-900/40 text-red-400'
+                                : 'bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-400'
+                            }`}
+                          >
+                            <Lock size={11} /> {u.status === 'active' ? 'Lock' : 'Unlock'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
