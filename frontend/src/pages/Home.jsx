@@ -444,7 +444,7 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
     setTimeout(() => setReferralCopied(false), 2000)
   }
 
-  const visibleProducts = showAllProducts ? activeProducts : activeProducts.slice(0, 4)
+  const visibleProducts = showAllProducts ? activeProducts : activeProducts.slice(0, 6)
 
   const isFormValid = () => {
     const name = deliveryName || '';
@@ -503,17 +503,17 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
             
             {/* Modal Header/Banner & Image Gallery */}
             {checkoutStep !== 'success' && (
-              <div className="relative bg-slate-50 flex flex-col items-center justify-center border-b border-slate-100 shrink-0 p-4 pt-10">
-                <div className="h-40 flex items-center justify-center">
+              <div className="relative bg-slate-50 flex flex-col items-center justify-center border-b border-slate-100 shrink-0 pb-4">
+                <div className="h-56 w-full overflow-hidden">
                   <img 
                     src={selectedProduct.images[activeImgIdx]} 
                     alt={selectedProduct.title} 
-                    className="h-36 w-36 object-contain drop-shadow-md transition-all duration-300" 
+                    className="w-full h-full object-cover transition-all duration-300" 
                   />
                 </div>
                 
                 {/* Thumbnails Gallery */}
-                <div className="flex gap-2.5 justify-center mt-2 shrink-0">
+                <div className="flex gap-2.5 justify-center mt-3 shrink-0">
                   {selectedProduct.images.map((img, i) => (
                     <button 
                       key={i} 
@@ -952,7 +952,7 @@ export default function Home({ onNavigate, unreadNotificationsCount }) {
       {/* ── Product Grid ── */}
       <section className="px-4 pt-6 pb-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tech Products</h3>
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Products</h3>
           <button onClick={() => setShowAllProducts(!showAllProducts)} className="text-xs text-primary font-medium flex items-center gap-0.5 hover:underline cursor-pointer">
             {showAllProducts ? 'Show Less' : 'View All'} <ChevronRight size={14} />
           </button>
