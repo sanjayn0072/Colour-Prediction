@@ -111,10 +111,21 @@ const NAV_ITEMS = [
 function AppContent() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, login, logout } = useUser()
+  const { user, login, logout, loading } = useUser()
   const { socket } = useGame()
   const [profileResetTrigger, setProfileResetTrigger] = useState(0)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#070b13] text-white font-sans">
+        <div className="flex flex-col items-center">
+          <span className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 mt-3 font-semibold">Restoring session...</p>
+        </div>
+      </div>
+    )
+  }
 
   const fetchUnreadNotificationsCount = async () => {
     const token = localStorage.getItem('token')
@@ -174,6 +185,7 @@ function AppContent() {
 
   // URL path/hash listener for administrative layout path redirection
   useEffect(() => {
+    if (loading) return
     const checkAdminRedirection = () => {
       const path = location.pathname
       const hash = window.location.hash
@@ -188,10 +200,11 @@ function AppContent() {
       }
     }
     checkAdminRedirection()
-  }, [user, location.pathname])
+  }, [user, loading, location.pathname])
 
   // Sync pathname with login redirect when not authenticated
   useEffect(() => {
+    if (loading) return
     const path = location.pathname
     const searchParams = new URLSearchParams(location.search)
     const hasInvite = searchParams.has('invitecode') || searchParams.has('inviteCode') || searchParams.has('ref')
@@ -200,7 +213,7 @@ function AppContent() {
         navigate('/login', { replace: true })
       }
     }
-  }, [location.pathname, user])
+  }, [location.pathname, user, loading])
 
   /* ── Auth Handlers ──────────── */
   const handleLogin = (userData) => {

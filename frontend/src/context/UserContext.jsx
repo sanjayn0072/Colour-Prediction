@@ -304,6 +304,7 @@ const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//$
 
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [vouchers, setVouchers] = useState(INITIAL_VOUCHERS)
   
   const [banners, setBanners] = useState(INITIAL_BANNERS)
@@ -849,7 +850,10 @@ export function UserProvider({ children }) {
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token')
-    if (!token) return
+    if (!token) {
+      setLoading(false)
+      return
+    }
     const headers = { 'Authorization': `Bearer ${token}` }
     try {
       const profileRes = await fetch(`${API_BASE}/api/auth/profile`, { headers, credentials: 'include' })
@@ -862,6 +866,7 @@ export function UserProvider({ children }) {
         setBonusBalance(0)
         setSavedBanks([])
         setSavedUpis([])
+        setLoading(false)
         return
       }
       if (profileRes.ok) {
@@ -906,6 +911,8 @@ export function UserProvider({ children }) {
       if (!err.message?.includes('401') && !err.message?.includes('Unauthorized')) {
         console.error('Failed to load profile:', err)
       }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -1574,10 +1581,13 @@ export function UserProvider({ children }) {
       return { success: false, error: 'Failed to connect to server.' }
     }
   }
+  useEffect(() => {
+    fetchUserProfile()
+  }, [])
 
   return (
     <UserContext.Provider value={{ 
-      user, setUser, login, logout, setRole, 
+      user, setUser, login, logout, setRole, loading,
       balance, setBalance, realBalance, setRealBalance, 
       availableBalance, setAvailableBalance, lockedBalance, setLockedBalance,
       bonusBalance, setBonusBalance,
