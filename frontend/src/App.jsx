@@ -116,17 +116,6 @@ function AppContent() {
   const [profileResetTrigger, setProfileResetTrigger] = useState(0)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#070b13] text-white font-sans">
-        <div className="flex flex-col items-center">
-          <span className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-slate-400 mt-3 font-semibold">Restoring session...</p>
-        </div>
-      </div>
-    )
-  }
-
   const fetchUnreadNotificationsCount = async () => {
     const token = localStorage.getItem('token')
     if (!token) return
@@ -214,6 +203,17 @@ function AppContent() {
       }
     }
   }, [location.pathname, user, loading])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#070b13] text-white font-sans">
+        <div className="flex flex-col items-center">
+          <span className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 mt-3 font-semibold">Restoring session...</p>
+        </div>
+      </div>
+    )
+  }
 
   /* ── Auth Handlers ──────────── */
   const handleLogin = (userData) => {
