@@ -305,6 +305,7 @@ const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//$
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [maintenanceActive, setMaintenanceActive] = useState(false)
   const [vouchers, setVouchers] = useState(INITIAL_VOUCHERS)
   
   const [banners, setBanners] = useState(INITIAL_BANNERS)
@@ -1582,12 +1583,56 @@ export function UserProvider({ children }) {
     }
   }
   useEffect(() => {
-    fetchUserProfile()
+    const initAuth = async () => {
+      try {
+        const maintRes = await fetch(`${API_BASE}/api/config/maintenance`)
+        if (maintRes.ok) {
+          const maintData = await maintRes.json()
+          if (maintData.maintenance) {
+            const token = localStorage.getItem('token')
+            if (token) {
+              const headers = { 'Authorization': `Bearer ${token}` }
+              const profileRes = await fetch(`${API_BASE}/api/auth/profile`, { headers })
+              if (profileRes.ok) {
+                const profileData = await profileRes.json()
+                if (profileData.user && profileData.user.role === 'super_admin') {
+                  setUser(prev => ({
+                    ...prev,
+                    ...profileData.user,
+                    uid: profileData.user.uid || profileData.user.id || (prev ? prev.uid : String(Math.floor(100000 + Math.random() * 900000))),
+                    role: 'super_admin'
+                  }))
+                  setLoading(false)
+                  return
+                }
+              }
+            }
+            setMaintenanceActive(true)
+            setLoading(false)
+            return
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check maintenance state:', err)
+      }
+
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await fetchUserProfile()
+        } catch (err) {
+          console.error('Failed to restore session:', err)
+        }
+      } else {
+        setLoading(false)
+      }
+    }
+    initAuth()
   }, [])
 
   return (
     <UserContext.Provider value={{ 
-      user, setUser, login, logout, setRole, loading,
+      user, setUser, login, logout, setRole, loading, maintenanceActive, setMaintenanceActive,
       balance, setBalance, realBalance, setRealBalance, 
       availableBalance, setAvailableBalance, lockedBalance, setLockedBalance,
       bonusBalance, setBonusBalance,

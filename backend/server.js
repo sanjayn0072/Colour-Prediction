@@ -149,6 +149,59 @@ const xssSanitizer = (req, res, next) => {
 app.use(xssSanitizer);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+const checkMaintenanceMode = async (req, res, next) => {
+  if (!req.path.startsWith('/api')) {
+    return next();
+  }
+
+  // Always allow health check and maintenance status endpoint
+  if (req.path === '/api/health-api' || req.path === '/api/config/maintenance') {
+    return next();
+  }
+
+  try {
+    const configRows = await query('SELECT config_value FROM system_configs WHERE config_key = "SYSTEM_MAINTENANCE_STATE"');
+    const isMaintenance = configRows.length > 0 && configRows[0].config_value === 'maintenance';
+
+    if (isMaintenance) {
+      let token;
+      if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        token = req.headers.authorization.split(' ')[1];
+      } else if (req.cookies && req.cookies.token) {
+        token = req.cookies.token;
+      }
+
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const users = await query('SELECT role FROM users WHERE id = ?', [decoded.id]);
+          if (users.length > 0 && users[0].role === 'super_admin') {
+            return next();
+          }
+        } catch (err) {
+          // Token is invalid/expired, block
+        }
+      }
+
+      // Allow super admin login paths
+      if (req.path === '/api/admin/auth/login' || req.path === '/api/admin/auth/2fa') {
+        return next();
+      }
+
+      // Block all other requests
+      return res.status(503).json({
+        error: 'Platform is under maintenance. Please try again later.',
+        code: 'MAINTENANCE_ACTIVE'
+      });
+    }
+  } catch (err) {
+    logger.error(err, 'Failed to check system maintenance mode');
+  }
+  next();
+};
+
+app.use(checkMaintenanceMode);
+
 // Import configurable rate limiters from rateLimitMiddleware
 import {
   authRateLimiter,
@@ -160,9 +213,21 @@ import {
 import { protect } from './middleware/authMiddleware.js';
 import { checkRole } from './middleware/roleMiddleware.js';
 import { uploadProductImage, uploadProductImages, verifyUploadMagicBytes, handleScreenshotUpload } from './utils/uploadService.js';
+
 app.get("/api/health-api", (req, res) => {
   res.status(200).json({ success: true })
 })
+
+app.get('/api/config/maintenance', async (req, res) => {
+  try {
+    const configRows = await query('SELECT config_value FROM system_configs WHERE config_key = "SYSTEM_MAINTENANCE_STATE"');
+    const isMaintenance = configRows.length > 0 && configRows[0].config_value === 'maintenance';
+    return res.status(200).json({ maintenance: isMaintenance });
+  } catch (err) {
+    logger.error(err, 'Failed to retrieve maintenance status');
+    return res.status(200).json({ maintenance: false });
+  }
+});
 // ─── AUTHENTICATION ENDPOINTS ───
 app.post('/api/auth/send-otp', authRateLimiter, validate(sendOtpSchema), authController.sendOtp);
 app.post('/api/auth/verify-email', authRateLimiter, validate(verifyEmailSchema), authController.verifyOtpRegister);
