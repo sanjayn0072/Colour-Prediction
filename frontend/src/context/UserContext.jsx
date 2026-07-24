@@ -1584,46 +1584,99 @@ export function UserProvider({ children }) {
   }
   useEffect(() => {
     const initAuth = async () => {
+      const token = localStorage.getItem('token')
       try {
-        const maintRes = await fetch(`${API_BASE}/api/config/maintenance`)
-        if (maintRes.ok) {
-          const maintData = await maintRes.json()
-          if (maintData.maintenance) {
-            const token = localStorage.getItem('token')
-            if (token) {
-              const headers = { 'Authorization': `Bearer ${token}` }
-              const profileRes = await fetch(`${API_BASE}/api/auth/profile`, { headers })
-              if (profileRes.ok) {
-                const profileData = await profileRes.json()
-                if (profileData.user && profileData.user.role === 'super_admin') {
-                  setUser(prev => ({
-                    ...prev,
-                    ...profileData.user,
-                    uid: profileData.user.uid || profileData.user.id || (prev ? prev.uid : String(Math.floor(100000 + Math.random() * 900000))),
-                    role: 'super_admin'
-                  }))
-                  setLoading(false)
-                  return
-                }
-              }
+        if (!token) {
+          // No token stored: perform quick non-blocking maintenance check
+          const maintRes = await fetch(`${API_BASE}/api/config/maintenance`).catch(() => null)
+          if (maintRes && maintRes.ok) {
+            const maintData = await maintRes.json().catch(() => null)
+            if (maintData && maintData.maintenance) {
+              setMaintenanceActive(true)
             }
-            setMaintenanceActive(true)
-            setLoading(false)
-            return
+          }
+          setLoading(false)
+          return
+        }
+
+        // Token present: fetch maintenance status and profile in parallel
+        const headers = { 'Authorization': `Bearer ${token}` }
+        const [maintRes, profileRes] = await Promise.all([
+          fetch(`${API_BASE}/api/config/maintenance`).catch(() => null),
+          fetch(`${API_BASE}/api/auth/profile`, { headers, credentials: 'include' }).catch(() => null)
+        ])
+
+        let isMaintenance = false
+        if (maintRes && maintRes.ok) {
+          const maintData = await maintRes.json().catch(() => null)
+          if (maintData && maintData.maintenance) {
+            isMaintenance = true
           }
         }
-      } catch (err) {
-        console.error('Failed to check maintenance state:', err)
-      }
 
-      const token = localStorage.getItem('token')
-      if (token) {
-        try {
-          await fetchUserProfile()
-        } catch (err) {
-          console.error('Failed to restore session:', err)
+        if (profileRes) {
+          if (profileRes.status === 401 || profileRes.status === 403) {
+            localStorage.removeItem('token')
+            setUser(null)
+            setRealBalance(0)
+            setAvailableBalance(0)
+            setLockedBalance(0)
+            setBonusBalance(0)
+            setSavedBanks([])
+            setSavedUpis([])
+          } else if (profileRes.ok) {
+            const profileData = await profileRes.json().catch(() => null)
+            if (profileData && profileData.user) {
+              const u = profileData.user
+              setUser(prev => ({
+                ...prev,
+                ...u,
+                uid: u.uid || u.id || (prev ? prev.uid : String(Math.floor(100000 + Math.random() * 900000))),
+                role: u.role || 'user'
+              }))
+              if (u.walletBalance !== undefined) setRealBalance(u.walletBalance)
+              if (u.availableBalance !== undefined) setAvailableBalance(u.availableBalance)
+              if (u.lockedBalance !== undefined) setLockedBalance(u.lockedBalance)
+              if (u.bonusBalance !== undefined) setBonusBalance(u.bonusBalance)
+              if (u.requiredWager !== undefined) setRequiredWager(u.requiredWager)
+              if (u.requiredBonusWager !== undefined) setRequiredBonusWager(u.requiredBonusWager)
+              if (u.claimedVipRewards !== undefined) setClaimedVipRewards(u.claimedVipRewards)
+
+              if (u.bankDetails) {
+                setSavedBanks([{
+                  accountNumber: u.bankDetails.accountNumber,
+                  ifsc: u.bankDetails.ifscCode,
+                  holderName: u.bankDetails.holderName,
+                  bankName: u.bankDetails.bankName
+                }])
+              } else {
+                setSavedBanks([])
+              }
+
+              if (u.upiDetails) {
+                setSavedUpis([{
+                  upiId: u.upiDetails.upiId,
+                  holderName: u.name
+                }])
+              } else {
+                setSavedUpis([])
+              }
+
+              if (isMaintenance && u.role !== 'super_admin') {
+                setMaintenanceActive(true)
+              }
+              setLoading(false)
+              return
+            }
+          }
         }
-      } else {
+
+        if (isMaintenance) {
+          setMaintenanceActive(true)
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err)
+      } finally {
         setLoading(false)
       }
     }

@@ -82,21 +82,45 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cookieParser());
 
-const server = http.createServer(app);
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'https://colourplay.pages.dev', "https://playnixclub.bet", "https://www.playnixclub.bet"];
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://colourplay.pages.dev',
+  'https://playnixclub.bet',
+  'https://www.playnixclub.bet',
+  'https://api.playnixclub.bet'
+];
+
+const envOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : [];
+
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const hostname = new URL(origin).hostname;
+    if (hostname === 'playnixclub.bet' || hostname.endsWith('.playnixclub.bet') || hostname.endsWith('colourplay.pages.dev')) {
+      return true;
+    }
+  } catch (e) {
+    // Ignore invalid URL parse errors
+  }
+  return false;
+};
 
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin)) {
         return callback(null, true);
       }
-      return callback(new Error('Not allowed by CORS'));
+      return callback(null, false);
     },
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
@@ -105,11 +129,10 @@ connectDB();
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+    if (isOriginAllowed(origin)) {
       return callback(null, true);
     }
-    return callback(new Error('Not allowed by CORS'));
+    return callback(null, false);
   },
   credentials: true
 }));
