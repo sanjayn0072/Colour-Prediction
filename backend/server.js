@@ -82,6 +82,8 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cookieParser());
 
+const server = http.createServer(app);
+
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
